@@ -10,9 +10,9 @@ Release
 *.so
 *.bak
 *.exe
+*.zip
 .codegraph/*
 opencode.*
-external/*
 .vscode/*
 install/*
 build/*

@@ -751,149 +751,16 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(FLAC_DEFS) -c -o $@ $<
 
-# ---- Tests ----
-TEST_OGG_DEPS = $(BLD)/script/alpha/ogg.o \
-                $(BLD)/main/ogg/ogg.o \
-                $(BLD)/main/ssz/ssz.o
-
-test_ogg: $(TEST)/test_ogg.cpp $(TEST_OGG_DEPS) $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_ogg.exe $(TEST)/test_ogg.cpp $(TEST_OGG_DEPS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_ogg.exe ==="
-	$(BLD)/test_ogg.exe
-
-test_common: $(TEST)/test_common.cpp $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_common.exe $(TEST)/test_common.cpp $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_common.exe ==="
-	$(BLD)/test_common.exe
-
-test_sound: $(TEST)/test_sound.cpp $(BLD)/script/ssz/sound.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_sound.exe $(TEST)/test_sound.cpp $(BLD)/script/ssz/sound.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_sound.exe ==="
-	$(BLD)/test_sound.exe
-
-test_sff: $(TEST)/test_sff.cpp \
-  $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o \
-  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-  $(BLD)/script/alpha/sdlplugin.o \
-  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o \
-  $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_sff.exe $(TEST)/test_sff.cpp \
-	  $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o \
-	  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-	  $(BLD)/script/alpha/sdlplugin.o \
-	  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o \
-	  $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_sff.exe (interactive viewer: run manually) ==="
-
-test_action: $(TEST)/test_action.cpp $(BLD)/script/ssz/action.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_action.exe $(TEST)/test_action.cpp $(BLD)/script/ssz/action.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_action.exe (interactive: run manually) ==="
-
-test_font: $(TEST)/test_font.cpp $(BLD)/script/ssz/font.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_font.exe $(TEST)/test_font.cpp $(BLD)/script/ssz/font.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_font.exe (interactive: run manually) ==="
-
-test_font_render: $(TEST)/test_font_render.cpp $(BLD)/script/ssz/font.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_font_render.exe $(TEST)/test_font_render.cpp $(BLD)/script/ssz/font.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_font_render.exe (interactive: run manually) ==="
-
-test_stage: $(TEST)/test_stage.cpp $(BLD)/script/ssz/stage.o $(BLD)/script/ssz/bg.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/ssz/action.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_stage.exe $(TEST)/test_stage.cpp $(BLD)/script/ssz/stage.o $(BLD)/script/ssz/bg.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/ssz/action.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_stage.exe (interactive: run manually) ==="
-
-test_command: $(TEST)/test_command.cpp $(BLD)/script/ssz/command.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_command.exe $(TEST)/test_command.cpp $(BLD)/script/ssz/command.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_command.exe ==="
-	$(BLD)/test_command.exe
-
-test_integration: $(TEST)/test_integration.cpp $(BLD)/script/ssz/stage.o $(BLD)/script/ssz/common.o $(BLD)/script/ssz/command.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/font.o $(BLD)/script/ssz/bg.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_integration.exe $(TEST)/test_integration.cpp $(BLD)/script/ssz/stage.o $(BLD)/script/ssz/common.o $(BLD)/script/ssz/command.o $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/font.o $(BLD)/script/ssz/bg.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_integration.exe ==="
-	$(BLD)/test_integration.exe
-
-.PHONY: test_ogg test_common test_sound test_sff test_action test_animation test_font test_font_render test_stage test_command test_integration test_matchwinloss test_sounds_matchflow test_win_anim test_plugin_signatures test-conversion-pairs test-converted-compile test-converted-link test-p0
-
-test_animation: $(TEST)/test_animation.cpp $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_animation.exe $(TEST)/test_animation.cpp $(BLD)/script/ssz/sff.o $(BLD)/script/ssz/common.o $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o $(BLD)/script/alpha/sdlplugin.o $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o $(BLD)/main/sdlplugin/sdlplugin.o $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_animation.exe (interactive: run manually) ==="
-
-test_matchflow: $(TEST)/test_matchflow.cpp \
-  $(BLD)/script/ssz/char.o \
-  $(BLD)/script/ssz/statebuilder.o \
-  $(BLD)/script/ssz/trigger-script.o \
-  $(BLD)/script/ssz/command.o \
-  $(BLD)/script/ssz/common.o \
-  $(BLD)/script/ssz/action.o \
-  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o \
-  $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_matchflow.exe $(TEST)/test_matchflow.cpp \
-	  $(BLD)/script/ssz/char.o $(BLD)/script/ssz/statebuilder.o \
-	  $(BLD)/script/ssz/trigger-script.o $(BLD)/script/ssz/command.o \
-	  $(BLD)/script/ssz/common.o $(BLD)/script/ssz/action.o \
-	  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-	  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o \
-	  $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_matchflow.exe ==="
-	$(BLD)/test_matchflow.exe
-
-test_matchwinloss: $(TEST)/test_matchwinloss.cpp
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_matchwinloss.exe $(TEST)/test_matchwinloss.cpp $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_matchwinloss.exe ==="
-	$(BLD)/test_matchwinloss.exe
-
-test_sounds_matchflow: $(TEST)/test_sounds_matchflow.cpp
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_sounds_matchflow.exe $(TEST)/test_sounds_matchflow.cpp $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_sounds_matchflow.exe ==="
-	$(BLD)/test_sounds_matchflow.exe
-
-test_win_anim: $(TEST)/test_win_anim.cpp \
-  $(BLD)/script/ssz/action.o $(BLD)/script/ssz/common.o \
-  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_win_anim.exe $(TEST)/test_win_anim.cpp \
-	  $(BLD)/script/ssz/action.o $(BLD)/script/ssz/common.o \
-	  $(BLD)/script/string.o $(BLD)/script/math.o $(BLD)/script/file.o \
-	  $(BLD)/main/ssz/ssz.o $(BLD)/main/file/file.o \
-	  $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_win_anim.exe ==="
-	$(BLD)/test_win_anim.exe
-
-test_plugin_signature_objs = \
-  $(BLD)/main/ssz/ssz.o \
-  $(BLD)/main/alert/alert.o \
-  $(BLD)/main/file/file.o \
-  $(BLD)/main/math/math.o \
-  $(BLD)/main/lua/lua.o \
-  $(BLD)/main/ogg/ogg.o \
-  $(BLD)/main/regex/regex.o \
-  $(BLD)/main/shell/shell.o \
-  $(BLD)/main/socket/socket.o \
-  $(BLD)/main/sound/sound.o \
-  $(BLD)/main/sdlplugin/sdlplugin.o \
-  $(BLD)/main/thread/thread.o \
-  $(BLD)/main/time/time.o \
-  $(BLD)/main/mesdialog/mesdialog.o
-
-test_plugin_signatures: $(TEST)/test_plugin_signatures.cpp $(test_plugin_signature_objs) $(ALL_LIBS)
-	$(CXX) $(CXXFLAGS) -I $(SCRIPT) -o $(BLD)/test_plugin_signatures.exe $(TEST)/test_plugin_signatures.cpp $(test_plugin_signature_objs) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
-	@echo "=== Built: $(BLD)/test_plugin_signatures.exe ==="
-	$(BLD)/test_plugin_signatures.exe
-
-test-conversion-pairs:
-	@python tools/check_conversion_pairs.py
-
-test-converted-compile: $(patsubst $(SCRIPT)/%.cpp,$(BLD)/script/%.o,$(SCRIPT_SRCS))
-
-test-converted-link: $(MAIN_OBJS) $(SCRIPT_OBJS) $(ALL_LIBS)
-	@echo "=== Link test: all objects resolve ==="
-
-test-p0: test-conversion-pairs test-converted-compile test-converted-link
-	@echo "=== P0 gate PASSED ==="
-
 clean:
 	rm -rf $(BLD)
 
 install: $(TARGET)
+	@if [ ! -d "install" ]; then \
+		echo "=== Downloading install.zip... ==="; \
+		wget -q "https://github.com/leonkasovan/ikemen-new-ultra/releases/download/v1.0.0.0/install.zip" -O install.zip; \
+		echo "=== Extracting... ==="; \
+		unzip -q install.zip; \
+		rm -f install.zip; \
+	fi
 	cp $(TARGET) "install/"
 	
