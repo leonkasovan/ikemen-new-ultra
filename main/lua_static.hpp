@@ -69,6 +69,7 @@ extern "C"
 	void       SSZ_STDCALL ToString(PluginUtil*, int32_t, Reference*, lua_State*);
 	void       SSZ_STDCALL PushRef(PluginUtil*, DynamicRef*, lua_State*);
 	void       SSZ_STDCALL ToRef(PluginUtil*, int32_t, DynamicRef*, lua_State*);
+	PluginSSZFuncs* SSZ_STDCALL GetSSZFuncs();
 }
 
 // -----------------------------------------------------------------------
@@ -102,6 +103,7 @@ inline bool lua_static_register()
 		{ "ToString",    (void*)ToString    },
 		{ "PushRef",     (void*)PushRef     },
 		{ "ToRef",       (void*)ToRef       },
+		{ "GetSSZFuncs", (void*)GetSSZFuncs },
 	};
 
 	return SSZ_RegisterFunction(

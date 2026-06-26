@@ -697,7 +697,10 @@ $(BLD)/vorbis/%.o: $(VORBIS_DIR)/lib/%.c
 	$(CC) $(CFLAGS) $(VORBIS_CFLAGS) -c -o $@ $<
 
 # ---- libpng (C) ----
-$(BLD)/png/%.o: $(PNG_DIR)/%.c
+$(PNG_DIR)/pnglibconf.h: $(PNG_DIR)/scripts/pnglibconf.h.prebuilt
+	cp $< $@
+
+$(BLD)/png/%.o: $(PNG_DIR)/%.c $(PNG_DIR)/pnglibconf.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -763,4 +766,10 @@ install: $(TARGET)
 		rm -f install.zip; \
 	fi
 	cp $(TARGET) "install/"
+	mkdir -p install/lib install/lib/alpha install/ssz install/save
+	cp script/*.ssz install/lib/
+	cp script/alpha/*.ssz install/lib/alpha/
+	cp script/ssz/*.ssz install/ssz/
+	cp script/save/*.ssz install/save/
+	@echo "=== Installed to install/ ==="
 	

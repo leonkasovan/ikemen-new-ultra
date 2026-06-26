@@ -72,22 +72,22 @@ static GLint g_gl33s_uColor   = -1;
 static GLint g_gl33s_uAlpha   = -1;
 static GLint g_gl33s_uProjMat = -1;
 
-int32_t ransuutane;
-SDL_Window* g_window;
-SDL_Renderer* g_renderer;
+int32_t ransuutane = 0;
+SDL_Window* g_window = nullptr;
+SDL_Renderer* g_renderer = nullptr;
 SDL_Texture* g_target = nullptr;
-uint32_t* g_pix;
+uint32_t* g_pix = nullptr;
 SDL_GLContext g_gl = nullptr;
-int g_pitch;
+int g_pitch = 0;
 int g_w = 640, g_h = 480;
 float w_opacity = 1.0;
 uint32_t g_scrflag = 0;
-SDL_AudioSpec g_desired;
-HGLRC g_hglrc, g_hglrc2;
-HDC g_hdc;
-DWORD g_mainTreadId;
+SDL_AudioSpec g_desired = {};
+HGLRC g_hglrc = nullptr, g_hglrc2 = nullptr;
+HDC g_hdc = nullptr;
+DWORD g_mainTreadId = 0;
 
-WNDPROC g_orgProc;
+WNDPROC g_orgProc = nullptr;
 char16_t g_lastChar = '\0', g_newChar = '\0';
 
 void lockTarget()

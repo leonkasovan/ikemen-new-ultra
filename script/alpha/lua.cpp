@@ -28,13 +28,14 @@ extern "C" {
 	void     SSZ_STDCALL ToString(PluginUtil*, int32_t, Reference*, void*);
 	void     SSZ_STDCALL PushRef(PluginUtil*, DynamicRef*, void*);
 	void     SSZ_STDCALL ToRef(PluginUtil*, int32_t, DynamicRef*, void*);
+	PluginSSZFuncs* SSZ_STDCALL GetSSZFuncs();
 }
 
 namespace ikemen {
 
 static PluginUtil makePU() {
-	static PluginSSZFuncs f = {nullptr, nullptr, nullptr};
-	static PluginUtil pu(&f, nullptr);
+	PluginSSZFuncs* sf = GetSSZFuncs();
+	static PluginUtil pu(sf, nullptr);
 	return pu;
 }
 

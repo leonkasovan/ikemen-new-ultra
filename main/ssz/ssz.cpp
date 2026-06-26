@@ -181,6 +181,11 @@ struct GlobalPluginSSZFuncs
 };
 static GlobalPluginSSZFuncs g_gpsf;
 
+extern "C" PluginSSZFuncs* SSZ_STDCALL GetSSZFuncs()
+{
+	return &g_gpsf.sf;
+}
+
 
 
 
