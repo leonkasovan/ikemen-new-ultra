@@ -8,7 +8,11 @@
 #include <vector>
 
 #include "lua.hpp"
-
+extern "C" {
+#include "lfs.h"
+#include "ffi/ffi.h"
+#include "lpeg-1.1.0/lptypes.h"
+}
 
 #include "sszdef.h"
 #include "typeid.h"
@@ -78,6 +82,9 @@ extern "C" lua_State* SSZ_STDCALL NewState(PluginUtil* pu)
 	luaL_requiref(L, LUA_BITLIBNAME, luaopen_bit32, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
+	luaL_requiref(L, LUA_LFSNAME, luaopen_lfs, 1); lua_pop(L, 1);
+	luaL_requiref(L, LUA_FFINAME, luaopen_ffi, 1); lua_pop(L, 1);
+	luaL_requiref(L, LUA_LPEGNAME, luaopen_lpeg, 1); lua_pop(L, 1);
 	
 	luaL_newmetatable(L, SszRefMetaName);
 	lua_pushstring(L, "__gc");

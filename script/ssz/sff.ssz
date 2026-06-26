@@ -6,6 +6,7 @@ lib file = <file.ssz>;
 lib m = <math.ssz>;
 lib s = <string.ssz>;
 lib tbl = <table.ssz>;
+//lib al = <alert.ssz>;
 
 //Load "lib/alpha/" Scripts
 lib sdl = <alpha/sdlplugin.ssz>;
@@ -131,7 +132,6 @@ public &Sprite
   public short imageGroup, imageNumber;
   public index palidx = -1;
   public int rle = 0;
-  public ubyte coldepth = 0;
   public void shareCopy(`self sp=)
   {
     `colorPallet = sp.colorPallet;
@@ -140,7 +140,6 @@ public &Sprite
     `rct.h = sp.rct.h;
     `palidx = sp.palidx;
     `rle = sp.rle;
-    `coldepth = sp.coldepth;
   }
   public void copy(`self sp=)
   {
@@ -209,10 +208,10 @@ public &Sprite
     if(!f.read!short?(y=)) ret false;
     `rct.y = y;
     if(!f.read!ushort?(idxlnked=)) ret false;
-    ubyte fmt;
+    ubyte fmt, dummy;
     if(!f.read!ubyte?(fmt=)) ret false;
     `rle = -(int)fmt;
-    if(!f.read!ubyte?(`coldepth=)) ret false;
+    if(!f.read!ubyte?(dummy=)) ret false;
     if(!f.read!uint?(ofs=)) ret false;
     if(!f.read!uint?(siz=)) ret false;
     ushort pali, flg;
@@ -265,52 +264,35 @@ public &Sprite
   }
   public ^/char readV2(&.file.File f=, long ofs, uint dsz)
   {
+    f.seek(ofs+4, .file.Seek::SET);
     ^ubyte px;
-    // Handle raw/uncompressed (rle == 0, format 0)
-    if(`rle == 0){
-      if(dsz == 0) ret "";
-      f.seek(ofs, .file.Seek::SET);
-      px.new((index)dsz);
-      f.readAry!ubyte?(px);
-      if(`coldepth == 0d8){
-        `rlePcxDecode(px=);
-        `setPxl(px);
-      } else if(`coldepth == 0d24 || `coldepth == 0d32){
-        `pxl = px;
-      } else {
-        ret "unknown color depth";
+    if(`rle < 0) switch(-`rle){
+      if(-`rle <= 4){
+        px.new((index)dsz-4);
+        f.readAry!ubyte?(px);
+		// .al.alert!self?("  memory allocated "+''dsz+" bytes" );
       }
+    case 2:
+      `rle8Decode(px=);
+    case 3:
+      `rle5Decode(px=);
+    case 4:
+      `lz5Decode(px=);
+    case 10:
+      px = .sdl.decodePNG8(`rct.w=, `rct.h=, f=);
+    case 11, 12:
+    /?/*.cfg.Renderer != 0:
+      `rle = -12;
+      `pxl.new(1);
+      if(!`pxl~loadPngTexture(`rct.w=, `rct.h=, f=)) default;
+    /*true:
+      `rct.w = `rct.h = 0;
+    /*?*/
       ret "";
+    default:
+      ret "unknown format";
     }
-    if(`rle < 0){
-      f.seek(ofs+4, .file.Seek::SET);
-      switch(-`rle){
-        if(-`rle <= 4){
-          px.new((index)dsz-4);
-          f.readAry!ubyte?(px);
-        }
-      case 2:
-        `rle8Decode(px=);
-      case 3:
-        `rle5Decode(px=);
-      case 4:
-        `lz5Decode(px=);
-      case 10:
-        px = .sdl.decodePNG8(`rct.w=, `rct.h=, f=);
-      case 11, 12:
-      /?/*.cfg.Renderer != 0:
-        `rle = -12;
-        `pxl.new(1);
-        if(!`pxl~loadPngTexture(`rct.w=, `rct.h=, f=)) default;
-      /*true:
-        `rct.w = `rct.h = 0;
-      /*?*/
-        ret "";
-      default:
-        ret "unknown format";
-      }
-      `setPxl(px);
-    }
+    `setPxl(px);
     ret "";
   }
   public void setPxl(^ubyte px)
@@ -469,6 +451,7 @@ public &Sprite
   {
     ^/char error;
     &.file.File f;
+	// .al.alert!self?(fn+" ("+''ig+","+''in+")");
     if(!f.open(fn, "rb")) ret .com.FileOpenError;
     &.SffHeader h;
     uint lofs, tofs;
@@ -521,6 +504,7 @@ public &Sprite
             misc, dummy, pl=, false)=>error
           > 0) ret error;
       case 0d2:
+	    // .al.alert!self?(fn+" need memory="+''size);
         if(#`readV2(f=, (long)misc, size)=>error > 0) ret error;
       }
       if(`imageGroup == ig && `imageNumber == in) break;
@@ -688,6 +672,7 @@ public &Sff
   {
     ^/char error;
     &.file.File f;
+	//.al.alert!self?("Sff.loadFile="+filename);
     if(!f.open(filename, "rb")) ret .com.FileOpenError;
     `clear();
     uint lofs, tofs;
@@ -777,6 +762,7 @@ public &Sff
                 || prev < 0))=>error
             > 0) ret error;
         case 0d2:
+		  // .al.alert!self?(filename+" need memory="+''size);
           if(#spriteList[i].readV2(f=, (long)misc, size)=>error > 0){
             ret error;
           }
