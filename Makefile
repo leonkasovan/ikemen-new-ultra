@@ -30,7 +30,6 @@ ROOT       = .
 EXT        = $(ROOT)/external
 MAIN       = $(ROOT)/main
 SSZ        = $(MAIN)/ssz
-SCRIPT     = $(ROOT)/script
 TEST       = $(ROOT)/test
 BLD        = $(ROOT)/build/$(CONFIG)
 
@@ -120,52 +119,6 @@ MAIN_SRCS = \
   $(MAIN)/mesdialog/mesdialog.cpp \
   $(MAIN)/ogg/ogg.cpp \
   $(MAIN)/regex/regex.cpp
-
-SCRIPT_SRCS = \
-  $(SCRIPT)/alert.cpp \
-  $(SCRIPT)/alpha/lua.cpp \
-  $(SCRIPT)/alpha/mesdialog.cpp \
-  $(SCRIPT)/alpha/ogg.cpp \
-  $(SCRIPT)/alpha/sdlevent.cpp \
-  $(SCRIPT)/alpha/sdlplugin.cpp \
-  $(SCRIPT)/arcfour.cpp \
-  $(SCRIPT)/ssz/animation.cpp \
-  $(SCRIPT)/ssz/action.cpp \
-  $(SCRIPT)/ssz/bg.cpp \
-  $(SCRIPT)/ssz/command.cpp \
-  $(SCRIPT)/ssz/common.cpp \
-  $(SCRIPT)/ssz/debug-script.cpp \
-  $(SCRIPT)/ssz/fight.cpp \
-  $(SCRIPT)/ssz/fighting.cpp \
-  $(SCRIPT)/ssz/font.cpp \
-  $(SCRIPT)/ssz/ikemen.cpp \
-  $(SCRIPT)/ssz/loader.cpp \
-  $(SCRIPT)/ssz/script.cpp \
-  $(SCRIPT)/ssz/sff.cpp \
-  $(SCRIPT)/ssz/share.cpp \
-  $(SCRIPT)/ssz/stage.cpp \
-  $(SCRIPT)/ssz/sound.cpp \
-  $(SCRIPT)/ssz/char.cpp \
-  $(SCRIPT)/ssz/statebuilder.cpp \
-  $(SCRIPT)/ssz/system-script.cpp \
-  $(SCRIPT)/ssz/trigger-script.cpp \
-  $(SCRIPT)/ssz/system.cpp \
-  $(SCRIPT)/ssz/video.cpp \
-  $(SCRIPT)/base64.cpp \
-  $(SCRIPT)/file.cpp \
-  $(SCRIPT)/math.cpp \
-  $(SCRIPT)/md5.cpp \
-  $(SCRIPT)/regex.cpp \
-  $(SCRIPT)/shell.cpp \
-  $(SCRIPT)/socket.cpp \
-  $(SCRIPT)/sound.cpp \
-  $(SCRIPT)/ssz.cpp \
-  $(SCRIPT)/ssz/mugen_sff_loader.cpp \
-  $(SCRIPT)/string.cpp \
-  $(SCRIPT)/thread.cpp \
-  $(SCRIPT)/time.cpp
-
-SCRIPT_OBJS = $(patsubst $(SCRIPT)/%.cpp,$(BLD)/script/%.o,$(SCRIPT_SRCS))
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -638,9 +591,9 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
-$(TARGET): $(MAIN_OBJS) $(SCRIPT_OBJS) $(ALL_LIBS)
+$(TARGET): $(MAIN_OBJS) $(ALL_LIBS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) $(SCRIPT_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
 ifeq ($(CONFIG),Release)
 	$(W64DEVKIT)/bin/strip --strip-all $@
 endif
@@ -651,10 +604,6 @@ $(BLD)/main/%.o: $(MAIN)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# ---- Script layer (C++) ----
-$(BLD)/script/%.o: $(SCRIPT)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 # ---- SDL2 (C) ----
 $(BLD)/sdl2/%.o: $(SDL2_DIR)/src/%.c
