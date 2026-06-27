@@ -19,7 +19,6 @@
 #include "thread_static.hpp"
 #include "time_static.hpp"
 
-#include "../script/ssz/ikemen.hpp"
 
 // sszrefnewfunc / sszrefdeletefunc are defined in ssz.cpp and
 // declared extern in sszdef.h — no per-TU definition needed here.
@@ -184,14 +183,6 @@ int main(int argc, char *argv[]) {
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");
 
-#ifdef IKEMEN_NATIVE_BOOT
-	// ── Native C++ boot path (no SSZ JIT) ──────────────────────────
-	LOG_INFO("Ikemen", "Starting native C++ engine...");
-	int result = ikemen::ikemenMain();
-	LOG_INFO("Ikemen", "Engine exited with code %d", result);
-	ref.releaseanddelete();
-	return result;
-#else
 	// ── SSZ JIT boot path ──────────────────────────────────────────
 	// Run() compiles and executes in the same ssz.cpp TU — all internal
 	// sszrefnewfunc/wstrToRef calls are consistent within that translation unit.
@@ -203,7 +194,6 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Run() completed successfully");
-#endif
 
 	ref.releaseanddelete();
 	return 0;

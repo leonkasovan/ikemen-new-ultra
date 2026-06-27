@@ -766,11 +766,11 @@ install: $(TARGET)
 		rm -f install.zip; \
 	fi
 	cp $(TARGET) "install/"
-	cp -r ssz_script/lib/ install/
-	cp -r ssz_script/ssz/ install/
-	cp -r ssz_script/save/ install/
-	cp -r lua_script/lib/ install/
-	cp -r lua_script/script/ install/
-	cp -r lua_script/save/ install/
+	cp -rf ssz_script/lib/ install/
+	cp -rf ssz_script/ssz/ install/
+	cp -rf ssz_script/save/ install/
+	cp -rf lua_script/lib/ install/
+	cp -rf lua_script/script/ install/
+	cp -rf lua_script/save/ install/
 	@echo "=== Installed to install/ ==="
   
