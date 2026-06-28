@@ -1,10 +1,6 @@
-
 #include <windows.h>
 #include <locale.h>
-#include <process.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdarg.h>
 #include <vector>
 
 #include "lua.hpp"
@@ -17,7 +13,9 @@ extern "C" {
 #include "sszdef.h"
 #include "typeid.h"
 #include "arrayandref.hpp"
-#include "pluginutil.hpp"
+
+// SSZCALLBACK typedef (replaces pluginutil.hpp include)
+typedef void* (SSZ_STDCALL* SSZCALLBACK)(void*, intptr_t, void*, intptr_t, intptr_t);
 
 
 const char SszRefMetaName[] = "SszRef";
@@ -59,15 +57,15 @@ int funcCall(lua_State* L)
 	return ret;
 }
 
-extern "C" void SSZ_STDCALL LuaInit(PluginUtil* pu, intptr_t refcopy, intptr_t refdest)
+void SSZ_STDCALL LuaInit(intptr_t refcopy, intptr_t refdest, SSZCALLBACK callback, void* handle)
 {
-	g_callback = pu->psf->callback;
-	g_handle = pu->handle;
+	g_callback = callback;
+	g_handle = handle;
 	g_refDestroy = refdest;
 	g_refCopy = refcopy;
 }
 
-extern "C" lua_State* SSZ_STDCALL NewState(PluginUtil* pu)
+lua_State* SSZ_STDCALL NewState()
 {
 	lua_State* L = luaL_newstate();
 	if (!L) return nullptr;
@@ -149,7 +147,7 @@ static void LuaProcessDeferredClose()
 	g_deferredLuaClose.clear();
 }
 
-extern "C" void SSZ_STDCALL Close(PluginUtil* pu, lua_State* L)
+void SSZ_STDCALL Close(lua_State* L)
 {
 	if (!L) return;
 
@@ -163,100 +161,100 @@ extern "C" void SSZ_STDCALL Close(PluginUtil* pu, lua_State* L)
 	}
 
 	LuaSafeQuarantine(L);
-	// LOG_INFO("Lua", "Close(): quarantined lua_State=%p; lua_close intentionally skipped", (void*)L);
+	// LOG_INFO(\"Lua\", \"Close(): quarantined lua_State=%p; lua_close intentionally skipped\", (void*)L);
 	lua_gc(L, LUA_GCCOLLECT, 0);
 	lua_close(L);
 	LuaProcessDeferredClose();
 }
 
-extern "C" bool SSZ_STDCALL RunFile(PluginUtil* pu, Reference filename, lua_State* L)
+bool SSZ_STDCALL RunFile(const std::string& filename, lua_State* L)
 {
 	return
-		!luaL_loadfile(L, pu->refToAstr(CP_UTF8, filename).c_str())
+		!luaL_loadfile(L, filename.c_str())
 		&& !lua_pcall(L, 0, 0, 0);
 }
 
-extern "C" bool SSZ_STDCALL RunString(PluginUtil* pu, Reference s, lua_State* L)
+bool SSZ_STDCALL RunString(const std::string& s, lua_State* L)
 {
 	return
-		!luaL_loadstring(L, pu->refToAstr(CP_UTF8, s).c_str())
+		!luaL_loadstring(L, s.c_str())
 		&& !lua_pcall(L, 0, 0, 0);
 }
 
-extern "C" int32_t SSZ_STDCALL GetTop(PluginUtil* pu, lua_State* L)
+int32_t SSZ_STDCALL GetTop(lua_State* L)
 {
 	return lua_gettop(L);
 }
 
-extern "C" void SSZ_STDCALL GetGlobal(PluginUtil* pu, Reference var, lua_State* L)
+void SSZ_STDCALL GetGlobal(const std::string& var, lua_State* L)
 {
-	lua_getglobal(L, pu->refToAstr(CP_UTF8, var).c_str());
+	lua_getglobal(L, var.c_str());
 }
 
-extern "C" void SSZ_STDCALL Register(PluginUtil* pu, intptr_t func, Reference var, lua_State* L)
+void SSZ_STDCALL Register(intptr_t func, const std::string& var, lua_State* L)
 {
 	lua_pushinteger(L, func);
 	lua_pushcclosure(L, funcCall, 1);
-	lua_setglobal(L, pu->refToAstr(CP_UTF8, var).c_str());
+	lua_setglobal(L, var.c_str());
 }
 
-extern "C" bool SSZ_STDCALL Pcall(PluginUtil* pu, int32_t nresults, int32_t nargs, lua_State* L)
+bool SSZ_STDCALL Pcall(int32_t nresults, int32_t nargs, lua_State* L)
 {
 	return !lua_pcall(L, nargs, nresults, 0);
 }
 
-extern "C" void SSZ_STDCALL Pop(PluginUtil* pu, int32_t n, lua_State* L)
+void SSZ_STDCALL Pop(int32_t n, lua_State* L)
 {
 	lua_pop(L, n);
 }
 
-extern "C" void SSZ_STDCALL PushNumber(PluginUtil* pu, double n, lua_State* L)
+void SSZ_STDCALL PushNumber(double n, lua_State* L)
 {
 	lua_pushnumber(L, n);
 }
 
-extern "C" bool SSZ_STDCALL IsNumber(PluginUtil* pu, int32_t idx, lua_State* L)
+bool SSZ_STDCALL IsNumber(int32_t idx, lua_State* L)
 {
 	return lua_isnumber(L, idx) != 0;
 }
 
-extern "C" double SSZ_STDCALL ToNumber(PluginUtil* pu, int32_t idx, lua_State* L)
+double SSZ_STDCALL ToNumber(int32_t idx, lua_State* L)
 {
 	return lua_tonumber(L, idx);
 }
 
-extern "C" void SSZ_STDCALL PushBoolean(PluginUtil* pu, bool b, lua_State* L)
+void SSZ_STDCALL PushBoolean(bool b, lua_State* L)
 {
 	lua_pushboolean(L, b);
 }
 
-extern "C" bool SSZ_STDCALL IsBoolean(PluginUtil* pu, int32_t idx, lua_State* L)
+bool SSZ_STDCALL IsBoolean(int32_t idx, lua_State* L)
 {
 	return lua_isboolean(L, idx) != 0;
 }
 
-extern "C" bool SSZ_STDCALL ToBoolean(PluginUtil* pu, int32_t idx, lua_State* L)
+bool SSZ_STDCALL ToBoolean(int32_t idx, lua_State* L)
 {
 	return lua_toboolean(L, idx) != 0;
 }
 
-extern "C" void SSZ_STDCALL PushString(PluginUtil* pu, Reference s, lua_State* L)
+void SSZ_STDCALL PushString(const std::string& s, lua_State* L)
 {
-	lua_pushstring(L, pu->refToAstr(CP_UTF8, s).c_str());
+	lua_pushstring(L, s.c_str());
 }
 
-extern "C" bool SSZ_STDCALL IsString(PluginUtil* pu, int32_t idx, lua_State* L)
+bool SSZ_STDCALL IsString(int32_t idx, lua_State* L)
 {
 	return lua_isstring(L, idx) != 0;
 }
 
-extern "C" void SSZ_STDCALL ToString(PluginUtil* pu, int32_t idx, Reference* s, lua_State* L)
+void SSZ_STDCALL ToString(int32_t idx, lua_State* L, std::string& output)
 {
-	pu->setSSZFunc();
-	pu->astrToRef(CP_UTF8, *s, lua_tostring(L, idx));
+	const char* str = lua_tostring(L, idx);
+	if (str) output = str;
 }
 
-extern "C" void SSZ_STDCALL PushRef(PluginUtil* pu, DynamicRef* userdata, lua_State* L)
+void SSZ_STDCALL PushRef(DynamicRef* userdata, lua_State* L)
 {
 	auto ud = (DynamicRef*)lua_newuserdata(L, sizeof(DynamicRef));
 	*ud = *userdata;
@@ -265,7 +263,7 @@ extern "C" void SSZ_STDCALL PushRef(PluginUtil* pu, DynamicRef* userdata, lua_St
 	lua_setmetatable(L, -2);
 }
 
-extern "C" void SSZ_STDCALL ToRef(PluginUtil* pu, int32_t idx, DynamicRef* userdata, lua_State* L)
+void SSZ_STDCALL ToRef(int32_t idx, DynamicRef* userdata, lua_State* L)
 {
 	auto ud = (DynamicRef*)lua_touserdata(L, idx);
 	if(!ud) return;
@@ -277,4 +275,3 @@ extern "C" void SSZ_STDCALL ToRef(PluginUtil* pu, int32_t idx, DynamicRef* userd
 	#pragma pack(pop)
 	g_callback(g_handle, g_refCopy, &arg, sizeof(arg), 0);
 }
-

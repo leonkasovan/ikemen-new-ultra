@@ -1,4 +1,3 @@
-
 #include <windows.h>
 #include <locale.h>
 #include <process.h>
@@ -7,9 +6,6 @@
 #include "vorbis/vorbisfile.h"
 
 #include "sszdef.h"
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
 #include "mem_profiler.hpp"
 
 
@@ -32,7 +28,7 @@ public:
 	{
 		clear();
 	}
-	MEMBER bool open(std::WSTR file)
+	MEMBER bool open(const std::wstring& file)
 	{
 		clear();
 		_wfopen_s(&_fh, file.c_str(), L("rb"));
@@ -77,53 +73,59 @@ public:
 	}
 };
 
-extern "C" OggVorbis* SSZ_STDCALL NewOggVorbis(PluginUtil* pu)
+OggVorbis* SSZ_STDCALL NewOggVorbis()
 {
 	return new OggVorbis;
 }
 
-extern "C" void SSZ_STDCALL DeleteOggVorbis(PluginUtil* pu, OggVorbis* ov)
+void SSZ_STDCALL DeleteOggVorbis(OggVorbis* ov)
 {
 	delete ov;
 }
 
-extern "C" bool SSZ_STDCALL OggVorbisOpen(PluginUtil* pu, Reference file, OggVorbis* ov)
+bool SSZ_STDCALL OggVorbisOpen(const std::wstring& file, OggVorbis* ov)
 {
-	std::string fname = pu->refToAstr(CP_THREAD_ACP, file);
+	std::string fname;
+	{
+		int len = WideCharToMultiByte(CP_THREAD_ACP, 0, file.c_str(), (int)file.size(), nullptr, 0, nullptr, nullptr);
+		if (len > 0) {
+			fname.resize(len);
+			WideCharToMultiByte(CP_THREAD_ACP, 0, file.c_str(), (int)file.size(), &fname[0], len, nullptr, nullptr);
+		}
+	}
 	MEM_MARK_BEFORE_NAMED(MUSIC, fname.c_str());
-	bool result = ov->open(pu->refToWstr(file));
+	bool result = ov->open(file);
 	MEM_MARK_AFTER_NAMED(MUSIC, fname.c_str());
 	return result;
 }
 
-extern "C" void SSZ_STDCALL OggVorbisClear(PluginUtil* pu, OggVorbis* ov)
+void SSZ_STDCALL OggVorbisClear(OggVorbis* ov)
 {
 	ov->clear();
 }
 
-extern "C" int64_t SSZ_STDCALL OggVorbisPcmTotal(PluginUtil* pu, OggVorbis* ov)
+int64_t SSZ_STDCALL OggVorbisPcmTotal(OggVorbis* ov)
 {
 	return ov->pcmTotal();
 }
 
-extern "C" int32_t SSZ_STDCALL OggVorbisChannels(PluginUtil* pu, OggVorbis* ov)
+int32_t SSZ_STDCALL OggVorbisChannels(OggVorbis* ov)
 {
 	return ov->channels();
 }
 
-extern "C" int32_t SSZ_STDCALL OggVorbisRate(PluginUtil* pu, OggVorbis* ov)
+int32_t SSZ_STDCALL OggVorbisRate(OggVorbis* ov)
 {
 	return ov->rate();
 }
 
-extern "C" intptr_t SSZ_STDCALL OggVorbisRead(PluginUtil* pu, Reference buffer, OggVorbis* ov)
+intptr_t SSZ_STDCALL OggVorbisRead(int16_t* buffer, intptr_t length, OggVorbis* ov)
 {
-	if(buffer.len() == 0) return 0;
-	return ov->read((int16_t*)buffer.atpos(), buffer.len()/sizeof(int16_t));
+	if(length == 0) return 0;
+	return ov->read(buffer, length);
 }
 
-extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVorbis* ov)
+int32_t SSZ_STDCALL OggVorbisSeek(double time, OggVorbis* ov)
 {
 	return ov->seek(time);
 }
-

@@ -69,7 +69,7 @@ if lpeg then json = json.use_lpeg() end --Change json to optimized mode using lp
 --;===========================================================
 --; DATA DEFINITION
 --;===========================================================
-data = require("save.data") --Create global space variable (accessing variables between modules)
+data = {} --Create global space variable (accessing variables between modules)
 
 --Set Save Path Variables
 saveCoreCfgPath = "save/config.ssz"
@@ -3097,12 +3097,12 @@ end
 
 t_unlockLua = { --Create table to manage unlock conditions in real-time
 chars = {}, stages = {}, modes = {},
-palettes = {}, abyss = {}, achievements = {}
+palettes = {}, abyss = {}
 }
 
 t_unlockGroups = {
 ['chars'] = true, ['stages'] = true, ['modes'] = true,
-['palettes'] = true, ['abyss'] = true, ['achievements'] = true,
+['palettes'] = true, ['abyss'] = true
 }
 
 function f_generateUnlocks()
@@ -3131,21 +3131,10 @@ function f_unlock(permanent)
 			--[[
 				if group == 'chars' then
 					f_unlockChar(k, bool, false)
-				elseif group == 'stages' then
-					f_unlockStage(k, bool)
 				end
 			]]
 				if bool and (permanent or t_unlockGroups[group]) then
 					table.insert(t_del, k)
-					if group == 'achievements' then
-						for i=1, #t_achievements do
-						--Send achievement ID first time that is unlocked to t_pendingTrophy to display them
-							if t_achievements[i].id == k and not data.trophies[k].displayed then
-								table.insert(t_pendingTrophy, 1, {trophyID = i})
-							end
-						end
-						if data.debugLog then f_printTable(t_pendingTrophy, "save/debug/t_pendingTrophy.log") end
-					end
 				end
 			else
 				--Error: Lua code does not return boolean value

@@ -9,8 +9,49 @@ loadDebugFont(fontDebug)
 setDebugScript("script/match.lua")
 loadLifebar(fightDef)
 
--- Populate t_selChars / t_selStages / t_charDef / t_stageDef from select.def
-assert(loadfile("script/loader.lua"))()
+-- Populate t_selChars / t_selStages from select.def
+-- Try full loader.lua first (rich character/stage metadata), fall back to minimal inline parser
+local ok, err = pcall(dofile, "script/loader.lua")
+if not ok then
+	print("[main.lua] loader.lua failed: " .. tostring(err))
+	print("[main.lua] Using minimal inline parser...")
+	t_selChars = {}
+	t_selStages = {}
+	local section = 0
+	local file = io.open(selectDef, "r")
+	if file then
+		local content = file:read("*all")
+		file:close()
+		content = content:gsub('([^\r\n]*)%s*;[^\r\n]*', '%1')
+		for line in content:gmatch('[^\r\n]+') do
+			line = line:lower()
+			line = line:gsub('%s+', ' ')
+			if line:match('^%s*%[%s*characters%s*%]') then
+				section = 1
+			elseif line:match('^%s*%[%s*extrastages%s*%]') then
+				section = 2
+			elseif section == 1 and line:match('%S') and not line:match('^%s*%[') then
+				local c = line:gsub('^%s*(.-)%s*$', '%1')
+				c = c:gsub(',.*$', ''):gsub('\\', '/')
+				if c ~= '' then
+					local row = #t_selChars + 1
+					t_selChars[row] = {char = c, unlock = "true"}
+					addChar(c)
+					print("[main.lua] Loading char " .. c)
+				end
+			elseif section == 2 and line:match('%S') and not line:match('^%s*%[') then
+				local c = line:gsub('^%s*(.-)%s*$', '%1')
+				c = c:gsub(',.*$', ''):gsub('\\', '/')
+				if c ~= '' and c:match('%.[Dd][Ee][Ff]') then
+					local row = #t_selStages + 1
+					t_selStages[row] = {stage = c, unlock = "true"}
+					addStage(c)
+					print("[main.lua] Loading stage " .. c)
+				end
+			end
+		end
+	end
+end
 
 -- Randomly select characters (t_selChars is 1-indexed)
 print("Total characters: " .. #t_selChars)

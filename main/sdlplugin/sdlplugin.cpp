@@ -29,9 +29,7 @@
 
 #include "sszdef.h"
 #include "mem_profiler.hpp"
-#include "typeid.h"
 #include "arrayandref.hpp"
-#include "pluginutil.hpp"
 #include "renderer.h"
 
 // ---------------------------------------------------------------------------
@@ -467,7 +465,7 @@ void TestTTF()
 }
 
 const int defaultTTFSize = 32;
-extern "C" void SSZ_STDCALL DrawTTF(PluginUtil* pu, int32_t alpha, int32_t b, int32_t g, int32_t r, float scaleY, float scaleX, int32_t y, int32_t x, Reference text, int32_t align, Reference fontPath)
+void SSZ_STDCALL DrawTTF(int32_t alpha, int32_t b, int32_t g, int32_t r, float scaleY, float scaleX, int32_t y, int32_t x, const std::wstring& text, int32_t align, const std::wstring& fontPath)
 {
 	if (!g_renderer)
 	{
@@ -475,9 +473,9 @@ extern "C" void SSZ_STDCALL DrawTTF(PluginUtil* pu, int32_t alpha, int32_t b, in
 		return;
 	}
 //Strings extraction
-	std::wstring wFontPath = pu->refToWstr(fontPath);
+	std::wstring wFontPath = fontPath;
 	std::string sFontPath = WstrToStr(wFontPath);
-	std::wstring wText = pu->refToWstr(text);
+	std::wstring wText = text;
 	std::string sText = WstrToStr(wText);
 //Load Font
 	TTF_Font* font = TTF_OpenFont(sFontPath.c_str(), defaultTTFSize);
@@ -545,7 +543,7 @@ void TestRoom()
 }
 
 //Software Render
-extern "C" bool SSZ_STDCALL Init(PluginUtil* pu, bool mugen, int32_t h, int32_t w, Reference cap)
+bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 {
 	//TestRoom(); //To test SDL Stuff
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0)
@@ -558,7 +556,7 @@ extern "C" bool SSZ_STDCALL Init(PluginUtil* pu, bool mugen, int32_t h, int32_t 
 		//SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0"); //VSYNC TEST
 		TTF_Init(); //Initialize TTF loading
 		g_scrflag = SDL_SWSURFACE;
-		g_window = SDL_CreateWindow(pu->refToAstr(CP_UTF8, cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
+		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
 		if(mugen)
@@ -578,7 +576,7 @@ extern "C" bool SSZ_STDCALL Init(PluginUtil* pu, bool mugen, int32_t h, int32_t 
 
 //OpenGL Render
 int isOpenGL = 0;
-extern "C" bool SSZ_STDCALL GlInit(PluginUtil* pu, int32_t h, int32_t w, Reference cap)
+bool SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
 	{
@@ -592,7 +590,7 @@ extern "C" bool SSZ_STDCALL GlInit(PluginUtil* pu, int32_t h, int32_t w, Referen
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1); //3
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1); //1
 		g_scrflag = SDL_WINDOW_OPENGL;
-		g_window = SDL_CreateWindow(pu->refToAstr(CP_UTF8, cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
+		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
 		g_gl = SDL_GL_CreateContext(g_window);
@@ -954,9 +952,9 @@ static void fillRendererInfo()
 // ---------------------------------------------------------------------------
 // RendererInit  –  Unified initialisation for all backends
 // ---------------------------------------------------------------------------
-extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName, int32_t h, int32_t w, Reference cap)
+bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32_t w, const std::wstring& cap)
 {
-	std::string rendStr = pu->refToAstr(CP_UTF8, rendererName);
+	std::string rendStr = WstrToStr(rendererName);
 	g_rendererType = parseRendererType(rendStr.c_str());
 	g_perfCounters.init();
 	g_perfCounters.fpsLastTick = SDL_GetTicks();
@@ -993,7 +991,7 @@ extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName,
 			SDL_Vulkan_UnloadLibrary();
 			g_scrflag = SDL_WINDOW_VULKAN;
 			g_window = SDL_CreateWindow(
-				pu->refToAstr(CP_UTF8, cap).c_str(),
+				WstrToStr(cap).c_str(),
 				SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 				w, h, g_scrflag);
 			if (!g_window)
@@ -1065,7 +1063,7 @@ extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName,
 		isOpenGL = 1;
 		g_scrflag = SDL_WINDOW_OPENGL;
 		g_window = SDL_CreateWindow(
-			pu->refToAstr(CP_UTF8, cap).c_str(),
+			WstrToStr(cap).c_str(),
 			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 			w, h, g_scrflag);
 		if (!g_window)
@@ -1178,7 +1176,7 @@ extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName,
 
 	g_scrflag = SDL_SWSURFACE;
 	g_window = SDL_CreateWindow(
-		pu->refToAstr(CP_UTF8, cap).c_str(),
+		WstrToStr(cap).c_str(),
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		w, h, g_scrflag);
 	if (!g_window)
@@ -1218,7 +1216,7 @@ extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName,
 // ---------------------------------------------------------------------------
 // GetRendererInfo  –  Return current renderer info as a string
 // ---------------------------------------------------------------------------
-extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
+void SSZ_STDCALL GetRendererInfo()
 {
 	char buf[512];
 	sprintf(buf, "Backend: %s\nDevice: %s\nDriver: %s\nMax Texture: %d",
@@ -1233,7 +1231,7 @@ extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
 // ---------------------------------------------------------------------------
 // EnablePerfMonitor  –  Toggle performance monitoring output
 // ---------------------------------------------------------------------------
-extern "C" void SSZ_STDCALL EnablePerfMonitor(PluginUtil* pu, bool enable)
+void SSZ_STDCALL EnablePerfMonitor(bool enable)
 {
 	g_perfMonitorEnabled = enable;
 	PERF_LOG("Performance monitoring %s", enable ? "ENABLED" : "DISABLED");
@@ -1244,7 +1242,7 @@ static void textCacheClear();
 static void blitCacheClear();
 static void textCacheEvictFont(TTF_Font* font);
 
-extern "C" void SSZ_STDCALL End(PluginUtil* pu)
+void SSZ_STDCALL End()
 {
 	INIT_LOG("Shutting down renderer...");
 	textCacheClear();
@@ -1281,7 +1279,7 @@ extern "C" void SSZ_STDCALL End(PluginUtil* pu)
 }
 
 int fsMode = 0;
-extern "C" void SSZ_STDCALL FullScreenExclusive(PluginUtil* pu, bool fsr) //FullScreenExclusive need to be register in sdlplugin.def to work in lib/alpha/sdlplugin.ssz
+void SSZ_STDCALL FullScreenExclusive(bool fsr) //FullScreenExclusive need to be register in sdlplugin.def to work in lib/alpha/sdlplugin.ssz
 {
 	if (fsr == true)
 	{
@@ -1297,7 +1295,7 @@ extern "C" void SSZ_STDCALL FullScreenExclusive(PluginUtil* pu, bool fsr) //Full
 }
 
 bool fullscreenChecker = false;
-extern "C" bool SSZ_STDCALL FullScreen(PluginUtil* pu, bool fs)
+bool SSZ_STDCALL FullScreen(bool fs)
 {
 	//fullscreenChecker = !fullscreenChecker; //Change the value of fullscreen Checker to its opposite
 	if (fs == true)
@@ -1339,7 +1337,7 @@ void WindowDecoration(bool wd)
 	}
 }
 
-extern "C" void SSZ_STDCALL WindowType(PluginUtil* pu, int state) //Can't change the Window state of a fullscreen window.
+void SSZ_STDCALL WindowType(int state) //Can't change the Window state of a fullscreen window.
 {
 //Window Resizable (Minimize + Maximize & Close Box)
 	if(state == 1)
@@ -1378,17 +1376,17 @@ extern "C" void SSZ_STDCALL WindowType(PluginUtil* pu, int state) //Can't change
 	}
 }
 
-extern "C" int SSZ_STDCALL GetWidth(PluginUtil* pu)
+int SSZ_STDCALL GetWidth()
 {
 	return GetSystemMetrics(SM_CXSCREEN);
 }
 
-extern "C" int SSZ_STDCALL GetHeight(PluginUtil* pu)
+int SSZ_STDCALL GetHeight()
 {
 	return GetSystemMetrics(SM_CYSCREEN);
 }
 
-extern "C" void SSZ_STDCALL WindowSize(PluginUtil* pu, int height, int width)
+void SSZ_STDCALL WindowSize(int height, int width)
 {
 	//g_w = width;
 	//g_h = height;
@@ -1396,7 +1394,7 @@ extern "C" void SSZ_STDCALL WindowSize(PluginUtil* pu, int height, int width)
 }
 
 bool isAspectRatio = false;
-extern "C" void SSZ_STDCALL AspectRatio(PluginUtil* pu, bool aspect)
+void SSZ_STDCALL AspectRatio(bool aspect)
 {
 	if (aspect == true)
 	{
@@ -1413,7 +1411,7 @@ extern "C" void SSZ_STDCALL AspectRatio(PluginUtil* pu, bool aspect)
 	}
 }
 
-extern "C" void SSZ_STDCALL SetOpacity(PluginUtil* pu, float wo)
+void SSZ_STDCALL SetOpacity(float wo)
 {
 	w_opacity = wo;
 	if (w_opacity < 0.0)
@@ -1428,7 +1426,7 @@ extern "C" void SSZ_STDCALL SetOpacity(PluginUtil* pu, float wo)
 }
 
 bool winMaximized = false;
-extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
+void SSZ_STDCALL TakeScreenShot(const std::wstring& dir)
 {
 //Software Render
 	if (isOpenGL == 0)
@@ -1451,7 +1449,7 @@ extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 			{
 				SDL_Surface *screenshot = SDL_CreateRGBSurface(0, g_w, g_h, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
 				SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-				IMG_SavePNG(screenshot, pu->refToAstr(CP_THREAD_ACP, dir).c_str());
+				IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
 				SDL_FreeSurface(screenshot);
 			}
 		//Window is Maximized (Reuse Fullscreen screenshot logic to avoid crash)
@@ -1459,7 +1457,7 @@ extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 			{
 				SDL_Surface *screenshot = SDL_CreateRGBSurface(0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
 				SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-				IMG_SavePNG(screenshot, pu->refToAstr(CP_THREAD_ACP, dir).c_str());
+				IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
 				SDL_FreeSurface(screenshot);
 			}
 		}
@@ -1468,7 +1466,7 @@ extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 		{
 			SDL_Surface *screenshot = SDL_CreateRGBSurface(0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
 			SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-			IMG_SavePNG(screenshot, pu->refToAstr(CP_THREAD_ACP, dir).c_str());
+			IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
 			SDL_FreeSurface(screenshot);
 		}
 	}
@@ -1487,7 +1485,7 @@ extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 		}
 	//Save using libpng
 		{
-			std::string path = pu->refToAstr(CP_THREAD_ACP, dir);
+			std::string path = WstrToStr(dir);
 			FILE* fp = fopen(path.c_str(), "wb");
 			if(fp){
 				png_structp png_ptr = png_create_write_struct(
@@ -1516,7 +1514,7 @@ extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 }
 
 //To update window resize in OpenGL context
-extern "C" bool SSZ_STDCALL UpdateGLViewport(PluginUtil* pu, const SDL_Event& event)
+bool SSZ_STDCALL UpdateGLViewport(const SDL_Event& event)
 {
 	if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MAXIMIZED)
 	{
@@ -1828,12 +1826,12 @@ int PlayVLCVideo(const std::string& videoPath, const std::string& capturePath, i
 	return 1; //Success
 }
 
-extern "C" int SSZ_STDCALL PlayVideo(PluginUtil* pu, Reference fn, Reference screenshotPath, int volume, int audioTrack)//, int subtitleTrack)
+int SSZ_STDCALL PlayVideo(const std::wstring& fn, const std::wstring& screenshotPath, int volume, int audioTrack)//, int subtitleTrack)
 {
-	std::wstring wVideoPath = pu->refToWstr(fn); //Get video path as wide string
+	std::wstring wVideoPath = fn; //Get video path as wide string
 	std::string videoPath = WstrToStr(wVideoPath); //Convert the path to narrow string (std::string) for libvlc_media_new_path
 //Same for screenshots path
-	std::wstring wShotPath = pu->refToWstr(screenshotPath);
+	std::wstring wShotPath = screenshotPath;
 	std::string capturePath = WstrToStr(wShotPath);
 	MEM_MARK_BEFORE_NAMED(VIDEO, videoPath.c_str());
 	int result = PlayVLCVideo(videoPath, capturePath, volume, audioTrack);//, subtitleTrack;
@@ -1841,7 +1839,7 @@ extern "C" int SSZ_STDCALL PlayVideo(PluginUtil* pu, Reference fn, Reference scr
 	return result;
 }
 
-extern "C" bool SSZ_STDCALL PollEvent(PluginUtil* pu, int8_t* pb)
+bool SSZ_STDCALL PollEvent(int8_t* pb)
 {
 	if(pb == nullptr){
 		LOG_INFO("SSZ", "sdlplugin::PollEvent pb is null");
@@ -1884,12 +1882,12 @@ extern "C" bool SSZ_STDCALL PollEvent(PluginUtil* pu, int8_t* pb)
 	return ret;
 }
 
-extern "C" char16_t SSZ_STDCALL GetLastChar(PluginUtil* pu)
+char16_t SSZ_STDCALL GetLastChar()
 {
 	return g_lastChar;
 }
 
-extern "C" bool SSZ_STDCALL KeyState(PluginUtil* pu, int32_t key)
+bool SSZ_STDCALL KeyState(int32_t key)
 {
 	int keyCount = 0;
 	const uint8_t* state = SDL_GetKeyboardState(&keyCount);
@@ -1904,7 +1902,7 @@ extern "C" bool SSZ_STDCALL KeyState(PluginUtil* pu, int32_t key)
 	return state[key] == SDL_PRESSED;
 }
 
-extern "C" bool SSZ_STDCALL JoystickButtonState(PluginUtil* pu, int32_t btn, int32_t joy)
+bool SSZ_STDCALL JoystickButtonState(int32_t btn, int32_t joy)
 {
 	return g_js.getState(joy, btn);
 }
@@ -1913,7 +1911,7 @@ extern "C" bool SSZ_STDCALL JoystickButtonState(PluginUtil* pu, int32_t btn, int
 // Batched input poll — returns a 14-bit bitmask of all button states.    [OPT3]
 // Eliminates 27 FFI round-trips per player per frame vs individual calls.
 // ---------------------------------------------------------------------------
-extern "C" int32_t SSZ_STDCALL PollInputBitmask(PluginUtil* pu, int32_t jn,
+int32_t SSZ_STDCALL PollInputBitmask(int32_t jn,
 	int32_t u,  int32_t d,  int32_t l,  int32_t r,
 	int32_t a,  int32_t b,  int32_t c,
 	int32_t x,  int32_t y,  int32_t z,
@@ -1964,7 +1962,7 @@ extern "C" int32_t SSZ_STDCALL PollInputBitmask(PluginUtil* pu, int32_t jn,
 // Software pixel-buffer fill (writes directly into g_pix)
 // Used by the SDL2 software-renderer path for opaque fills.
 // ---------------------------------------------------------------------------
-extern "C" void SSZ_STDCALL SoftFill(PluginUtil* pu, uint32_t color, SDL_Rect* prect)
+void SSZ_STDCALL SoftFill(uint32_t color, SDL_Rect* prect)
 {
 	LARGE_INTEGER t0, t1;
 	QueryPerformanceCounter(&t0);
@@ -2005,7 +2003,7 @@ extern "C" void SSZ_STDCALL SoftFill(PluginUtil* pu, uint32_t color, SDL_Rect* p
 	g_perfCounters.fillTimeUs += qpcElapsedUs(t0, t1, g_perfCounters.qpcFreq);
 }
 
-extern "C" void SSZ_STDCALL Fill(PluginUtil* pu, uint32_t color, SDL_Rect* prect)
+void SSZ_STDCALL Fill(uint32_t color, SDL_Rect* prect)
 {
 	g_perfCounters.fillCalls++;
 	g_perfCounters.drawCalls++;
@@ -2013,15 +2011,14 @@ extern "C" void SSZ_STDCALL Fill(PluginUtil* pu, uint32_t color, SDL_Rect* prect
 	SDL_RenderFillRect(g_renderer, prect);
 }
 
-extern "C" intptr_t SSZ_STDCALL IMGLoad(PluginUtil* pu, Reference fn)
+intptr_t SSZ_STDCALL IMGLoad(const std::wstring& fn)
 {
-	return (intptr_t)IMG_Load(pu->refToAstr(CP_THREAD_ACP, fn).c_str());
+	return (intptr_t)IMG_Load(WstrToStr(fn).c_str());
 }
 
-extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w, Reference* out)
+void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_t>& out)
 {
-	pu->setSSZFunc();
-	out->releaseanddelete();
+	out.clear();
 	*w = *h = 0;
 	if(!fp) return;
 	uint8_t header[8] = {0};
@@ -2052,8 +2049,9 @@ extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int
 		{
 			*w = width;
 			*h = height;
-			out->refnew(height, width);
-			auto p = (png_bytep)out->atpos();
+			out.resize(height * width);
+			if (out.size() < (size_t)(height * width)) out.resize(height * width);
+	auto p = out.data();
 			auto pp = new png_bytep[height];
 			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i;
 			png_read_image(png_ptr, pp);
@@ -2140,7 +2138,7 @@ static void blitCacheTrim()
 	}
 }
 
-extern "C" void SSZ_STDCALL BlitSurface(PluginUtil* pu, SDL_Rect* prect, SDL_Surface* psrcs)
+void SSZ_STDCALL BlitSurface(SDL_Rect* prect, SDL_Surface* psrcs)
 {
 	SDL_Texture* tex;
 	std::map<SDL_Surface*, BlitCacheEntry>::iterator it = g_blitCache.find(psrcs);
@@ -2163,7 +2161,7 @@ extern "C" void SSZ_STDCALL BlitSurface(PluginUtil* pu, SDL_Rect* prect, SDL_Sur
 	SDL_RenderCopy(g_renderer, tex, nullptr, prect);
 }
 
-extern "C" intptr_t SSZ_STDCALL CreatePaletteSurface(PluginUtil* pu, int32_t h, int32_t w, SDL_Color* ppl, uint8_t* ppx)
+intptr_t SSZ_STDCALL CreatePaletteSurface(int32_t h, int32_t w, SDL_Color* ppl, uint8_t* ppx)
 {
 	SDL_Surface* psrc = SDL_CreateRGBSurfaceFrom(ppx, w, h, 8, w, 0, 0, 0, 0);
 	SDL_SetPaletteColors(psrc->format->palette, ppl, 0, 256);
@@ -2172,12 +2170,12 @@ extern "C" intptr_t SSZ_STDCALL CreatePaletteSurface(PluginUtil* pu, int32_t h, 
 	return (intptr_t)pdst;
 }
 
-extern "C" void SSZ_STDCALL SetColorKey(PluginUtil* pu, uint32_t key, SDL_Surface* psur)
+void SSZ_STDCALL SetColorKey(uint32_t key, SDL_Surface* psur)
 {
 	SDL_SetColorKey(psur, key < 256, key);
 }
 
-extern "C" void SSZ_STDCALL Flip(PluginUtil* pu)
+void SSZ_STDCALL Flip()
 {
 	LARGE_INTEGER flipT0, flipT1;
 
@@ -2208,7 +2206,7 @@ extern "C" void SSZ_STDCALL Flip(PluginUtil* pu)
 	}
 }
 
-extern "C" intptr_t SSZ_STDCALL AllocSurface(PluginUtil* pu, int32_t h, int32_t w)
+intptr_t SSZ_STDCALL AllocSurface(int32_t h, int32_t w)
 {
 	return
 		(intptr_t)SDL_CreateRGBSurface(
@@ -2216,35 +2214,35 @@ extern "C" intptr_t SSZ_STDCALL AllocSurface(PluginUtil* pu, int32_t h, int32_t 
 			0x0000FF00, 0x000000FF, 0xFF000000);
 }
 
-extern "C" void SSZ_STDCALL FreeSurface(PluginUtil* pu, SDL_Surface* ps)
+void SSZ_STDCALL FreeSurface(SDL_Surface* ps)
 {
 	blitCacheEvict(ps);
 	SDL_FreeSurface(ps);
 }
 
-extern "C" void SSZ_STDCALL Delay(PluginUtil* pu, uint32_t ms)
+void SSZ_STDCALL Delay(uint32_t ms)
 {
 	SDL_Delay(ms);
 }
 
-extern "C" uint32_t SSZ_STDCALL GetTicks(PluginUtil* pu)
+uint32_t SSZ_STDCALL GetTicks()
 {
 	return SDL_GetTicks();
 }
 
-extern "C" void SSZ_STDCALL CursorShow(PluginUtil* pu, bool show)
+void SSZ_STDCALL CursorShow(bool show)
 {
 	SDL_ShowCursor(show ? SDL_ENABLE : SDL_DISABLE);
 }
 
-extern "C" intptr_t SSZ_STDCALL OpenFont(PluginUtil* pu, int32_t size, Reference font)
+intptr_t SSZ_STDCALL OpenFont(int32_t size, const std::wstring& font)
 {
 	TTF_Font* pf;
-	pf = TTF_OpenFont(pu->refToAstr(CP_THREAD_ACP, font).c_str(), size);
+	pf = TTF_OpenFont(WstrToStr(font).c_str(), size);
 	return (intptr_t)pf;
 }
 
-extern "C" void SSZ_STDCALL CloseFont(PluginUtil* pu, TTF_Font* pf)
+void SSZ_STDCALL CloseFont(TTF_Font* pf)
 {
 	textCacheEvictFont(pf);
 	TTF_CloseFont(pf);
@@ -2337,9 +2335,9 @@ static void textCacheTrim()
 	}
 }
 
-extern "C" void SSZ_STDCALL RenderFont(PluginUtil* pu, Reference str, int32_t y, int32_t x, SDL_Color c, TTF_Font* pf)
+void SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x, SDL_Color c, TTF_Font* pf)
 {
-	std::wstring wstr = pu->refToWstr(str);
+	std::wstring wstr = str;
 	uint32_t colorPack = ((uint32_t)c.r << 24) | ((uint32_t)c.g << 16)
 	                   | ((uint32_t)c.b << 8)  | (uint32_t)c.a;
 
@@ -2450,7 +2448,7 @@ double normalize(double sam, const int chs, const int sps, NormalizeVar& v)
 // then this function normalises and copies into the callback buffer.
 // BGM is handled entirely by SDL_mixer on its own device.
 // ---------------------------------------------------------------------------
-extern "C" bool SSZ_STDCALL SetSndBuf(PluginUtil* pu, int32_t* buf)
+bool SSZ_STDCALL SetSndBuf(int32_t* buf)
 {
 	if(g_snddata == g_sndbuf) return false;
 	for(int i = 0; i < g_samples*2; i++){
@@ -2471,26 +2469,16 @@ extern "C" bool SSZ_STDCALL SetSndBuf(PluginUtil* pu, int32_t* buf)
 //   WAV, MP3, OGG Vorbis, FLAC, MOD/S3M/XM/IT, MIDI, …
 // The second parameter (pldir) is kept for ABI compat but ignored.
 // ---------------------------------------------------------------------------
-extern "C" bool SSZ_STDCALL PlayBGM(PluginUtil* pu, Reference fn, Reference pldir)
+bool SSZ_STDCALL PlayBGM(const std::wstring& fn, const std::wstring& pldir)
 {
 	LOG_DEBUG("SDL", "PlayBGM: Starting");
 	bgmclear();
-	if(fn.len() == 0){
+	if(fn.empty()){
 		LOG_DEBUG("SDL", "PlayBGM: Empty filename, returning true");
 		return true;
 	}
-	// Convert wide filename reference to multibyte
-	std::wstring fnamew;
-	std::string fname;
-	fnamew.append((wchar_t*)fn.atpos(), fn.len()/(int)sizeof(wchar_t));
-	fname.resize(WideCharToMultiByte(
-		CP_THREAD_ACP, 0, fnamew.data(), (int)fnamew.size(),
-		nullptr, 0, nullptr, nullptr));
-	if(fname.size() > 0){
-		WideCharToMultiByte(
-			CP_THREAD_ACP, 0, fnamew.data(), (int)fnamew.size(),
-			(char*)fname.data(), (int)fname.size(), nullptr, nullptr);
-	}
+	// Convert wide filename to multibyte
+	std::string fname = WstrToStr(fn);
 	// Resolve absolute path
 	char* pc = _fullpath(nullptr, fname.c_str(), 0);
 	if(pc == nullptr){
@@ -2523,7 +2511,7 @@ extern "C" bool SSZ_STDCALL PlayBGM(PluginUtil* pu, Reference fn, Reference pldi
 	return true;
 }
 
-extern "C" void SSZ_STDCALL PauseBGM(PluginUtil* pu, bool pause)
+void SSZ_STDCALL PauseBGM(bool pause)
 {
 	if(pause == bgm_paused) return;
 	bgm_paused = pause;
@@ -2540,24 +2528,24 @@ extern "C" void SSZ_STDCALL PauseBGM(PluginUtil* pu, bool pause)
 
 // Legacy SendOpen/Write/Close kept as no-ops for ABI compatibility.
 // OGG streaming is now handled by PlayBGM via SDL_mixer.
-extern "C" bool SSZ_STDCALL SendOpenBGM(PluginUtil* pu, int32_t channels, int32_t rate)
+bool SSZ_STDCALL SendOpenBGM(int32_t channels, int32_t rate)
 {
 	LOG_DEBUG("SDL", "SendOpenBGM: deprecated (SDL_mixer handles all BGM)");
 	return false;
 }
 
-extern "C" void SSZ_STDCALL SendCloseBGM(PluginUtil* pu)
+void SSZ_STDCALL SendCloseBGM()
 {
 	LOG_DEBUG("SDL", "SendCloseBGM: deprecated");
 }
 
-extern "C" intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil* pu, Reference buffer)
+intptr_t SSZ_STDCALL SendWriteBGM()
 {
 	LOG_DEBUG("SDL", "SendWriteBGM: deprecated");
 	return 0;
 }
 
-extern "C" void SSZ_STDCALL SetVolume(PluginUtil* pu, float bv, float wv, float gv)
+void SSZ_STDCALL SetVolume(float bv, float wv, float gv)
 {
 	bgm_vol = bv;
 	wav_vol = wv;
@@ -2578,7 +2566,7 @@ extern "C" void SSZ_STDCALL SetVolume(PluginUtil* pu, float bv, float wv, float 
 	// 	bgm_vol, wav_vol, g_vol, mixVol);
 }
 
-extern "C" void SSZ_STDCALL FadeInBGM(PluginUtil* pu, int time)
+void SSZ_STDCALL FadeInBGM(int time)
 {
 	if(g_bgmMusic == nullptr){
 		LOG_DEBUG("SDL", "FadeInBGM: No music loaded");
@@ -2591,7 +2579,7 @@ extern "C" void SSZ_STDCALL FadeInBGM(PluginUtil* pu, int time)
 	Mix_VolumeMusic(targetVol);
 }
 
-extern "C" void SSZ_STDCALL FadeOutBGM(PluginUtil* pu, int time)
+void SSZ_STDCALL FadeOutBGM(int time)
 {
 	if(g_bgmMusic == nullptr){
 		LOG_DEBUG("SDL", "FadeOutBGM: No music loaded");
@@ -4402,7 +4390,7 @@ int foobar(int n)
 	return 0;
 }
 
-extern "C" bool SSZ_STDCALL RenderMugenZoom(PluginUtil* pu, Reference* pluginbuf, int32_t rle,
+bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 	float rcy, float rcx, SDL_Rect* pdstr, int32_t alpha,
 	uint32_t roto, float rasterxadd, float yscl, float xbotscl, float xtopscl,
 	SDL_Rect* tile, float ty, float cx, SDL_Rect* psrcr,
@@ -4446,7 +4434,6 @@ extern "C" bool SSZ_STDCALL RenderMugenZoom(PluginUtil* pu, Reference* pluginbuf
 	}
 	uint32_t pal[256];
 	int i;
-	pu->setSSZFunc();
 	if(
 		(
 			127 <= alpha && alpha <= 254 && foobar(255 - alpha)
@@ -4543,7 +4530,7 @@ extern "C" bool SSZ_STDCALL RenderMugenZoom(PluginUtil* pu, Reference* pluginbuf
 // Renders all glyphs of a text string in a single FFI call, eliminating
 // per-glyph RenderMugenZoom overhead (path flags, alpha dispatch, QPC timing).
 // ---------------------------------------------------------------------------
-extern "C" bool SSZ_STDCALL RenderFontBatch(PluginUtil* pu, int32_t count,
+bool SSZ_STDCALL RenderFontBatch(int32_t count,
 	int32_t* glyphData,
 	float spacing,
 	float yscl,
@@ -4564,7 +4551,6 @@ extern "C" bool SSZ_STDCALL RenderFontBatch(PluginUtil* pu, int32_t count,
 	LARGE_INTEGER t0, t1;
 	QueryPerformanceCounter(&t0);
 	g_perfCounters.drawCalls++;
-	pu->setSSZFunc();
 
 	int winX0 = 0, winY0 = 0, winX1 = 0, winY1 = 0;
 	int firstAtlasOfs = 0, firstGlyphW = 0;
@@ -5352,7 +5338,7 @@ void mShadowRender(
 	}
 }
 
-extern "C" bool SSZ_STDCALL RenderMugenShadow(PluginUtil* pu, Reference* pluginbuf, int32_t rle,
+bool SSZ_STDCALL RenderMugenShadow(Reference* pluginbuf, int32_t rle,
 	float rcy, float rcx, SDL_Rect* pdstr, int32_t alpha,
 	uint32_t roto, float vscl, float yscl, float xscl,
 	float ty, float cx, SDL_Rect* psrcr, uint32_t color, Reference img)
@@ -5377,7 +5363,7 @@ extern "C" bool SSZ_STDCALL RenderMugenShadow(PluginUtil* pu, Reference* pluginb
 	return true;
 }
 
-extern "C" uint32_t SSZ_STDCALL Load8bitTexture(PluginUtil* pu, int32_t h, int32_t w, uint8_t* ppxl)
+uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 {
 	// ASSET_LOG("Loading 8-bit texture: %dx%d", w, h);
 	uint32_t texid;
@@ -5394,7 +5380,7 @@ extern "C" uint32_t SSZ_STDCALL Load8bitTexture(PluginUtil* pu, int32_t h, int32
 	return texid;
 }
 
-extern "C" uint32_t SSZ_STDCALL LoadPngTexture(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w)
+uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 {
 	*w = *h = 0;
 	if(!fp) return 0;
@@ -5450,12 +5436,12 @@ extern "C" uint32_t SSZ_STDCALL LoadPngTexture(PluginUtil* pu, FILE* fp, int32_t
 	return texid;
 }
 
-extern "C" void SSZ_STDCALL DeleteGlTexture(PluginUtil* pu, uint32_t texid)
+void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 {
 	if(texid != 0) glDeleteTextures(1, &texid);
 }
 
-extern "C" void SSZ_STDCALL GlSwapBuffers(PluginUtil* pu)
+void SSZ_STDCALL GlSwapBuffers()
 {
 	// End previous frame perf tracking
 	if (g_perfMonitorEnabled)
@@ -5483,7 +5469,7 @@ extern "C" void SSZ_STDCALL GlSwapBuffers(PluginUtil* pu)
 	}
 }
 
-extern "C" bool SSZ_STDCALL InitMugenGl(PluginUtil* pu)
+bool SSZ_STDCALL InitMugenGl()
 {
 	const GLchar* vertShader =
 		"void main(void){"
@@ -5884,7 +5870,7 @@ void renderMugenGl(
 	}
 }
 
-extern "C" bool SSZ_STDCALL RenderMugenGl(PluginUtil* pu, float rcy, float rcx, SDL_Rect* dstr, int alpha,
+bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	float angle, float rasterxadd, float vscl, float yscl,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, int mask, uint8_t* ppal, uint32_t texid)
@@ -5958,7 +5944,7 @@ extern "C" bool SSZ_STDCALL RenderMugenGl(PluginUtil* pu, float rcy, float rcx, 
 	return true;
 }
 
-extern "C" bool SSZ_STDCALL RenderMugenGlFc(PluginUtil* pu, float mulb, float mulg, float mulr,
+bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	float addb, float addg, float addr, float color, bool neg,
 	float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	float angle, float rasterxadd, float vscl, float yscl,
@@ -6010,7 +5996,7 @@ extern "C" bool SSZ_STDCALL RenderMugenGlFc(PluginUtil* pu, float mulb, float mu
 	return true;
 }
 
-extern "C" bool SSZ_STDCALL RenderMugenGlFcS(PluginUtil* pu, uint32_t color,
+bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 	float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	float angle, float rasterxadd, float vscl, float yscl,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
@@ -6073,7 +6059,7 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	glEnd();
 }
 
-extern "C" void SSZ_STDCALL MugenFillGl(PluginUtil* pu, int32_t alpha, uint32_t color, SDL_Rect rect)
+void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 {
 	g_perfCounters.fillCalls++;
 	g_perfCounters.drawCalls++;
@@ -6120,7 +6106,7 @@ extern "C" void SSZ_STDCALL MugenFillGl(PluginUtil* pu, int32_t alpha, uint32_t 
 	}
 }
 
-extern "C" bool SSZ_STDCALL BindGlContext(PluginUtil* pu)
+bool SSZ_STDCALL BindGlContext()
 {
 	return
 		wglMakeCurrent(
@@ -6128,7 +6114,7 @@ extern "C" bool SSZ_STDCALL BindGlContext(PluginUtil* pu)
 			g_mainTreadId == GetCurrentThreadId() ? g_hglrc : g_hglrc2) != 0;
 }
 
-extern "C" bool SSZ_STDCALL UnbindGlContext(PluginUtil* pu)
+bool SSZ_STDCALL UnbindGlContext()
 {
 	return wglMakeCurrent(nullptr, nullptr) != 0;
 }

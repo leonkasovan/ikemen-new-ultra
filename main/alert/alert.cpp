@@ -1,20 +1,20 @@
-
 #include "sszdef.h"
 
-#include "typeid.h"
-#include "arrayandref.hpp"
+#ifndef _WIN32
 #include "pluginutil.hpp"
+#endif
 
-extern "C" void SSZ_STDCALL Alert(PluginUtil* pu, Reference title, Reference mes)
+
+void SSZ_STDCALL Alert(const std::wstring& title, const std::wstring& mes)
 {
 #ifdef _WIN32
 	MessageBox(
-		NULL, pu->refToWstr(mes).c_str(), pu->refToWstr(title).c_str(),
+		NULL, mes.c_str(), title.c_str(),
 		MB_OK | MB_ICONWARNING);
 #else
 	fprintf(
 		stderr, "%s\n%s\n",
-		pu->wToA(pu->refToWstr(title)).c_str(),
-		pu->wToA(pu->refToWstr(mes)).c_str());
+		PluginUtil::wToA(PluginUtil::gwToW(title)).c_str(),
+		PluginUtil::wToA(PluginUtil::gwToW(mes)).c_str());
 #endif
 }

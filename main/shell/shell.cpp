@@ -1,27 +1,21 @@
-
 #include <windows.h>
 #include <process.h>
 #include <stdint.h>
 
 
 #include "sszdef.h"
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
 
-extern "C" bool SSZ_STDCALL ShellOpen(PluginUtil* pu, bool act, bool wait, Reference direct, Reference param, Reference file)
+
+bool SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct, const std::wstring& param, const std::wstring& file)
 {
 	SHELLEXECUTEINFO sei;
-	std::wstring f = pu->refToWstr(file);
-	std::wstring p = pu->refToWstr(param);
-	std::wstring d = pu->refToWstr(direct);
 	sei.cbSize		 = sizeof(sei);
 	sei.fMask		 = wait ? SEE_MASK_NOCLOSEPROCESS : 0;
 	sei.hwnd		 = 0;
 	sei.lpVerb		 = L"open";
-	sei.lpFile		 = f.c_str();
-	sei.lpParameters = p.c_str();
-	sei.lpDirectory  = d.c_str();
+	sei.lpFile		 = file.c_str();
+	sei.lpParameters = param.c_str();
+	sei.lpDirectory  = direct.c_str();
 	sei.nShow		 = (act ? SW_NORMAL : SW_SHOWMINNOACTIVE);
 	if(ShellExecuteEx(&sei)){
 		if(wait) WaitForSingleObject(sei.hProcess, INFINITE);
@@ -31,9 +25,9 @@ extern "C" bool SSZ_STDCALL ShellOpen(PluginUtil* pu, bool act, bool wait, Refer
 	return true;
 }
 
-extern "C" bool SSZ_STDCALL MoveTrash(PluginUtil* pu, Reference file)
+bool SSZ_STDCALL MoveTrash(const std::wstring& file)
 {
-	std::wstring f = pu->refToWstr(file);
+	std::wstring f = file;
 	wchar_t* pwc = _wfullpath(NULL, f.c_str(), 0);
 	if(pwc == NULL) return false;
 	f = pwc;
@@ -48,4 +42,3 @@ extern "C" bool SSZ_STDCALL MoveTrash(PluginUtil* pu, Reference file)
 	sfos.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 	return SHFileOperation(&sfos) == 0;
 }
-

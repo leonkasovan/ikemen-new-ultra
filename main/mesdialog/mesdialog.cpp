@@ -2,6 +2,8 @@
 #include <process.h>
 #include <stdint.h>
 #include <zlib.h>
+#include <string>
+#include <vector>
 static const unsigned char ASCII_FLAG  = 0x01; /* bit 0 set: file probably ascii text */
 static const unsigned char HEAD_CRC    = 0x02; /* bit 1 set: header CRC present */
 static const unsigned char EXTRA_FIELD = 0x04; /* bit 2 set: extra field present */
@@ -10,68 +12,47 @@ static const unsigned char COMMENT     = 0x10; /* bit 4 set: file comment presen
 static const unsigned char RESERVED    = 0xE0; /* bits 5..7: reserved */
 #include "locksingler.hpp"
 #include "sszdef.h"
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
 
 // Initialize ghInstance with main module handle
 HINSTANCE ghInstance = GetModuleHandle(NULL);
 LockSingler g_mtx;
 std::wstring g_sharedstring;
 
-// BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
-// {
-// 	switch(fdwReason)
-// 	{
-// 	case DLL_PROCESS_ATTACH:
-// 		ghInstance = hinstDLL;
-// 		g_sharedstring = L'\0';
-// 		break;
-// 	case DLL_PROCESS_DETACH:
-// 		break;
-// 	case DLL_THREAD_ATTACH:
-// 		break;
-// 	case DLL_THREAD_DETACH:
-// 		break;
-// 	}
-// 	return TRUE;
-// }
 
-extern "C" bool SSZ_STDCALL YesNo(PluginUtil* pu, Reference r)
+bool SSZ_STDCALL YesNo(const std::wstring& r)
 {
 	return
 		MessageBox(
-			NULL, pu->refToWstr(r).c_str(), L"Message", MB_YESNO) == IDYES;
+			NULL, r.c_str(), L"Message", MB_YESNO) == IDYES;
 }
 
-extern "C" void SSZ_STDCALL VeryUnsafeCopy(PluginUtil* pu, intptr_t size, void *src, void *dst)
+void SSZ_STDCALL VeryUnsafeCopy(intptr_t size, void *src, void *dst)
 {
 	memcpy(dst, src, size);
 }
 
-extern "C" bool SSZ_STDCALL GetClipboardStr(PluginUtil* pu, Reference *r)
+std::wstring SSZ_STDCALL GetClipboardStr()
 {
-	pu->setSSZFunc();
 	HANDLE hText;
 	wchar_t *pText;
 	OpenClipboard(NULL);
 	hText = GetClipboardData(CF_UNICODETEXT);
-	if(hText == NULL) return false;
+	if(hText == NULL) return std::wstring();
 	pText = (wchar_t*)GlobalLock(hText);
-	pu->wstrToRef(*r, pText);
+	std::wstring result(pText);
 	GlobalUnlock(hText);
 	CloseClipboard();
-	return true;
+	return result;
 }
 
-extern "C" intptr_t SSZ_STDCALL TazyuuCheck(PluginUtil* pu, Reference name)
+intptr_t SSZ_STDCALL TazyuuCheck(const std::wstring& name)
 {
 	HANDLE hMutex;
 	SECURITY_ATTRIBUTES securityatt;
 	securityatt.nLength = sizeof(securityatt);
 	securityatt.lpSecurityDescriptor = NULL;
 	securityatt.bInheritHandle = FALSE;
-	hMutex = CreateMutex(&securityatt, FALSE, pu->refToWstr(name).c_str());
+	hMutex = CreateMutex(&securityatt, FALSE, name.c_str());
 	if(GetLastError() == ERROR_ALREADY_EXISTS){
 		CloseHandle(hMutex);
 		hMutex = NULL;
@@ -79,17 +60,16 @@ extern "C" intptr_t SSZ_STDCALL TazyuuCheck(PluginUtil* pu, Reference name)
 	return (intptr_t)hMutex;
 }
 
-extern "C" void SSZ_STDCALL CloseTazyuuHandle(PluginUtil* pu, intptr_t mutex)
+void SSZ_STDCALL CloseTazyuuHandle(intptr_t mutex)
 {
-    ReleaseMutex((HANDLE)mutex);
-    CloseHandle((HANDLE)mutex);
+	ReleaseMutex((HANDLE)mutex);
+	CloseHandle((HANDLE)mutex);
 }
 
-extern "C" void SSZ_STDCALL GetInifileString(PluginUtil* pu, Reference* pstr, Reference def, Reference key, Reference app, Reference file)
+std::wstring SSZ_STDCALL GetInifileString(const std::wstring& def, const std::wstring& key, const std::wstring& app, const std::wstring& file)
 {
-	pu->setSSZFunc();
 	wchar_t* pws;
-	std::wstring tmp1 = pu->refToWstr(file);
+	std::wstring tmp1 = file;
 	pws = _wfullpath(NULL, tmp1.c_str(), 0);
 	if(pws != NULL){
 		tmp1 = pws;
@@ -98,16 +78,16 @@ extern "C" void SSZ_STDCALL GetInifileString(PluginUtil* pu, Reference* pstr, Re
 	std::wstring tmp5;
 	tmp5.resize(256);
 	GetPrivateProfileString(
-		pu->refToWstr(app).c_str(), pu->refToWstr(key).c_str(),
-		pu->refToWstr(def).c_str(),
-		(wchar_t*)tmp5.data(), tmp5.size(), tmp1.c_str());
-	pu->wstrToRef(*pstr, tmp5.c_str());
+		app.c_str(), key.c_str(),
+		def.c_str(),
+		(wchar_t*)tmp5.data(), (DWORD)tmp5.size(), tmp1.c_str());
+	return tmp5.c_str();
 }
 
-extern "C" int32_t SSZ_STDCALL GetInifileInt(PluginUtil* pu, int32_t def, Reference key, Reference app, Reference file)
+int32_t SSZ_STDCALL GetInifileInt(int32_t def, const std::wstring& key, const std::wstring& app, const std::wstring& file)
 {
 	wchar_t* pws;
-	std::wstring tmp1 = pu->refToWstr(file);
+	std::wstring tmp1 = file;
 	pws = _wfullpath(NULL, tmp1.c_str(), 0);
 	if(pws != NULL){
 		tmp1 = pws;
@@ -115,14 +95,14 @@ extern "C" int32_t SSZ_STDCALL GetInifileInt(PluginUtil* pu, int32_t def, Refere
 	}
 	return
 		GetPrivateProfileInt(
-			pu->refToWstr(app).c_str(), pu->refToWstr(key).c_str(),
+			app.c_str(), key.c_str(),
 			def, tmp1.c_str());
 }
 
-extern "C" bool SSZ_STDCALL WriteInifileString(PluginUtil* pu, Reference str, Reference key, Reference app, Reference file)
+bool SSZ_STDCALL WriteInifileString(const std::wstring& str, const std::wstring& key, const std::wstring& app, const std::wstring& file)
 {
 	wchar_t* pws;
-	std::wstring tmp1 = pu->refToWstr(file);
+	std::wstring tmp1 = file;
 	pws = _wfullpath(NULL, tmp1.c_str(), 0);
 	if(pws != NULL){
 		tmp1 = pws;
@@ -130,8 +110,8 @@ extern "C" bool SSZ_STDCALL WriteInifileString(PluginUtil* pu, Reference str, Re
 	}
 	return
 		WritePrivateProfileString(
-			pu->refToWstr(app).c_str(), pu->refToWstr(key).c_str(),
-			pu->refToWstr(str).c_str(), tmp1.c_str()) != 0;
+			app.c_str(), key.c_str(),
+			str.c_str(), tmp1.c_str()) != 0;
 }
 
 
@@ -165,16 +145,14 @@ int HeadCheck(const char *const buf, intptr_t len)
 	return i;
 }
 
-extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference *dst)
+bool SSZ_STDCALL UnCompress(const void* data, intptr_t bytes, std::vector<uint8_t>& output)
 {
-	pu->setSSZFunc();
 	z_stream z;
 	intptr_t hsize;
 	char outbuf[4096];
 	int status;
-	std::string mainbuf;
-	if(src.len() == 0) return false;
-	if((hsize = HeadCheck((char*)src.atpos(), src.len())) < 0) hsize = 0;
+	if(bytes == 0) return false;
+	if((hsize = HeadCheck((const char*)data, bytes)) < 0) hsize = 0;
 	z.zalloc = Z_NULL;
 	z.zfree = Z_NULL;
 	z.opaque = Z_NULL;
@@ -185,13 +163,13 @@ extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference 
 	}else{
 		if(inflateInit(&z) != Z_OK) return false;
 	}
-	z.next_in = (BYTE *)src.atpos()+hsize;
-	z.avail_in = (uInt)(src.len()-hsize);
+	z.next_in = (BYTE *)data + hsize;
+	z.avail_in = (uInt)(bytes - hsize);
 	z.next_out = (BYTE *)outbuf; 
 	z.avail_out = (uInt)sizeof(outbuf);
 	do{
 		if(z.avail_out == 0){
-			mainbuf.append(outbuf, sizeof(outbuf));
+			output.insert(output.end(), outbuf, outbuf + sizeof(outbuf));
 			z.next_out = (Bytef*)outbuf;
 			z.avail_out = sizeof(outbuf);
 		}
@@ -201,60 +179,52 @@ extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference 
 		inflateEnd(&z);
 		return false;
 	}
-	mainbuf.append(outbuf, sizeof(outbuf) - z.avail_out);
+	output.insert(output.end(), outbuf, outbuf + sizeof(outbuf) - z.avail_out);
 	inflateEnd(&z);
-	dst->releaseanddelete();
-	dst->refnew(mainbuf.size(), sizeof(int8_t));
-	if(dst->len() > 0) memcpy(dst->atpos(), mainbuf.data(), mainbuf.size());
 	return true;
 }
 
-extern "C" void SSZ_STDCALL UbytesToStr(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
+void SSZ_STDCALL UbytesToStr(const void* data, intptr_t bytes, UINT cp, std::wstring& output)
 {
-	pu->setSSZFunc();
-	dst->releaseanddelete();
-	if(src.len() == 0) return;
-	dst->refnew(MultiByteToWideChar(cp, 0, (LPCSTR)src.atpos(), (int)src.len(), NULL, 0), sizeof(wchar_t));
-	if(dst->len() > 0) MultiByteToWideChar(cp, 0, (LPCSTR)src.atpos(), (int)src.len(), (wchar_t*)dst->atpos(), (int)dst->len()/sizeof(wchar_t));
+	if(bytes == 0) return;
+	int len = MultiByteToWideChar(cp, 0, (LPCSTR)data, (int)bytes, NULL, 0);
+	if(len <= 0) return;
+	output.resize(len);
+	MultiByteToWideChar(cp, 0, (LPCSTR)data, (int)bytes, &output[0], len);
 }
 
-extern "C" void SSZ_STDCALL StrToUbytes(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
+void SSZ_STDCALL StrToUbytes(const void* data, intptr_t bytes, UINT cp, std::vector<uint8_t>& output)
 {
-	pu->setSSZFunc();
-	dst->releaseanddelete();
-	if(src.len() == 0) return;
-	dst->refnew(WideCharToMultiByte(cp, 0, (wchar_t*)src.atpos(), (int)src.len()/sizeof(wchar_t), NULL, 0, NULL, NULL), sizeof(uint8_t));
-	if(dst->len() > 0) WideCharToMultiByte(cp, 0, (wchar_t*)src.atpos(), (int)src.len()/sizeof(wchar_t), (LPSTR)dst->atpos(), (int)dst->len(), NULL, NULL);
+	if(bytes == 0) return;
+	int len = WideCharToMultiByte(cp, 0, (wchar_t*)data, (int)bytes / (int)sizeof(wchar_t), NULL, 0, NULL, NULL);
+	if(len <= 0) return;
+	output.resize(len);
+	WideCharToMultiByte(cp, 0, (wchar_t*)data, (int)bytes / (int)sizeof(wchar_t), (LPSTR)output.data(), len, NULL, NULL);
 }
 
-extern "C" void SSZ_STDCALL AsciiToLocal(PluginUtil* pu, Reference src, Reference *dst)
+void SSZ_STDCALL AsciiToLocal(const void* data, intptr_t bytes, std::wstring& output)
 {
-	pu->setSSZFunc();
-	dst->releaseanddelete();
-	if(src.len() == 0) return;
+	if(bytes == 0) return;
 	std::string tmp;
-	intptr_t i, l = src.len()/sizeof(wchar_t);
-	for(i = 0; i < l; i++) tmp += (char)((wchar_t*)src.atpos())[i];
-	dst->refnew(MultiByteToWideChar(CP_THREAD_ACP, 0, tmp.data(), tmp.size(), NULL, 0), sizeof(wchar_t));
-	if(dst->len() > 0) MultiByteToWideChar(CP_THREAD_ACP, 0, tmp.data(), tmp.size(), (wchar_t*)dst->atpos(), (int)dst->len()/sizeof(wchar_t));
+	intptr_t i, l = bytes / (intptr_t)sizeof(wchar_t);
+	for(i = 0; i < l; i++) tmp += (char)((wchar_t*)data)[i];
+	int len = MultiByteToWideChar(CP_THREAD_ACP, 0, tmp.data(), (int)tmp.size(), NULL, 0);
+	if(len <= 0) return;
+	output.resize(len);
+	MultiByteToWideChar(CP_THREAD_ACP, 0, tmp.data(), (int)tmp.size(), &output[0], len);
 }
 
-extern "C" void SSZ_STDCALL SetSharedString(PluginUtil* pu, Reference str)
+void SSZ_STDCALL SetSharedString(const std::wstring& str)
 {
 	AutoLocker al(&g_mtx);
-	g_sharedstring = pu->refToWstr(str);
+	g_sharedstring = str;
 }
 
-extern "C" void SSZ_STDCALL GetSharedString(PluginUtil* pu, Reference *str)
+std::wstring SSZ_STDCALL GetSharedString()
 {
-	pu->setSSZFunc();
 	AutoLocker al(&g_mtx);
-	pu->wstrToRef(*str, g_sharedstring.c_str());
+	return g_sharedstring;
 }
-
-
-
-
 
 
 
@@ -338,17 +308,15 @@ BOOL WINAPI InputBoxDlgProc(HWND hDlg, UINT message,WPARAM wParam, LPARAM lParam
 	return FALSE;
 }
 
-extern "C" void SSZ_STDCALL InputStr(PluginUtil* pu, Reference *pr, Reference title)
+std::wstring SSZ_STDCALL InputStr(const std::wstring& title)
 {
-	pu->setSSZFunc();
-	wchar_t* str;
-	int len;
-	len = -1;
-	str = NULL;
-	MyInputBox(NULL, pu->refToWstr(title).c_str(), &str, &len);
-	if(len >= 0){
-		pu->wstrToRef(*pr, str);
-	}else{
-		pr->releaseanddelete();
+	wchar_t* str = NULL;
+	int len = -1;
+	MyInputBox(NULL, title.c_str(), &str, &len);
+	if(len >= 0 && str){
+		std::wstring result(str, len);
+		delete[] str;
+		return result;
 	}
+	return std::wstring();
 }

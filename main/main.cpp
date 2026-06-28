@@ -21,19 +21,13 @@
 #include "time_static.hpp"
 
 
-// sszrefnewfunc / sszrefdeletefunc are defined in ssz.cpp and
-// declared extern in sszdef.h — no per-TU definition needed here.
-
-
-#include "typeid.h"
-#include "arrayandref.hpp"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
-#define SSZ_CORE
-#include "pluginutil.hpp"
-#undef SSZ_CORE
+// Required for complete Reference type in extern "C" bridge declarations
+// (static registration headers use Reference by value for __stdcall decoration).
+#include "arrayandref.hpp"
 
 // =========================================================================
 //  Exit safety nets: VEH (crashes) + TLS callback (ExitProcess)
@@ -78,33 +72,8 @@ static void NTAPI MemProfilerTLS(PVOID /*h*/, DWORD reason, PVOID /*reserved*/)
 PIMAGE_TLS_CALLBACK _tls_callback
 	__attribute__((section(".CRT$XLY"), used)) = MemProfilerTLS;
 
-// Declare the exported Run function so it can be linked directly
-extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r);
-
-// Build a Reference from a narrow string.
-// Calls sszrefnewfunc directly — avoids Reference::refnew ODR ambiguity
-// (the linker may pick a copy from another TU that references a different
-//  sszrefnewfunc, causing a null-pointer crash inside refnew).
-static Reference makeScriptRef(const char* path)
-{
-	Reference ref;
-	ref.init();
-	int wlen = MultiByteToWideChar(CP_ACP, 0, path, -1, nullptr, 0);
-	if (wlen <= 0) return ref;
-	wlen--; // exclude NUL terminator
-	intptr_t bytes = wlen * (intptr_t)sizeof(WCHR);
-	HeapObj* obj = (HeapObj*)sszrefnewfunc(sizeof(HeapObjHead) + bytes);
-	if (!obj) return ref;
-	obj->head.data      = obj->body.data;
-	obj->head.datasize  = bytes;
-	obj->head.mutex     = nullptr;
-	obj->head.refcount  = 1;
-	MultiByteToWideChar(CP_ACP, 0, path, -1, (wchar_t*)obj->body.data, wlen);
-	ref.pointer  = obj;
-	ref.position = 0;
-	ref.length   = bytes;
-	return ref;
-}
+// Forward declaration of native Run — defined in ssz.cpp
+bool Run(const std::wstring& scriptPath);
 
 static bool stringInSlice(const std::vector<std::string>& slice, const std::string& s)
 {
@@ -358,19 +327,24 @@ int main(int argc, char *argv[]) {
 	AddVectoredExceptionHandler(1, MemProfilerVEH);
 	atexit(SafePrintRanking);
 	setlocale(LC_CTYPE, "en_US.UTF-8");
-	PluginUtil pu(nullptr, nullptr);//Dummy
 	CommandLineString<WCHR> cmdline;
 #ifdef _WIN32
 	cmdline.set(GetCommandLineW());
 	SetDllDirectoryW(L"lib/external"); //Change dir where external dlls are loaded.
 #else
 	std::vector<std::WSTR> arg;
-	while(argc--) arg.push_back(pu.aToW(*argv++));
+	for (int i = 0; i < argc; i++) {
+		std::string s(argv[i]);
+		std::wstring ws(s.begin(), s.end());
+		arg.push_back(ws);
+	}
 	cmdline.swap(arg);
 #endif
 
-	Reference ref = makeScriptRef(argc >= 2 ? argv[1] : "ssz/ikemen.ssz");
-	LOG_INFO("Ikemen", "Running Script: %s", argc >= 2 ? argv[1] : "ssz/ikemen.ssz");
+	std::wstring scriptPath = cmdline.get().size() > 1
+		? cmdline.get()[1]
+		: L"ssz/ikemen.ssz";
+	LOG_INFO("Ikemen", "Running Script: %ls", scriptPath.c_str());
 
 	LOG_DEBUG("SSZ", "=== I.K.E.M.E.N. Plus Ultra startup ===");
 	LOG_DEBUG("SSZ", "Registering static plugins...");
@@ -436,17 +410,14 @@ int main(int argc, char *argv[]) {
 	updateStageInSelectDef("data/select.def");
 
 	// ── SSZ JIT boot path ──────────────────────────────────────────
-	// Run() compiles and executes in the same ssz.cpp TU — all internal
-	// sszrefnewfunc/wstrToRef calls are consistent within that translation unit.
+	// Run() compiles and executes via the native ABI.
 	LOG_DEBUG("SSZ", "Starting Run()...");
-	if (!Run(&pu, ref)) {
+	if (!Run(scriptPath)) {
 		LOG_INFO("Ikemen", "Script failed");
 		LOG_DEBUG("SSZ", "Run() FAILED");
-		ref.releaseanddelete();
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Run() completed successfully");
 
-	ref.releaseanddelete();
 	return 0;
 }

@@ -1,8 +1,6 @@
-
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#define WTOA(s) pu->refToAstr(CP_UTF8, s)
 typedef int socklen_t;
 #else
 #include <netdb.h>
@@ -12,17 +10,14 @@ typedef int socklen_t;
 #define TRUE 1
 #define SD_BOTH SHUT_RDWR
 #define closesocket close
-#define WTOA(s) pu->wToA(pu->refToWstr(s))
 typedef int SOCKET;
 typedef struct sockaddr SOCKADDR;
 typedef struct addrinfo ADDRINFO;
 #endif
 
-#include "sszdef.h"
+#include <string>
 
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
+#include "sszdef.h"
 
 
 void socclose(SOCKET &soc)
@@ -138,29 +133,29 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
 }
 #endif
 
-extern "C" void SSZ_STDCALL SocketClose(PluginUtil* pu, SOCKET *psoc)
+void SSZ_STDCALL SocketClose(SOCKET *psoc)
 {
 	socclose(*psoc);
 }
 
-extern "C" bool SSZ_STDCALL SocketConnect(PluginUtil* pu, bool nodelay, int32_t timeout,
-	Reference port, Reference host, SOCKET *psoc)
+bool SSZ_STDCALL SocketConnect(bool nodelay, int32_t timeout,
+	const std::string& port, const std::string& host, SOCKET *psoc)
 {
 	return
 		socconnect(
-			*psoc, WTOA(host).c_str(),
-			WTOA(port).c_str(), timeout, nodelay);
+			*psoc, host.c_str(),
+			port.c_str(), timeout, nodelay);
 }
 
-extern "C" bool SSZ_STDCALL SocketListen(PluginUtil* pu, bool ipv4, int32_t backlog,
-	Reference port, SOCKET *psoc)
+bool SSZ_STDCALL SocketListen(bool ipv4, int32_t backlog,
+	const std::string& port, SOCKET *psoc)
 {
 	return
 		soclisten(
-			*psoc, WTOA(port).c_str(), backlog, ipv4);
+			*psoc, port.c_str(), backlog, ipv4);
 }
 
-extern "C" SOCKET SSZ_STDCALL SocketAccept(PluginUtil* pu, bool nodelay, int32_t timeout, SOCKET soc)
+SOCKET SSZ_STDCALL SocketAccept(bool nodelay, int32_t timeout, SOCKET soc)
 {
 	if(soc == INVALID_SOCKET) return INVALID_SOCKET;
 	fd_set readset;
@@ -185,24 +180,24 @@ extern "C" SOCKET SSZ_STDCALL SocketAccept(PluginUtil* pu, bool nodelay, int32_t
 	return s;
 }
 
-extern "C" bool SSZ_STDCALL SocketSend(PluginUtil* pu, intptr_t size, char *p, SOCKET *psoc)
+bool SSZ_STDCALL SocketSend(intptr_t size, const char *p, SOCKET *psoc)
 {
 	return socsend(*psoc, p, size) == size;
 }
 
-extern "C" intptr_t SSZ_STDCALL SocketSendAry(PluginUtil* pu, intptr_t size, Reference ary, SOCKET *psoc)
+intptr_t SSZ_STDCALL SocketSendAry(intptr_t size, const void *data, intptr_t bytes, SOCKET *psoc)
 {
-	if(ary.len() == 0) return 0;
-	return socsend(*psoc, (char*)ary.atpos(), ary.len()) / size;
+	if(bytes == 0) return 0;
+	return socsend(*psoc, (const char*)data, (int)bytes) / size;
 }
 
-extern "C" bool SSZ_STDCALL SocketRecv(PluginUtil* pu, intptr_t size, char *p, SOCKET *psoc)
+bool SSZ_STDCALL SocketRecv(intptr_t size, char *p, SOCKET *psoc)
 {
 	return socrecv(*psoc, p, size) == size;
 }
 
-extern "C" intptr_t SSZ_STDCALL SocketRecvAry(PluginUtil* pu, intptr_t size, Reference ary, SOCKET *psoc)
+intptr_t SSZ_STDCALL SocketRecvAry(intptr_t size, void *data, intptr_t bytes, SOCKET *psoc)
 {
-	if(ary.len() == 0) return 0;
-	return socrecv(*psoc, (char*)ary.atpos(), ary.len()) / size;
+	if(bytes == 0) return 0;
+	return socrecv(*psoc, (char*)data, (int)bytes) / size;
 }

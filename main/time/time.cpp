@@ -1,14 +1,9 @@
-
 #include <time.h>
 
 #include "sszdef.h"
 
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
 
-
-extern "C" uint32_t SSZ_STDCALL TickCount(PluginUtil* pu)
+uint32_t SSZ_STDCALL TickCount()
 {
 #ifdef _WIN32
 	return timeGetTime();
@@ -19,7 +14,7 @@ extern "C" uint32_t SSZ_STDCALL TickCount(PluginUtil* pu)
 #endif
 }
 
-extern "C" int64_t SSZ_STDCALL UnixTime(PluginUtil* pu)
+int64_t SSZ_STDCALL UnixTime()
 {
 	return time(nullptr);
 }

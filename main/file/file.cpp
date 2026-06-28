@@ -1,4 +1,3 @@
-
 #ifdef _WIN32
 #include <stdio.h>
 #else
@@ -12,9 +11,11 @@
 
 #include "sszdef.h"
 
-#include "typeid.h"
-#include "arrayandref.hpp"
+#include <vector>
+
+#ifndef _WIN32
 #include "pluginutil.hpp"
+#endif
 
 #ifndef _WIN32
 
@@ -80,125 +81,119 @@ static BOOL SetCurrentDirectory(const WCHR *lpFileName)
 }
 #endif
 
-extern "C" intptr_t SSZ_STDCALL Open(PluginUtil* pu, Reference md, Reference fn)
+intptr_t SSZ_STDCALL Open(const std::wstring& md, const std::wstring& fn)
 {
 	FILE *pFile = NULL;
-	_wfopen_s(&pFile, pu->refToWstr(fn).c_str(), pu->refToWstr(md).c_str());
+	_wfopen_s(&pFile, fn.c_str(), md.c_str());
 	return (intptr_t)pFile;
 }
 
-extern "C" void SSZ_STDCALL FileClose(PluginUtil* pu, FILE *pFile)
+void SSZ_STDCALL FileClose(FILE *pFile)
 {
 	if(pFile != NULL) fclose(pFile);
 }
 
-extern "C" bool SSZ_STDCALL Read(PluginUtil* pu, intptr_t size, void *p, FILE *pFile)
+bool SSZ_STDCALL Read(intptr_t size, void *p, FILE *pFile)
 {
 	if(pFile == NULL) return false;
 	return fread(p, size, 1, pFile) == 1;
 }
 
-extern "C" intptr_t SSZ_STDCALL ReadAry(PluginUtil* pu, intptr_t size, Reference ary, FILE *pFile)
+intptr_t SSZ_STDCALL ReadAry(intptr_t size, void *data, intptr_t bytes, FILE *pFile)
 {
 	if(pFile == NULL) return -1;
-	if(ary.len() == 0) return 0;
-	return fread(ary.atpos(), size, ary.len()/size, pFile);
+	if(bytes == 0) return 0;
+	return fread(data, size, bytes / size, pFile);
 }
 
-extern "C" bool SSZ_STDCALL Write(PluginUtil* pu, intptr_t size, void *p, FILE *pFile)
+bool SSZ_STDCALL Write(intptr_t size, const void *p, FILE *pFile)
 {
 	if(pFile == NULL) return false;
 	return fwrite(p, size, 1, pFile) == 1;
 }
 
-extern "C" intptr_t SSZ_STDCALL WriteAry(PluginUtil* pu, intptr_t size, Reference ary, FILE *pFile)
+intptr_t SSZ_STDCALL WriteAry(intptr_t size, const void *data, intptr_t bytes, FILE *pFile)
 {
 	if(pFile == NULL) return -1;
-	if(ary.len() == 0) return 0;
-	return fwrite(ary.atpos(), size, ary.len()/size, pFile);
+	if(bytes == 0) return 0;
+	return fwrite(data, size, bytes / size, pFile);
 }
 
-extern "C" bool SSZ_STDCALL Seek(PluginUtil* pu, int32_t origin, int64_t offset, FILE *pFile)
+bool SSZ_STDCALL Seek(int32_t origin, int64_t offset, FILE *pFile)
 {
 	if(pFile == NULL) return false;
 	return _fseeki64(pFile, offset, origin) != 0;
 }
 
-extern "C" void SSZ_STDCALL LoadAsciiText(PluginUtil* pu, Reference *pr, Reference r)
+std::wstring SSZ_STDCALL LoadAsciiText(const std::wstring& path)
 {
-	pu->setSSZFunc();
 	std::string tmp;
-	WCHR *pwc;
 	FILE *pFile = NULL;
-	if(_wfopen_s(&pFile, pu->refToWstr(r).c_str(), L("rb")) != 0) return;
+	if(_wfopen_s(&pFile, path.c_str(), L("rb")) != 0) return std::wstring();
 	char ch;
 	while(fread(&ch, sizeof(char), 1, pFile) == 1) tmp += ch;
 	fclose(pFile);
-	pr->releaseanddelete();
-	if(tmp.size() == 0) return;
-	pr->refnew(tmp.size(), sizeof(WCHR));
-	pwc = (WCHR*)pr->atpos();
+	if(tmp.size() == 0) return std::wstring();
+	std::wstring result;
+	result.resize(tmp.size());
 	for(intptr_t i = 0; i < (intptr_t)tmp.size(); i++){
-		pwc[i] = (WCHR)(unsigned char)tmp[i];
+		result[i] = (WCHR)(unsigned char)tmp[i];
 	}
+	return result;
 }
 
-extern "C" bool SSZ_STDCALL SaveAsciiText(PluginUtil* pu, Reference txt, Reference r)
+bool SSZ_STDCALL SaveAsciiText(const std::wstring& txt, const std::wstring& path)
 {
 	std::string tmp;
-	WCHR *pwc;
-	tmp.resize(txt.len() / sizeof(WCHR));
+	tmp.resize(txt.size());
 	if(tmp.size() == 0) return true;
-	pwc = (WCHR*)txt.atpos();
 	for(intptr_t i = 0; i < (intptr_t)tmp.size(); i++){
-		tmp[i] = (unsigned char)pwc[i];
+		tmp[i] = (unsigned char)txt[i];
 	}
 	FILE *pFile = NULL;
-	if(_wfopen_s(&pFile, pu->refToWstr(r).c_str(), L("wb")) != 0) return false;
+	if(_wfopen_s(&pFile, path.c_str(), L("wb")) != 0) return false;
 	bool ret =
 		fwrite(tmp.data(), sizeof(char), tmp.size(), pFile) == tmp.size();
 	fclose(pFile);
 	return ret;
 }
 
-extern "C" bool SSZ_STDCALL Delete(PluginUtil* pu, Reference file)
+bool SSZ_STDCALL Delete(const std::wstring& file)
 {
-	return DeleteFile(pu->refToWstr(file).c_str()) != 0;
+	return DeleteFile(file.c_str()) != 0;
 }
 
-extern "C" bool SSZ_STDCALL Move(PluginUtil* pu, Reference newn, Reference oldn)
+bool SSZ_STDCALL Move(const std::wstring& newn, const std::wstring& oldn)
 {
 	return
 		MoveFileEx(
-			pu->refToWstr(oldn).c_str(), pu->refToWstr(newn).c_str(),
+			oldn.c_str(), newn.c_str(),
 			MOVEFILE_WRITE_THROUGH) != 0;
 }
 
-extern "C" bool SSZ_STDCALL Copy(PluginUtil* pu, bool overwrite, Reference dist, Reference source)
+bool SSZ_STDCALL Copy(bool overwrite, const std::wstring& dist, const std::wstring& source)
 {
 	return
 		CopyFile(
-			pu->refToWstr(source).c_str(), pu->refToWstr(dist).c_str(),
+			source.c_str(), dist.c_str(),
 			!overwrite) != 0;
 }
 
-extern "C" void SSZ_STDCALL Find(PluginUtil* pu, Reference *fls, Reference fn)
+std::vector<std::wstring> SSZ_STDCALL Find(const std::wstring& pattern)
 {
-	pu->setSSZFunc();
+	std::vector<std::wstring> files;
 #ifdef _WIN32
 	HANDLE fh;
 	WIN32_FIND_DATA fd;
-	fh = FindFirstFile(pu->refToWstr(fn).c_str(), &fd);
-	if(fh == INVALID_HANDLE_VALUE) return;
+	fh = FindFirstFile(pattern.c_str(), &fd);
+	if(fh == INVALID_HANDLE_VALUE) return files;
 	do{
 		if(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-		intptr_t j = fls->addsize(1, sizeof(Reference), refzeroclearcb);
-		((Reference*)(fls->atpos()+j))->init();
-		pu->wstrToRef(*(Reference*)(fls->atpos()+j), fd.cFileName);
-	}while(FindNextFile(fh,&fd));
+		files.push_back(fd.cFileName);
+	}while(FindNextFile(fh, &fd));
 	FindClose(fh);
 #else
-	auto file = pu->wToA(pu->refToWstr(fn));
+	auto file = PluginUtil::wToA(pattern);
 	auto i = file.find_last_of('/');
 	std::string dstr;
 	DIR *pDir;
@@ -209,41 +204,38 @@ extern "C" void SSZ_STDCALL Find(PluginUtil* pu, Reference *fls, Reference fn)
 	}else{
 		pDir = opendir(".");
 	}
-	if(pDir == nullptr) return;
+	if(pDir == nullptr) return files;
 	struct dirent *ent;
 	while((ent = readdir(pDir)) != nullptr){
 		if(
 			(ent->d_type & DT_DIR)
 			|| fnmatch(file.c_str(), ent->d_name, 0)) continue;
-		intptr_t j = fls->addsize(1, sizeof(Reference), refzeroclearcb);
-		((Reference*)(fls->atpos()+j))->init();
-		pu->wstrToRef(*(Reference*)(fls->atpos()+j), pu->aToW(ent->d_name));
+		files.push_back(PluginUtil::aToW(ent->d_name));
 	}
 	closedir(pDir);
 #endif
+	return files;
 }
 
-extern "C" void SSZ_STDCALL FindDir(PluginUtil* pu, Reference *fls, Reference fn)
+std::vector<std::wstring> SSZ_STDCALL FindDir(const std::wstring& pattern)
 {
-	pu->setSSZFunc();
+	std::vector<std::wstring> dirs;
 #ifdef _WIN32
 	HANDLE fh;
 	WIN32_FIND_DATA fd;
-	fh = FindFirstFile(pu->refToWstr(fn).c_str(), &fd);
-	if(fh == INVALID_HANDLE_VALUE) return;
+	fh = FindFirstFile(pattern.c_str(), &fd);
+	if(fh == INVALID_HANDLE_VALUE) return dirs;
 	do{
 		if((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) continue;
 		if(fd.cFileName[0] == L'.'){
 			if(fd.cFileName[1] == L'\0') continue;
 			if(fd.cFileName[1] == L'.' && fd.cFileName[2] == L'\0') continue;
 		}
-		intptr_t j = fls->addsize(1, sizeof(Reference), refzeroclearcb);
-		((Reference*)(fls->atpos()+j))->init();
-		pu->wstrToRef(*(Reference*)(fls->atpos()+j), fd.cFileName);
-	}while(FindNextFile(fh,&fd));
+		dirs.push_back(fd.cFileName);
+	}while(FindNextFile(fh, &fd));
 	FindClose(fh);
 #else
-	auto file = pu->wToA(pu->refToWstr(fn));
+	auto file = PluginUtil::wToA(pattern);
 	auto i = file.find_last_of('/');
 	std::string dstr;
 	DIR *pDir;
@@ -254,7 +246,7 @@ extern "C" void SSZ_STDCALL FindDir(PluginUtil* pu, Reference *fls, Reference fn
 	}else{
 		pDir = opendir(".");
 	}
-	if(pDir == nullptr) return;
+	if(pDir == nullptr) return dirs;
 	struct dirent *ent;
 	while((ent = readdir(pDir)) != nullptr){
 		if(
@@ -264,45 +256,46 @@ extern "C" void SSZ_STDCALL FindDir(PluginUtil* pu, Reference *fls, Reference fn
 			if(ent->d_name[1] == '\0') continue;
 			if(ent->d_name[1] == '.' && ent->d_name[2] == '\0') continue;
 		}
-		intptr_t j = fls->addsize(1, sizeof(Reference), refzeroclearcb);
-		((Reference*)(fls->atpos()+j))->init();
-		pu->wstrToRef(*(Reference*)(fls->atpos()+j), pu->aToW(ent->d_name));
+		dirs.push_back(PluginUtil::aToW(ent->d_name));
 	}
 	closedir(pDir);
 #endif
+	return dirs;
 }
 
-extern "C" bool SSZ_STDCALL CreateDir(PluginUtil* pu, Reference dir)
+bool SSZ_STDCALL CreateDir(const std::wstring& dir)
 {
-	return CreateDirectory(pu->refToWstr(dir).c_str(), nullptr) != 0;
+	return CreateDirectory(dir.c_str(), nullptr) != 0;
 }
 
-extern "C" bool SSZ_STDCALL RemoveDir(PluginUtil* pu, Reference dir)
+bool SSZ_STDCALL RemoveDir(const std::wstring& dir)
 {
-	return RemoveDirectory(pu->refToWstr(dir).c_str()) != 0;
+	return RemoveDirectory(dir.c_str()) != 0;
 }
 
-extern "C" bool SSZ_STDCALL SetCurrentDir(PluginUtil* pu, Reference dir)
+bool SSZ_STDCALL SetCurrentDir(const std::wstring& dir)
 {
-	return SetCurrentDirectory(pu->refToWstr(dir).c_str()) != 0;
+	return SetCurrentDirectory(dir.c_str()) != 0;
 }
 
-extern "C" void SSZ_STDCALL GetCurrentDir(PluginUtil* pu, Reference* dir)
+std::wstring SSZ_STDCALL GetCurrentDir()
 {
-	pu->setSSZFunc();
-	dir->releaseanddelete();
+	std::wstring dir;
 #ifdef _WIN32
-	dir->refnew(GetCurrentDirectory(0, nullptr), sizeof(wchar_t));
+	dir.resize(GetCurrentDirectory(0, nullptr));
 	if(
-		dir->len() <= 0
+		dir.size() <= 0
 		|| GetCurrentDirectory(
-			dir->len()/sizeof(wchar_t), (wchar_t*)dir->atpos()) == 0)
+			(DWORD)dir.size(), &dir[0]) == 0)
 	{
-		return;
+		return std::wstring();
 	}
+	// Remove null terminator that GetCurrentDirectory includes
+	dir.resize(wcslen(dir.c_str()));
 #else
 	char *str = getcwd(nullptr, 0);
-	pu->wstrToRef(*dir, pu->aToW(str));
+	dir = PluginUtil::aToW(str);
 	free(str);
 #endif
+	return dir;
 }

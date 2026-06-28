@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "typeid.h"
+
 struct HeapObjHead
 {
 	int8_t *data;

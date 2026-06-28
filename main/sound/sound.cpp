@@ -1,13 +1,9 @@
-
 // SDL_OpenAudioDevice is used for raw float32 PCM streaming (one independent
 // device per Client). SDL_mixer / SDL_OpenAudio are NOT used here to avoid
 // conflicts with the BGM and SFX devices opened in sdlplugin.cpp.
 #include <SDL.h>
 #include "sszdef.h"
 
-#include "typeid.h"
-#include "arrayandref.hpp"
-#include "pluginutil.hpp"
 
 static const int g_srcFreq      = 48000;
 static const int g_bufferSamples = 2048;
@@ -125,17 +121,17 @@ public:
 // SSZ-exposed functions – identical surface as before.
 // ---------------------------------------------------------------------------
 
-extern "C" Client* SSZ_STDCALL NewClient(PluginUtil* pu)
+Client* SSZ_STDCALL NewClient()
 {
 	return new Client;
 }
 
-extern "C" void SSZ_STDCALL DeleteClient(PluginUtil* pu, Client* client)
+void SSZ_STDCALL DeleteClient(Client* client)
 {
 	delete client;
 }
 
-extern "C" bool SSZ_STDCALL ClientStart(PluginUtil* pu, Client* client)
+bool SSZ_STDCALL ClientStart(Client* client)
 {
 	if (!client->dev()) return false;
 	SDL_PauseAudioDevice(client->dev(), 0);   // 0 = un-pause (start)
@@ -143,7 +139,7 @@ extern "C" bool SSZ_STDCALL ClientStart(PluginUtil* pu, Client* client)
 	return true;
 }
 
-extern "C" bool SSZ_STDCALL ClientStop(PluginUtil* pu, Client* client)
+bool SSZ_STDCALL ClientStop(Client* client)
 {
 	if (!client->dev()) return false;
 	SDL_PauseAudioDevice(client->dev(), 1);   // 1 = pause (stop)
@@ -151,13 +147,13 @@ extern "C" bool SSZ_STDCALL ClientStop(PluginUtil* pu, Client* client)
 	return true;
 }
 
-extern "C" bool SSZ_STDCALL ClientBufferReady(PluginUtil* pu, Client* client)
+bool SSZ_STDCALL ClientBufferReady(Client* client)
 {
 	return client->src.ready();
 }
 
-extern "C" bool SSZ_STDCALL ClientSetBuffer(PluginUtil* pu, Reference src, Client* client)
+bool SSZ_STDCALL ClientSetBuffer(const float* buffer, intptr_t frames, Client* client)
 {
-	if (src.len() != sizeof(float) * g_bufferSamples * 2) return false;
-	return client->src.setNextBuffer(reinterpret_cast<const float*>(src.atpos()));
+	if (frames != g_bufferSamples * 2) return false;
+	return client->src.setNextBuffer(buffer);
 }

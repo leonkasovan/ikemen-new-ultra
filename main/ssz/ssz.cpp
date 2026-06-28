@@ -85,6 +85,7 @@ std::vector<MemorySnapshot> g_memEvents;
 #include "pluginutil.hpp"
 #undef SSZ_CORE
 
+#include "bridge.hpp"
 #include "tostring.hpp"
 
 #ifndef _WIN32
@@ -684,19 +685,24 @@ extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
 	}
 }
 
-extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r)
+bool SSZ_STDCALL Run(const std::wstring& scriptPath)
 {
 	LOG_DEBUG("SSZ", "Run() called, starting compilation...");
 	CompilerState cs;
-	auto error = cs.compile(pu->refToWstr(r));
+	auto error = cs.compile(scriptPath);
 	LOG_DEBUG("SSZ", "Compilation finished, error size=%zu", (size_t)error.size());
 	if(error.size() > 0){
-		// MessageBox(nullptr, error.c_str(), g_dtitle, MB_OK | MB_ICONERROR);
 		printf("Error Message\n%ls\n\n", error.c_str());
 		return false;
 	}
 	LOG_DEBUG("SSZ", "Running compiled script...");
 	return cs.run();
+}
+
+extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r)
+{
+	(void)pu;
+	return Run(ikemen::ssz_bridge::refToWstring(pu, r));
 }
 
 extern "C" CompilerState* SSZ_STDCALL NewCompiler(PluginUtil* pu)

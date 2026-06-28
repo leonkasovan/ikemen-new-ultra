@@ -45,8 +45,8 @@ CFLAGS     = -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable \
              -fno-strict-aliasing $(ARCH_F)
 
 ifeq ($(CONFIG),Debug)
-  CXXFLAGS += -O1 -g -DDEBUG
-  CFLAGS   += -O1 -g -DDEBUG
+  CXXFLAGS += -O1 -g -DDEBUG -Wuninitialized
+  CFLAGS   += -O1 -g -DDEBUG -Wuninitialized
   TARGET     = $(BLD)/ikemen-debug.exe
 else
   CXXFLAGS += -O3 -DNDEBUG
@@ -106,6 +106,7 @@ LDLIBS  = -lwinmm -lole32 -lshell32 -lws2_32 -lopengl32 -lglu32 -lgdi32 \
 MAIN_SRCS = \
   $(MAIN)/main.cpp \
   $(SSZ)/ssz.cpp \
+  $(SSZ)/bridge.cpp \
   $(MAIN)/lua/lua.cpp \
   $(MAIN)/file/file.cpp \
   $(MAIN)/sound/sound.cpp \
@@ -587,7 +588,7 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
 
-.PHONY: all clean install
+.PHONY: all clean install test
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
@@ -702,6 +703,22 @@ $(BLD)/modplug/%.o: $(MOD_DIR)/src/%.cpp
 $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(FLAC_DEFS) -c -o $@ $<
+
+# ---- Regression smoke tests ----
+# Compile and run file-operation tests against the native implementations.
+# Depends on the main build having compiled file.o first.
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o
+TEST_FILE_BIN  = $(BLD)/test_file.exe
+
+$(BLD)/test/test_file.o: $(TEST)/test_file.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
+
+$(TEST_FILE_BIN): $(TEST_FILE_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+test: $(TEST_FILE_BIN)
+	$(TEST_FILE_BIN)
 
 clean:
 	rm -rf $(BLD)

@@ -1,4 +1,3 @@
-
 #ifdef _WIN32
 #include <regex>
 #define RNS std
@@ -7,96 +6,94 @@
 #define RNS boost
 #endif
 
+#include <string>
+#include <vector>
+
 #include "sszdef.h"
 
-#include "typeid.h"
-#include "arrayandref.hpp"
+#ifndef _WIN32
 #include "pluginutil.hpp"
+#endif
+
+#include "bridge.hpp"
 
 
-extern "C" RNS::wregex* SSZ_STDCALL NewRegex(PluginUtil* pu, Reference* error, bool i, Reference ptn)
+RNS::wregex* SSZ_STDCALL NewRegex(bool i, const std::wstring& ptn, std::wstring* error)
 {
-	pu->setSSZFunc();
-	error->releaseanddelete();
 	RNS::wregex* re = nullptr;
 	try{
 		auto flag = RNS::wregex::ECMAScript | RNS::wregex::optimize;
 		if(i) flag |= RNS::wregex::icase;
-		re = new RNS::wregex(
 #ifdef _WIN32
-			pu->refToWstr(ptn),
+		re = new RNS::wregex(ptn, flag);
 #else
-			pu->wToGw(pu->refToWstr(ptn)),
+		re = new RNS::wregex(PluginUtil::gwToW(ptn), flag);
 #endif
-			flag);
-	}catch(RNS::regex_error e){
+	}catch(const RNS::regex_error& e){
+		if(error){
 #ifdef _WIN32
-		pu->astrToRef(CP_THREAD_ACP, *error, e.what());
+			int len = MultiByteToWideChar(CP_THREAD_ACP, 0, e.what(), -1, nullptr, 0);
+			if(len > 0){
+				error->resize(len - 1);
+				MultiByteToWideChar(CP_THREAD_ACP, 0, e.what(), -1, &(*error)[0], len);
+			}
 #else
-		pu->wstrToRef(*error, pu->aToW(e.what()));
+			*error = PluginUtil::wToGw(PluginUtil::aToW(e.what()));
 #endif
+		}
 		delete re;
 		re = nullptr;
 	}
 	return re;
 }
 
-extern "C" void SSZ_STDCALL DeleteRegex(PluginUtil* pu, RNS::wregex* re)
+void SSZ_STDCALL DeleteRegex(RNS::wregex* re)
 {
 	delete re;
 }
 
-extern "C" void SSZ_STDCALL RegexSearch(PluginUtil* pu, Reference* matches, Reference str, RNS::wregex* re)
+std::vector<ikemen::ssz_bridge::RegexMatchInfo> SSZ_STDCALL RegexSearch(const std::wstring& str, RNS::wregex* re)
 {
-	pu->setSSZFunc();
-	matches->releaseanddelete();
-	if(!re) return;
+	std::vector<ikemen::ssz_bridge::RegexMatchInfo> matches;
+	if(!re) return matches;
 	bool found = false;
 #ifdef _WIN32
 	RNS::wcmatch match;
-	if(str.len() > 0){
-		auto first = (const wchar_t*)str.atpos();
-		auto last = first + str.len()/sizeof(wchar_t);
+	if(!str.empty()){
+		auto first = str.c_str();
+		auto last = first + str.size();
 		found = RNS::regex_search(first, last, match, *re);
 	}else{
 		found = RNS::regex_search(L"", match, *re);
 	}
 #else
 	RNS::match_results<std::wstring::const_iterator> match;
-	auto gwstr = pu->wToGw(pu->refToWstr(str));
-	if(str.len() > 0){
-		found = RNS::regex_search(pu->wToGw(pu->refToWstr(str)), match, *re);
+	if(!str.empty()){
+		found = RNS::regex_search(str, match, *re);
 	}else{
 		found = RNS::regex_search(std::wstring(), match, *re);
 	}
 #endif
-	if(!found) return;
-	matches->refnew(match.size(), sizeof(Reference));
-	for(RNS::wcmatch::size_type i = 0; i < match.size(); i++){
-		auto p = match.position(i);
+	if(!found) return matches;
+	matches.reserve(match.size());
+	for(decltype(match.size()) i = 0; i < match.size(); i++){
+		ikemen::ssz_bridge::RegexMatchInfo m;
+		m.pos = match.position(i);
+		m.len = match.length(i);
 #ifndef _WIN32
-		if(p != (RNS::wcmatch::difference_type)-1){
-			auto pos = p;
-			for(size_t j = 0; j < pos; j++) if(gwstr[j] >= 0x10000) ++p;
-		}
-#endif
-		((Reference*)matches->atpos())[i].init();
-		if(match.length(i) > 0){
-			((Reference*)matches->atpos())[i].copy(str);
-			((Reference*)matches->atpos())[i].position += p*sizeof(WCHR);
-			auto l = match.length(i);
-#ifndef _WIN32
-			auto end = match.position(i) + l;
-			for(auto j = match.position(i); j < end; ++j){
-				if(gwstr[j] >= 0x10000) ++l;
+		if(m.pos != (decltype(match)::difference_type)-1){
+			for(intptr_t j = 0; j < m.pos; j++){
+				if(str[(size_t)j] >= 0x10000) ++m.pos;
 			}
-#endif
-			((Reference*)matches->atpos())[i].length = l*sizeof(WCHR);
-		}else{
-			((Reference*)matches->atpos())[i].position =
-				(
-					p != (RNS::wcmatch::difference_type)-1
-					? str.pos() + p : -1) * sizeof(WCHR);
 		}
+		if(m.len > 0){
+			auto end = match.position(i) + m.len;
+			for(auto j = match.position(i); j < end; ++j){
+				if(str[(size_t)j] >= 0x10000) ++m.len;
+			}
+		}
+#endif
+		matches.push_back(m);
 	}
+	return matches;
 }

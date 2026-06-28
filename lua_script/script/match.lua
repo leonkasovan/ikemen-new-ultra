@@ -2,12 +2,6 @@
 inMatch = true
 assert(loadfile("script/common.lua"))() --Load stuff shared with main menu (options data, screenpack assets, functions, etc..)
 require("script.pause")
---[[
-- assert(loadfile)) will cause that overwrites global variables every time it is called.
-- require() Injects global variables only the first time it runs
-
-Should replace above assert(loadfile()) with require()?
-]]
 
 --[[Load External Lua Modules FOR MATCH
 To load a lua file as an external module during match:
@@ -46,15 +40,6 @@ addHotkey('F5', false, false, true, 'lifeMax(2); lifeMax(4); lifeMax(6); lifeMax
 addHotkey('F6', false, false, false, 'powMax(1); powMax(2); powMax(3); powMax(4); powMax(5); powMax(6); powMax(7); powMax(8)') --F6: Gives to all Players Full Power
 addHotkey('F6', true, false, false, 'barAdd(1)') --CTRL+F6: Increases Player 1's Power Level to 1
 addHotkey('F6', false, false, true, 'barAdd(2)') --SHIFT+F6: Increases Player 2's Power Level to 1
---[[
-addHotkey('F7', false, false, false, 'guardMax(1); guardMax(2); guardMax(3); guardMax(4); guardMax(5); guardMax(6); guardMax(7); guardMax(8)') --F7: Gives to all Players Full Guard
-addHotkey('F7', true, false, false, 'guardMax(1); guardMax(3); guardMax(5), guardMax(7)') --CTRL+F7: Gives Player 1's full Guard
-addHotkey('F7', false, false, true, 'guardMax(2); guardMax(4); guardMax(6); guardMax(8)') --SHIFT+F7: Gives Player 2's full Guard
-
-addHotkey('F8', false, false, false, 'dizzyMin(1); dizzyMin(2); dizzyMin(3); dizzyMin(4); dizzyMin(5); dizzyMin(6); dizzyMin(7); dizzyMin(8)') --F8: Reset all Players Stunbar
-addHotkey('F8', true, false, false, 'dizzyMin(1); dizzyMin(3); dizzyMin(5), dizzyMin(7)') --CTRL+F8: Reset Player 1's Stunbar
-addHotkey('F8', false, false, true, 'dizzyMin(2); dizzyMin(4); dizzyMin(6); dizzyMin(8)') --SHIFT+F8: Gives Player 2's Stunbar
-]]
 addHotkey('SPACE', false, false, false, 'full(1); full(2); full(3); full(4); full(5); full(6); full(7); full(8); setTime(getRoundTime())') --SPACE KEY: Restores full life and power to all Players
 addHotkey('SCROLLLOCK', false, false, false, 'step()') --???
 addHotkey('KP_PLUS', true, false, false, 'changeSpeed(1)') --CTRL+KP PLUS: Increase Game Speed
@@ -86,11 +71,6 @@ if data.attractMode then
 	addHotkey('9', false, false, false, 'f_attractCfgMenu()') --Open Config Menu
 	addHotkey('0', false, false, false, 'f_resetEngine()') --Reset Engine
 end
---Miscellaneous Actions
--- if getGameMode() ~= "demo" then
-	--addHotkey('PAUSE', false, false, false, 'togglePause()') --Pause the game as MUGEN way
-	-- addHotkey('ESCAPE', false, false, false, 'togglePauseMenu(1)') --Pause the game as IKEMEN way
--- end
 addHotkey('PRINTSCREEN', false, false, false, 'f_screenShot()') --Takes a screenshot and saves it to "screenshots" folder (during netplay only works for the player that press the button)
 --;===========================================================
 --; DEBUG HOTKEYS FUNCTIONS
@@ -126,7 +106,6 @@ local oldid = id()
 		local n = ...
 		if not n then n = 0 end
 		setLife(n)
-		--setRedLife(0)
 		playerid(oldid)
 	end
 end
@@ -159,7 +138,6 @@ function full(p)
 local oldid = id()
 	if player(p) then
 		setLife(lifemax())
-		--setRedLife(lifemax())
 		setPower(powermax())
 		playerid(oldid)
 	end
@@ -210,33 +188,6 @@ local oldid = id()
 	return ret
 end
 
---[[DEFAULT
-function stateInfo(p)
-local oldid = id()
-	if not player(p) then return false end
-	local ret = string.format(
-		'STA:%s%s%s%6d(%d) ANI:%6d(%d)%2d',
-		statetype(), movetype(), physics(), stateno(), stateOwner(), anim(), animOwner(), animelemno(0)
-	)
-	playerid(oldid)
-	return ret
-end
-]]
-
---[[UNUSED
-function playerInfo(p)
---Action Info
-puts(string.format(
-	'ActionID:%d %d ElemNo:%d %d Pos:%.3f,%.3f Vel:%.3f,%.3f', 
-	anim(), animtime(), animelemno(0), animelemtime(animelemno(0)), posX(), posY(), velX(), velY())
-)
---State Info
-puts(string.format(
-	'%s %d StateNo:%d>%d %s MoveType:%s Physics:%s Time:%d', 
-	name(), id(), prevstateno(), stateno(), statetype(), movetype(), physics(), time() - 1)
-)
-end
-]]
 --;===========================================================
 --; MATCH LOOP SUB-FUNCTIONS
 --;===========================================================
@@ -268,19 +219,13 @@ local function f_demoSkip()
 	end
 end
 
-local bgmState = 0
-local bgmChanged = false
 local bgmDisplayTime = 0
 local bgmBGalphaS = 0
 local bgmBGalphaD = 255
 local bgmTxTalphaS = 0
 local bgmTxTalphaD = 255
 local function f_setStageMusic()
-	if bgmState == 1 then
-		playBGM(bgmIntro)
-		bgmState = 0
-	end
-	if roundstate() == 0 and bgmChanged then bgmDisplayTime = 0 end --Reset BGM Display Timer
+	if roundstate() == 0 then bgmDisplayTime = 0 end --Reset BGM Display Timer
 	if data.bgmDisplay and roundstate() == 2 then
 		if bgmDisplayTime < 200 then
 			bgmDisplayTime = bgmDisplayTime + 1
@@ -552,10 +497,6 @@ local function f_actionsCheck()
 				end
 		end
 	end
---[[
-	f_drawQuickText(txt_debugText, font14, 0, 1, "Text: "..var(), 111, 77)
-	f_drawQuickText(txt_debugText, font14, 0, 1, "NumTarget: "..numtarget(), 111, 97)
-]]
 end
 
 local scoreattackfactor = 1
@@ -588,7 +529,6 @@ local function f_addBonusScore()
 		if playerLeftSide then maxComboPlayer = maxComboCntP1 else maxComboPlayer = maxComboCntP2 end
 		setScore(score() + (maxComboPlayer * 1000) * scoreattackfactor)
 		setScore(score() + (consecutiveWins() * 1000) * scoreattackfactor)
-		--if firstattack() then setScore(score() + 1500 * scoreattackfactor) end
 		if wintime() then
 			setWinTimeCount(winTimeCount() + 1)
 		elseif winperfect() then
@@ -777,8 +717,6 @@ local function f_abyssItemsSet()
 					if not specialItemDone then
 					--Autoguard
 						if p1Dat[i].itemslot[slot] == txt_abyssShopAutoguard then setAutoguard(p1Dat[i].pn, true) end
-					--No Dizzy
-						--if p1Dat[i].itemslot[slot] == txt_abyssShopNoDizzy then setDizzy(-1) end
 					--Power Max
 						if p1Dat[i].itemslot[slot] == txt_abyssShopPowerMax then setPower(powermax()) end
 					--Depth Speed
@@ -798,9 +736,6 @@ local function f_abyssItemsSet()
 						setAttack(attack() * 2)
 						damagex2Item = true
 					end
-				--Constant Items
-				--Infinite Guard Gauge
-					--if p1Dat[i].itemslot[slot] == txt_abyssShopGuardInfinite then setGuard(guardmax()) end
 				end
 			end
 		--Affects CPU Side
@@ -830,7 +765,6 @@ local function f_abyssItemsSet()
 						damageReceived = gethitvar("damage") --Get Total Damage received from the Enemy
 					end
 					if p1Dat[i].itemslot[slot] == txt_abyssShopCurse.."1" then damageReceived = damageReceived / 2 end --Reduce to half
-					--f_applyToSide("right", "-life", damageReceived)
 					for p=1, 8 do
 						if p % 2 == 0 then
 							if player(p) then setLife(life() - damageReceived) end
@@ -839,23 +773,13 @@ local function f_abyssItemsSet()
 				end
 			--No CPU Power
 				if p1Dat[i].itemslot[slot] == txt_abyssShopNoPowerCPU then
-					--f_applyToSide("right", "powerset", 0)
 					for p=1, 8 do
 						if p % 2 == 0 then
 							if player(p) then setPower(0) end
 						end
 					end
 				end
-			--[[No CPU Guard
-				if p1Dat[i].itemslot[slot] == txt_abyssShopNoGuardCPU then
-					--f_applyToSide("right", "guardset", 0)
-					for player = 1, 8 do
-						if player % 2 == 0 then
-							setGuard(0)
-						end
-					end
-				end
-			]]
+
 			end
 		end
 		playerid(oldid)
@@ -865,7 +789,6 @@ local function f_abyssItemsSet()
 		if regenItem then regenItemTime = regenItemTime + 1 end
 		if poisonItem and gethitvar("hitcount") >= 1 and teamside() == 2 then
 			poisonItemTime = poisonItemTime + 1
-			--f_applyToSide("right", "-life", 1) --Replace below with this
 			for p=1, 8 do
 				if p % 2 == 0 then --Is an Even Player Number
 					if player(p) then setLife(life() - 1) end
@@ -958,7 +881,6 @@ local function f_abyssItemsSetCPU()
 						damageReceivedCPU = gethitvar("damage") --Get Total Damage received from the Player
 					end
 					if p2Dat[i].itemslot[slot] == txt_abyssShopCurse.."1" then damageReceivedCPU = damageReceivedCPU / 2 end --Reduce to half
-					--f_applyToSide("left", "-life", damageReceivedCPU)
 					for p=1, 8 do
 						if p % 2 == 0 then
 							
@@ -969,7 +891,6 @@ local function f_abyssItemsSetCPU()
 				end
 			--No Player Power
 				if p2Dat[i].itemslot[slot] == txt_abyssShopNoPowerCPU then
-					--f_applyToSide("left", "powerset", 0)
 					for p=1, 8 do
 						if p % 2 == 0 then
 						
@@ -987,7 +908,6 @@ local function f_abyssItemsSetCPU()
 		if regenItemCPU then regenItemTimeCPU = regenItemTimeCPU + 1 end
 		if poisonItemCPU and gethitvar("hitcount") >= 1 and teamside() == 1 then
 			poisonItemTimeCPU = poisonItemTimeCPU + 1
-			--f_applyToSide("left", "-life", 1) --Replace below with this
 			for p=1, 8 do
 				if p % 2 == 0 then --Is an Even Player Number
 					
@@ -1349,6 +1269,11 @@ local function f_drawDebugVars()
 end
 
 function loop() --The code for this function should be thought of as if it were always inside a "while true do"
+	-- Handle ESC to quit match
+	if not script.pause.pauseMenuActive and esc() then
+		exitMatch()
+		return
+	end
 	f_actionsCheck()
 --During Demo Mode
 	if getGameMode() == "demo" then
@@ -1358,7 +1283,6 @@ function loop() --The code for this function should be thought of as if it were 
 --During VS Mode
 	elseif getGameMode() == "vs" then
 		f_handicapSet()
-		--if roundstate() == 0 and roundno() == 2 then bgmState = 1 end --Test Change BGM in Round 2
 --During Gold Rush Mode
 	elseif getGameMode() == "goldrush" then
 		if roundstate() ~= 4 then
@@ -1451,7 +1375,6 @@ function loop() --The code for this function should be thought of as if it were 
 				end
 			end
 		--Round Time Updates
-			--f_drawQuickText(txt_debugText, font14, 0, 1, "Time Bonus: "..timeBonus / 60, 111, 77)
 			if roundstate() ~= 1 and timeBonus ~= 0 then
 				setTime(timeremaining() + timeBonus) --Time Bonus
 				sndPlay(sndIkemen, 620, 0)
@@ -1463,33 +1386,6 @@ function loop() --The code for this function should be thought of as if it were 
 				end
 				if timeremaining() <= 0 then setTime(0) end --Fix Negative Count
 			end
-		--[[Infinite Life Logic
-			if playerLeftSide then
-				for i=1, 8 do
-					if i % 2 == 0 then --Is an Even Player Number (Right Side)
-						
-					else --Is an Odd Player Number (Left Side)
-						if timeremaining() == 0 then
-							if player(i) then setLife(0) end
-						else
-							if player(i) then setLife(lifemax()) end
-						end
-					end
-				end
-			else
-				for i=1, 8 do
-					if i % 2 == 0 then --Is an Even Player Number (Right Side)
-						if timeremaining() == 0 then
-							if player(i) then setLife(0) end
-						else
-							if player(i) then setLife(lifemax()) end
-						end
-					else --Is an Odd Player Number (Left Side)
-						
-					end
-				end
-			end
-		--]]
 		end
 --During Abyss Mode
 	elseif getGameMode() == "abyss" or getGameMode() == "abysscoop" then
@@ -1503,14 +1399,6 @@ function loop() --The code for this function should be thought of as if it were 
 				abyssHitCnt = abyssHitCnt + 1
 			end
 		end
-	--[[
-		According to BlazBlue Continuum Shift Extend:
-		While fighting enemies in this mode, a "Depth Counter" will steadily increase
-		depending on the number of successful hits, including Astral Heats.
-		On most occasions, depth will increase every 2 successful hits.
-
-		Note: Depth is not accumulated during a Boss Fight.
-	]]
 		if abyssHitCnt == abyssHitTarget and time() == 0 then
 			setAbyssDepth(abyssdepth() + 1)
 			sndPlay(sndIkemen, 610, 0)
@@ -1527,7 +1415,7 @@ function loop() --The code for this function should be thought of as if it were 
 			exitMatch()
 		end
 	--Save Progress
-		if (abyssbossfight() == 0 and matchover()) then --or abyssbossfight() == 1
+		if (abyssbossfight() == 0 and matchover()) then
 			if (winnerteam() == 1 and playerLeftSide) or (winnerteam() == 2 and not playerLeftSide) then
 				if abyssSaveButton then
 					if not abyssPause then
@@ -1605,13 +1493,6 @@ function loop() --The code for this function should be thought of as if it were 
 	elseif roundstate() == 4 then
 		f_updateMatchInfo()
 		if not bonusScoreDone then f_addBonusScore() end
-	--[[
-		if bonusScoreDone then f_drawQuickText(txt_fightDat, font14, 0, 1, "Score Done", 95, 146)
-		else
-			f_drawQuickText(txt_fightDat, font14, 0, 1, "Score Waiting", 95, 146)
-		end
-		f_drawQuickText(txt_fightDat, font14, 0, 1, "Winner Team: "..winnerteam(), 95, 166)
-	--]]
 		if (playerLeftSide and winnerteam() == 1) or (not playerLeftSide and winnerteam() == 2) then
 			if getGameMode() == "speedstar" then
 				f_speedStarInfo(superCnt, perfectBonus)
@@ -1626,7 +1507,6 @@ function loop() --The code for this function should be thought of as if it were 
 			end
 		end
 	end
-	--if data.debugMode then f_drawDebugVars() end
 	f_attackDisplay()
 --When Attract Mode is Enabled
 	if data.attractMode then
@@ -1637,5 +1517,4 @@ function loop() --The code for this function should be thought of as if it were 
 		end
 		f_attractCredits(318, 238, -1)
 	end
-	f_checkAchievements()
 end
