@@ -707,7 +707,7 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # ---- Regression smoke tests ----
 # Compile and run file-operation tests against the native implementations.
 # Depends on the main build having compiled file.o first.
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp

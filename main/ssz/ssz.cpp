@@ -656,18 +656,18 @@ static std::string toNarrow(const std::wstring& ws)
 #endif
 }
 
-extern "C" void SSZ_STDCALL MemMarkBefore(PluginUtil* pu, Reference tag)
+// ---- Native implementations (no PluginUtil*, no Reference) ----
+
+void SSZ_STDCALL MemMarkBefore(const std::wstring& wtag)
 {
-	std::wstring wtag = pu->refToWstr(tag);
 	uint64_t mem = GetLiveMemory();
 	g_memBeforeMap[wtag] = mem;
 	std::string tagA = toNarrow(wtag);
 	LOG_DEBUG("Memory", "[%s] BEFORE = %llu", tagA.c_str(), (unsigned long long)mem);
 }
 
-extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
+void SSZ_STDCALL MemMarkAfter(const std::wstring& wtag)
 {
-	std::wstring wtag = pu->refToWstr(tag);
 	uint64_t mem = GetLiveMemory();
 	std::string tagA = toNarrow(wtag);
 
@@ -699,6 +699,43 @@ bool SSZ_STDCALL Run(const std::wstring& scriptPath)
 	return cs.run();
 }
 
+CompilerState* SSZ_STDCALL NewCompiler()
+{
+	return new CompilerState;
+}
+
+void SSZ_STDCALL DeleteCompiler(CompilerState* cs)
+{
+	delete cs;
+}
+
+std::wstring SSZ_STDCALL CompilerCompile(const std::wstring& file, CompilerState* cs)
+{
+	return cs->compile(file);
+}
+
+std::wstring SSZ_STDCALL CompilerCompileString(const std::wstring& code, const std::wstring& dir, CompilerState* cs)
+{
+	return cs->compileString(code, dir);
+}
+
+bool SSZ_STDCALL CompilerRun(CompilerState* cs)
+{
+	return cs->run();
+}
+
+// ---- Bridge wrappers (old ABI -> native) ----
+
+extern "C" void SSZ_STDCALL MemMarkBefore(PluginUtil* pu, Reference tag)
+{
+	MemMarkBefore(ikemen::ssz_bridge::refToWstring(pu, tag));
+}
+
+extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
+{
+	MemMarkAfter(ikemen::ssz_bridge::refToWstring(pu, tag));
+}
+
 extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r)
 {
 	(void)pu;
@@ -707,28 +744,41 @@ extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r)
 
 extern "C" CompilerState* SSZ_STDCALL NewCompiler(PluginUtil* pu)
 {
-	return new CompilerState;
+	(void)pu;
+	return NewCompiler();
 }
 
 extern "C" void SSZ_STDCALL DeleteCompiler(PluginUtil* pu, CompilerState* cs)
 {
-	delete cs;
+	(void)pu;
+	DeleteCompiler(cs);
 }
 
 extern "C" void SSZ_STDCALL CompilerCompile(PluginUtil* pu, Reference* err, Reference file, CompilerState* cs)
 {
-	auto error = cs->compile(pu->refToWstr(file));
+	sszrefnewfunc = pu->psf->newfunc;
+	sszrefdeletefunc = pu->psf->deletefunc;
+	auto error = CompilerCompile(ikemen::ssz_bridge::refToWstring(pu, file), cs);
+	err->releaseanddelete();
+	if (error.empty()) return;
 	pu->wstrToRef(*err, error);
 }
 
 extern "C" void SSZ_STDCALL CompilerCompileString(PluginUtil* pu, Reference* err,
 	Reference dir, Reference code, CompilerState* cs)
 {
-	auto error = cs->compileString(pu->refToWstr(code), pu->refToWstr(dir));
+	sszrefnewfunc = pu->psf->newfunc;
+	sszrefdeletefunc = pu->psf->deletefunc;
+	auto error = CompilerCompileString(
+		ikemen::ssz_bridge::refToWstring(pu, code),
+		ikemen::ssz_bridge::refToWstring(pu, dir), cs);
+	err->releaseanddelete();
+	if (error.empty()) return;
 	pu->wstrToRef(*err, error);
 }
 
 extern "C" bool SSZ_STDCALL CompilerRun(PluginUtil* pu, CompilerState* cs)
 {
-	return cs->run();
+	(void)pu;
+	return CompilerRun(cs);
 }

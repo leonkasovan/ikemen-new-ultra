@@ -1,6 +1,9 @@
-// Regression smoke tests for native file operations.
+// Regression smoke tests for native plugin implementations.
 // Compile: g++ -std=c++17 -DUNICODE -D_UNICODE -I ../main -I ../main/ssz
-//              -o test_file.exe test_file.cpp ../build/Debug/main/file/file.o
+//              -o test_file.exe test_file.cpp
+//              ../build/Debug/main/file/file.o
+//              ../build/Debug/main/math/math.o
+//              ../build/Debug/main/thread/thread.o
 // Run:     ./test_file.exe
 
 #define SSZ_STDCALL __stdcall
@@ -13,6 +16,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <cmath>
 
 // ---- Native file function declarations (matching main/file/file.cpp) ----
 
@@ -35,8 +39,29 @@ bool     SSZ_STDCALL RemoveDir(const std::wstring& dir);
 bool     SSZ_STDCALL SetCurrentDir(const std::wstring& dir);
 std::wstring SSZ_STDCALL GetCurrentDir();
 
-// ---- Test helpers ----
+// ---- Native math function declarations (matching main/math/math.cpp) ----
 
+double SSZ_STDCALL Sin(double x);
+double SSZ_STDCALL Cos(double x);
+double SSZ_STDCALL Tan(double x);
+double SSZ_STDCALL ASin(double x);
+double SSZ_STDCALL ACos(double x);
+double SSZ_STDCALL ATan(double x);
+double SSZ_STDCALL Log(double y, double x);
+double SSZ_STDCALL Ln(double x);
+double SSZ_STDCALL Exp(double x);
+double SSZ_STDCALL Sqrt(double x);
+double SSZ_STDCALL Ceil(double x);
+double SSZ_STDCALL Floor(double x);
+bool   SSZ_STDCALL IsFinite(double x);
+bool   SSZ_STDCALL IsInf(double x);
+bool   SSZ_STDCALL IsNaN(double x);
+
+// ---- Native thread function declarations (matching main/thread/thread.cpp) ----
+
+void SSZ_STDCALL ThreadDelay(uint32_t ms);
+
+// ---- Test helpers ----
 static int g_tests = 0;
 static int g_fails = 0;
 
@@ -318,6 +343,55 @@ static void test_find()
     Delete(TMPDIR + L"/gamma_find.dat");
 }
 
+// ---- Math tests ----
+
+static void test_math()
+{
+    std::wcout << L"\n--- Math ---" << std::endl;
+
+    TEST(L"Sin(0) == 0", Sin(0.0) == 0.0);
+    TEST(L"Cos(0) == 1", Cos(0.0) == 1.0);
+    TEST(L"Tan(0) == 0", Tan(0.0) == 0.0);
+
+    TEST(L"ASin(0) == 0", ASin(0.0) == 0.0);
+    TEST(L"ACos(1) == 0", ACos(1.0) == 0.0);
+    TEST(L"ATan(0) == 0", ATan(0.0) == 0.0);
+
+    double pi = 3.141592653589793;
+    TEST(L"Sin(PI/2) == 1", std::abs(Sin(pi/2) - 1.0) < 1e-15);
+    TEST(L"Cos(PI) == -1", std::abs(Cos(pi) + 1.0) < 1e-15);
+
+    TEST(L"Ln(1) == 0", Ln(1.0) == 0.0);
+    TEST(L"Ln(E) == 1", std::abs(Ln(2.718281828459045) - 1.0) < 1e-15);
+    TEST(L"Exp(0) == 1", Exp(0.0) == 1.0);
+
+    TEST(L"Sqrt(4) == 2", Sqrt(4.0) == 2.0);
+    TEST(L"Sqrt(0) == 0", Sqrt(0.0) == 0.0);
+
+    TEST(L"Ceil(1.5) == 2", Ceil(1.5) == 2.0);
+    TEST(L"Ceil(-1.5) == -1", Ceil(-1.5) == -1.0);
+    TEST(L"Floor(1.5) == 1", Floor(1.5) == 1.0);
+    TEST(L"Floor(-1.5) == -2", Floor(-1.5) == -2.0);
+
+    TEST(L"IsFinite(0) true", IsFinite(0.0));
+    TEST(L"IsInf(0) false", !IsInf(0.0));
+    TEST(L"IsNaN(0) false", !IsNaN(0.0));
+
+    TEST(L"Log(10, 100) == 2", std::abs(Log(10.0, 100.0) - 2.0) < 1e-15);
+}
+
+// ---- Thread tests ----
+
+static void test_thread()
+{
+    std::wcout << L"\n--- Thread ---" << std::endl;
+
+    // Just verify it doesn't crash
+    ThreadDelay(0);
+    ThreadDelay(1);
+    TEST(L"ThreadDelay(0) no crash", true);
+}
+
 // ---- Main ----
 
 int main()
@@ -334,6 +408,8 @@ int main()
     test_create_remove_dir();
     test_current_dir();
     test_find();
+    test_math();
+    test_thread();
 
     cleanup();
 
