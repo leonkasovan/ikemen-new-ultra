@@ -207,7 +207,9 @@ std::wstring percent_decode(const std::wstring& str) {
                 if (c >= L'a' && c <= L'f') return static_cast<uint8_t>(c - L'a' + 10);
                 return 0;
             };
-            uint8_t byte = (hex_digit(str[++i]) << 4) | hex_digit(str[++i]);
+            const wchar_t high = str[++i];
+            const wchar_t low = str[++i];
+            uint8_t byte = (hex_digit(high) << 4) | hex_digit(low);
             utf8.push_back(byte);
         } else {
             if (has_encoded && !utf8.empty()) {
