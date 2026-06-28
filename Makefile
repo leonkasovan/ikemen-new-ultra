@@ -87,6 +87,9 @@ IKEMEN_NATIVE_TIME_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SHELL_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_LUA_LIB       ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SDLPLUGIN_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SHARE_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SYSTEM_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_DEBUG_SCRIPT_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
 CXXFLAGS += -DIKEMEN_NATIVE_FILE_LIB=$(IKEMEN_NATIVE_FILE_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_STRING_LIB=$(IKEMEN_NATIVE_STRING_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_MATH_LIB=$(IKEMEN_NATIVE_MATH_LIB)
@@ -102,7 +105,14 @@ CXXFLAGS += -DIKEMEN_NATIVE_TIME_LIB=$(IKEMEN_NATIVE_TIME_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SHELL_LIB=$(IKEMEN_NATIVE_SHELL_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_LUA_LIB=$(IKEMEN_NATIVE_LUA_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SDLPLUGIN_LIB=$(IKEMEN_NATIVE_SDLPLUGIN_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SHARE_LIB=$(IKEMEN_NATIVE_SHARE_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SYSTEM_LIB=$(IKEMEN_NATIVE_SYSTEM_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_DEBUG_SCRIPT_LIB=$(IKEMEN_NATIVE_DEBUG_SCRIPT_LIB)
 CXXFLAGS += -DIKEMEN_ENABLE_PLUGIN_TRACE=$(IKEMEN_ENABLE_PLUGIN_TRACE)
+
+# Phase 3: module flags defined in the main flags block above.
+# Add new Phase 3 flags here when scaffolding additional core engine modules.
+# Add new Phase 3 flags here when scaffolding additional core engine modules.
 
 # Trace mode (off by default): logs every SSZ plugin call at runtime
 IKEMEN_ENABLE_PLUGIN_TRACE ?= 0
@@ -188,7 +198,9 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/thread_service.cpp \
   $(SSZ_NATIVE)/time_service.cpp \
   $(SSZ_NATIVE)/shell_service.cpp \
-  $(SSZ_NATIVE)/lua_service.cpp
+  $(SSZ_NATIVE)/lua_service.cpp \
+  $(SSZ_NATIVE)/share_service.cpp \
+  $(SSZ_NATIVE)/debug_script_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -783,7 +795,9 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # Depends on the main build having compiled file.o first.
 # string_service.o must be linked because test_string_service() calls non-inline
 # functions (equ, trim, find, split, join, Unicode, percent, hex/octal).
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/time/time.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/shell/shell.o $(BLD)/main/lua/lua.o $(BLD)/main/ssz/ssz.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o $(BLD)/main/ssz_native/thread_service.o $(BLD)/main/ssz_native/time_service.o $(BLD)/main/ssz_native/shell_service.o $(BLD)/main/ssz_native/lua_service.o
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/time/time.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/shell/shell.o $(BLD)/main/lua/lua.o $(BLD)/main/ssz/ssz.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o $(BLD)/main/ssz_native/thread_service.o $(BLD)/main/ssz_native/time_service.o $(BLD)/main/ssz_native/shell_service.o $(BLD)/main/ssz_native/lua_service.o \
+$(BLD)/main/ssz_native/share_service.o \
+$(BLD)/main/ssz_native/debug_script_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
@@ -816,6 +830,9 @@ native_manifest:
 	@echo "IKEMEN_NATIVE_SHELL_LIB     = $(IKEMEN_NATIVE_SHELL_LIB)"
 	@echo "IKEMEN_NATIVE_LUA_LIB       = $(IKEMEN_NATIVE_LUA_LIB)"
 	@echo "IKEMEN_NATIVE_SDLPLUGIN_LIB = $(IKEMEN_NATIVE_SDLPLUGIN_LIB)"
+	@echo "IKEMEN_NATIVE_SHARE_LIB     = $(IKEMEN_NATIVE_SHARE_LIB)"
+	@echo "IKEMEN_NATIVE_SYSTEM_LIB    = $(IKEMEN_NATIVE_SYSTEM_LIB)"
+	@echo "IKEMEN_NATIVE_DEBUG_SCRIPT_LIB = $(IKEMEN_NATIVE_DEBUG_SCRIPT_LIB)"
 	@echo "=== To disable a module: make IKEMEN_NATIVE_<NAME>_LIB=0 ==="
 
 clean:

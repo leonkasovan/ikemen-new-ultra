@@ -358,7 +358,7 @@ Mirrors module-level `lib/file.ssz` API:
 | Per-module feature flags | `IKEMEN_NATIVE_FILE_LIB`, `IKEMEN_NATIVE_STRING_LIB`, `IKEMEN_NATIVE_MATH_LIB`, `IKEMEN_NATIVE_REGEX_LIB`, `IKEMEN_NATIVE_SOCKET_LIB`, `IKEMEN_NATIVE_SOUND_LIB`, `IKEMEN_NATIVE_OGG_LIB`, `IKEMEN_NATIVE_MESDIALOG_LIB` — all default to 1, override from command line |
 | `make native_manifest` target | Prints all active native module flags |
 
-## Full trace instrumentation (June 2029)
+## Full trace instrumentation (June 2026)
 
 | Change | Details |
 |---|---|
@@ -369,3 +369,75 @@ Mirrors module-level `lib/file.ssz` API:
 | `main/ssz/ssz.cpp` | 9 `SSZ_TRACE("FuncName")` calls — all SSZ runtime bridge wrappers instrumented |
 | `AGENTS.md` | Updated ssz_native row: 31→33 files, ~5,000→~2,400 total |
 | `REVIEW.md` | Marked M33 (trace coverage) and M34 (AGENTS.md counts) as resolved; updated counts throughout |
+
+## Phase 3 — System service scaffolding (ssz_script/ssz/system.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/system_service.hpp` | **NEW** — header-only with SelectData, SelectCharData, SelectStageData, SelectInfoData, SystemData structs |
+| `Makefile` | Added `IKEMEN_NATIVE_SYSTEM_LIB` flag, `native_manifest` entry |
+| `test/test_file.cpp` | Added `test_system_service()` (28 tests: default init, field access, stub methods) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — System Service section; system.ssz marked as started; added Immediate TODO entry |
+
+## Phase 3 — Debug Script service (ssz_script/ssz/debug-script.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/debug_script_service.hpp` | **NEW** — DebugScriptState struct + 27 function declarations (25 Lua callbacks + 2 file loaders) |
+| `main/ssz_native/debug_script_service.cpp` | **NEW** — all 27 stub implementations (no-ops) |
+| `Makefile` | Added `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_debug_script_service()` (32 tests: struct init, 25 stub calls, file stubs, flags mutation) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Debug Script Service section; debug-script.ssz marked complete; Immediate TODO updated |
+
+## Post-review fixes (REVIEW.md findings — June 2026, debug_script_service)
+
+| Finding | Fix |
+|---|---|
+| **M40** — system_service note .cpp needed when wired | ✅ Already resolved (comment exists at system_service.hpp:17) |
+| **M41** — const_cast in SelectInfoData::reset() | ✅ Already resolved (sel is non-const SelectData*) |
+| **M42** — Phase 3 .cpp strategy heuristic | Added ≤5 inline / >5 split convention to TODO_SSZ_CONVERSION.md Phase 3 section |
+
+## Post-review fixes (REVIEW.md findings — June 2026, system_service)
+
+| Finding | Fix |
+|---|---|
+| **M40** — Header-only stubs need .cpp note | Added `Phase 3 note (M40)` comment to `system_service.hpp` referencing .cpp creation when methods exceed ~5 lines |
+| **M41** — `const_cast` in `SelectInfoData::reset()` | Changed `sel` from `const SelectData*` to `SelectData*` (non-const); removed `const_cast` from reset(); verified build |
+
+## Post-review fixes (REVIEW.md findings — June 2026, share_service scaffolding)
+
+| Finding | Fix |
+|---|---|
+| **M37** — Duplicate `IKEMEN_NATIVE_SHARE_LIB ?=` in Makefile | Removed duplicate assignment on line 110; comment updated to note flag is already defined |
+| **M38** — share_service uses root namespace without explanation | Added 7-line design note to `share_service.hpp` explaining DTO pattern (matches `ssz_value.hpp`) |
+| **M39** — test_share_minimal.cpp duplicates test_file.cpp coverage | Deleted `test_share_minimal.cpp` and its build artifacts; all tests consolidated in `test_file.cpp` |
+
+## Phase 3 — Share service scaffolding (ssz_script/ssz/share.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/share_service.hpp` | **NEW** — `ShareData` struct with ~90 fields matching share.ssz |
+| `main/ssz_native/share_service.cpp` | **NEW** — `share_copy()`/`share_push()` stubs (Phase 3 TODO) |
+| `Makefile` | Added `IKEMEN_NATIVE_SHARE_LIB` flag, `share_service.cpp` to MAIN_SRCS, `share_service.o` to TEST_FILE_OBJS, `native_manifest` entry |
+| `test/test_share_minimal.cpp` | **NEW** — minimal compilation test confirming ShareData struct + stub functions work |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Share Service section; marked share.ssz as started; added Immediate TODO entry for share scaffolding |
+
+## Pre-conversion trace capture (June 2026)
+
+| Change | Details |
+|---|---|
+| `docs/pre_conversion_trace.log` | **NEW** — 618 KB, 43,690 trace entries from engine startup with `IKEMEN_ENABLE_PLUGIN_TRACE=1` |
+| `docs/pre_conversion_trace_stderr.log` | **NEW** — empty (no stderr during startup) |
+| `docs/pre_conversion_trace_summary.md` | **NEW** — analysis: 28 unique functions called, 144 of 172 not exercised (expected) |
+| `TODO_SSZ_CONVERSION.md` | Marked "Capture pre-conversion trace logs" as done in Phase 0 and Immediate TODO sections |
+| `REVIEW.md` | Updated Exit Criteria: pre-conversion trace logs now captured |
+
+## Gameplay trace capture (June 2026)
+
+| Change | Details |
+|---|---|
+| `docs/pre_conversion_trace_gameplay.log` | **NEW** — 4.9 MB, ~343,000 entries, 47 unique functions (automated keypress navigation) |
+| `docs/pre_conversion_trace_summary.md` | Updated with gameplay trace analysis and comparison table |
+| `tools/capture_gameplay_trace.ps1` | **NEW** — script for automated keypress-based gameplay trace capture |
+| `REVIEW.md` | M36 updated: gameplay trace captured (47 functions); 125 still require actual fight gameplay |
+| `CHANGES.md` | Fixed date typo: "June 2029" → "June 2026" in two section headers (M35) |

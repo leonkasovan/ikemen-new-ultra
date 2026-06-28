@@ -31,6 +31,9 @@
 #include "ssz_native/shell_service.hpp"
 #include "ssz_native/lua_service.hpp"
 #include "ssz_native/table_service.hpp"
+#include "ssz_native/share_service.hpp"
+#include "ssz_native/system_service.hpp"
+#include "ssz_native/debug_script_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -706,6 +709,152 @@ static void test_shell_service()
     TEST(L"shell_service header compiles", true);
 }
 
+// ---- Share service tests (ssz_native::share) ----
+
+static void test_share_service()
+{
+    std::wcout << L"\n--- Share service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    ShareData sd;
+    // Default-initialized fields are zero/false/empty
+    TEST(L"ShareData default init tm == 0", sd.tm == 0);
+    TEST(L"ShareData default init zoom == false", sd.zoom == false);
+    TEST(L"ShareData default init team1VS2Life == 0", sd.team1VS2Life == 0.0f);
+    TEST(L"ShareData default init operatingSystem empty", sd.operatingSystem.empty());
+    TEST(L"ShareData default init com empty", sd.com.empty());
+    // copy/push are stubs — verify they compile and don't crash
+    share_copy(sd);
+    share_push(sd);
+
+    ShareData sd2;
+    sd2.chr_home = 1;
+    sd2.zoom = true;
+    sd2.zoomMin = 0.5f;
+    sd2.zoomMax = 2.0f;
+    sd2.operatingSystem = "Windows";
+    sd2.com.push_back(42);
+    TEST(L"ShareData fields hold values", sd2.chr_home == 1);
+    TEST(L"ShareData bool fields", sd2.zoom == true);
+    TEST(L"ShareData float fields", sd2.zoomMin == 0.5f);
+    TEST(L"ShareData string fields", sd2.operatingSystem == "Windows");
+    TEST(L"ShareData vector fields", sd2.com.size() == 1 && sd2.com[0] == 42);
+}
+
+// ---- Debug script service tests (ssz_native::debug) ----
+
+static void test_debug_script_service()
+{
+    std::wcout << L"\n--- Debug script service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // DebugScriptState default init
+    DebugScriptState ds;
+    TEST(L"DebugScriptState roundResetFlg false", ds.roundResetFlg == false);
+    TEST(L"DebugScriptState reloadFlg false", ds.reloadFlg == false);
+    TEST(L"DebugScriptState noHUDDisplay false", ds.noHUDDisplay == false);
+    TEST(L"DebugScriptState L null", ds.L == nullptr);
+
+    // Stub functions compile and don't crash
+    int re = 0;
+    debug_puts(nullptr, re);
+    debug_ssz_reload(nullptr, re);
+    debug_set_life(nullptr, re);
+    debug_set_life_max(nullptr, re);
+    debug_set_power(nullptr, re);
+    debug_set_attack(nullptr, re);
+    debug_set_defence(nullptr, re);
+    debug_self_state(nullptr, re);
+    debug_add_hotkey(nullptr, re);
+    debug_toggle_clsn_draw(nullptr, re);
+    debug_toggle_debug_draw(nullptr, re);
+    debug_toggle_status_draw(nullptr, re);
+    debug_toggle_post_match(nullptr, re);
+    debug_toggle_pause(nullptr, re);
+    debug_toggle_pause_menu(nullptr, re);
+    debug_step(nullptr, re);
+    debug_toggle_record(nullptr, re);
+    debug_toggle_playback(nullptr, re);
+    debug_toggle_record_end(nullptr, re);
+    debug_round_reset(nullptr, re);
+    debug_reload(nullptr, re);
+    debug_set_accel(nullptr, re);
+    debug_set_ai_level(nullptr, re);
+    debug_set_time(nullptr, re);
+    debug_clear(nullptr, re);
+    TEST(L"All 25 debug callbacks no-crash", true);
+
+    // File loading stubs
+    TEST(L"debug_load_file empty", debug_load_file("test.lua").empty());
+    TEST(L"debug_run_file empty", debug_run_file("test.lua").empty());
+
+    // State field mutation
+    ds.roundResetFlg = true;
+    ds.reloadFlg = true;
+    ds.noHUDDisplay = true;
+    TEST(L"DebugScriptState flags hold values",
+        ds.roundResetFlg == true && ds.reloadFlg == true && ds.noHUDDisplay == true);
+}
+
+// ---- System service tests (ssz_native::system) ----
+
+static void test_system_service()
+{
+    std::wcout << L"\n--- System service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // SelectData default init
+    SelectData sel;
+    TEST(L"SelectData columns == 5", sel.columns == 5);
+    TEST(L"SelectData rows == 2", sel.rows == 2);
+    TEST(L"SelectData cellsizex == 29.0", sel.cellsizex == 29.0f);
+    TEST(L"SelectData selectedStageNo == -1", sel.selectedStageNo == -1);
+    TEST(L"SelectData charlist empty", sel.charlist.empty());
+    TEST(L"SelectData stagelist empty", sel.stagelist.empty());
+
+    // SelectCharData default init
+    SelectCharData ch;
+    TEST(L"SelectCharData def empty", ch.def.empty());
+    TEST(L"SelectCharData name empty", ch.name.empty());
+
+    // SelectStageData default init
+    SelectStageData st;
+    TEST(L"SelectStageData def empty", st.def.empty());
+
+    // SelectInfoData default init
+    SelectInfoData inf;
+    TEST(L"SelectInfoData p empty", inf.p.empty());
+    TEST(L"SelectInfoData sel null", inf.sel == nullptr);
+
+    // SystemData default init
+    SystemData sys;
+    TEST(L"SystemData selinf.p empty", sys.selinf.p.empty());
+
+    // Stub methods compile and don't crash
+    TEST(L"SelectData getCharNo stub", sel.getCharNo(0) == 0);
+    TEST(L"SelectData getChar stub", sel.getChar(0) == nullptr);
+    TEST(L"SelectData getStageNo stub", sel.getStageNo(0) == 0);
+    TEST(L"SelectData getStage stub", sel.getStage(0) == nullptr);
+    TEST(L"SelectData getStageName stub", sel.getStageName(0).empty());
+    TEST(L"SelectData addChar stub", sel.addChar("kfm") == false);
+    TEST(L"SelectData addStage stub", sel.addStage("stageZ.def").empty());
+    sel.selectStage(3);
+    TEST(L"SelectData selectStage", sel.selectedStageNo == 3);
+    sel.setStageNo(2);
+    TEST(L"SelectData setStageNo stub", sel.curStageNo == 0); // stub resets to 0
+    TEST(L"SelectInfoData addSelchr stub", inf.addSelchr(0, 0, 1) == false);
+    TEST(L"SystemData selReset stub", true);
+    sys.selReset();
+    TEST(L"SystemData selReset no-crash", true);
+
+    // Populated select data
+    SelectCharData ch2;
+    ch2.def = "chars/kfm/kfm.def";
+    ch2.name = "KFM";
+    sel.charlist.push_back(ch2);
+    TEST(L"SelectData charlist push_back", sel.charlist.size() == 1);
+    TEST(L"SelectData charlist access", sel.charlist[0].name == "KFM");
+}
+
 // ---- Alert service tests (ssz_native::alert) ----
 
 static void test_alert_service()
@@ -1057,6 +1206,9 @@ int main()
     test_time_service();
     test_table_service();
     test_lua_service();
+    test_share_service();
+    test_system_service();
+    test_debug_script_service();
     test_shell_service();
     test_alert_service();
     test_crypto_service();

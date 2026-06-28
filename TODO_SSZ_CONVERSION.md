@@ -174,7 +174,11 @@ Use a **strangler-fig migration**:
 - [x] Decide whether native code naming should mirror SSZ names or use C++ domain names with adapter aliases. → Use C++ domain names with adapter aliases.
 - [x] Choose namespace convention: `ikemen::ssz_native`.
 - [x] Add build target for native SSZ conversion files (`SSZ_NATIVE_SRCS` in Makefile).
-- [ ] Capture SSZ trace logs for representative inputs (e.g., one `.def`, one stage, one character) before any conversion. These become the parity baseline.
+- [x] Capture SSZ trace logs for representative inputs (e.g., one `.def`, one stage, one character) before any conversion. These become the parity baseline.
+  - Trace saved to `docs/pre_conversion_trace.log` (618 KB, 43,690 entries).
+  - Summary: `docs/pre_conversion_trace_summary.md`.
+  - 28 unique bridge functions called during startup; 144 of 172 not exercised (expected for startup-only).
+  - Reproduce: `make IKEMEN_ENABLE_PLUGIN_TRACE=1 CONFIG=Debug install -j8` then run `.\ikemen-debug.exe 2>&1 > trace.log`.
 
 ## Phase 1 — Native Foundation Libraries
 
@@ -314,9 +318,9 @@ These files contain game/system behavior and should be converted after foundatio
 
 Recommended order (smallest first):
 
-1. `ssz_script/ssz/share.ssz` — 371 lines
-2. `ssz_script/ssz/system.ssz` — 427 lines
-3. `ssz_script/ssz/debug-script.ssz` — 296 lines
+1. `ssz_script/ssz/share.ssz` — 371 lines ⬜ Phase 3 started (scaffolding complete)
+2. `ssz_script/ssz/system.ssz` — 427 lines ⬜ Phase 3 scaffolding complete
+3. `ssz_script/ssz/debug-script.ssz` — 296 lines ✅ Phase 3 scaffolding complete (Lua callback bridge)
 4. `ssz_script/ssz/common.ssz` — 1199 lines
 5. `ssz_script/ssz/loader.ssz`
 6. `ssz_script/ssz/script.ssz` — 2216 lines
@@ -325,6 +329,13 @@ Recommended order (smallest first):
 9. `ssz_script/ssz/statebuilder.ssz` — 9334 lines (last)
 
 `statebuilder.ssz` is the largest file and should be converted only after smaller modules establish patterns.
+
+### Phase 3 .cpp strategy convention (M42)
+
+When scaffolding a Phase 3 module, follow this heuristic for whether to use a `.cpp` file:
+- **≤5 stub methods:** Header-only inline stubs in the `.hpp` (like `system_service`)
+- **>5 stub methods:** Separate `.cpp` with stub bodies (like `debug_script_service` with 27 stubs)
+This avoids excessive header bloat for large modules while keeping small modules simple. When any stub grows beyond ~5 lines of real logic, create a `.cpp` and move it out of the header.
 
 ## Phase 4 — Gameplay Resource Modules
 
@@ -532,6 +543,48 @@ An SSZ module can be considered converted only when:
 - [ ] Runtime smoke tests pass.
 - [ ] The module has a rollback flag if conversion is risky.
 
+## Phase 3 — Share Service (scaffolding)
+
+- [x] `main/ssz_native/share_service.hpp` — `ShareData` struct with all ~90 fields from `share.ssz`:
+  - int, bool, float primitives with default initialization
+  - `std::vector<int>`, `std::vector<bool>` for array fields
+  - `std::string` for `^/char` fields
+  - Opaque reference fields noted with comments for Phase 3 wiring
+- [x] `main/ssz_native/share_service.cpp` — `share_copy()` and `share_push()` stubs
+  - Marked `Phase 3` — will be wired to native state accessors as each module converts
+- [x] `IKEMEN_NATIVE_SHARE_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for share
+- [x] Compilation test in `test_file.cpp` (`test_share_service()`, 11 tests) — all ShareData fields pass
+- [ ] Wire `copy()`/`push()` to real state accessors — deferred until dependent modules (com, chr, cmd, fnt, snd, cfg, se, sc, stage) are at least partially native
+
+## Phase 3 — System Service (scaffolding)
+
+- [x] `main/ssz_native/system_service.hpp` — `SelectData`, `SelectCharData`, `SelectStageData`, `SelectInfoData`, `SystemData` structs
+  - Layout config (columns, rows, cell sizes, scales) with SSZ-default values
+  - Portrait group/index config matching `&Select` fields from `system.ssz`
+  - Character/stage list containers (`std::vector<SelectCharData/SelectStageData>`)
+  - Stub methods: `getCharNo`, `getChar`, `getStageNo`, `getStage`, `setStageNo`, `selectStage`, `getStageName`, `addChar`, `addStage`
+  - `SelectInfoData` with `Player`/`Selected` sub-structs and `addSelchr`/`reset` stubs
+  - `SystemData` with `selReset` stub
+- [x] `IKEMEN_NATIVE_SYSTEM_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for system
+- [x] Compilation tests in `test_file.cpp` (28 tests) — all struct/field default-init + stub method calls pass
+- [ ] Wire stubs to real logic — deferred until dependent modules (sff, fight, common, com) are at least partially native
+
+## Phase 3 — Debug Script Service (scaffolding)
+
+- [x] `main/ssz_native/debug_script_service.hpp` — `DebugScriptState` struct + 27 function declarations:
+  - 3 module-level flags: `roundResetFlg`, `reloadFlg`, `noHUDDisplay`
+  - `lua_State* L` pointer
+  - 25 Lua callback function declarations (`debug_puts`, `debug_set_life`, etc.)
+  - 2 file-loading function declarations (`debug_load_file`, `debug_run_file`)
+- [x] `main/ssz_native/debug_script_service.cpp` — all 27 function stubs (no-ops)
+  - `.cpp` required because functions take `lua_State*` (needs `<lua.h>` include when wired)
+- [x] `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for debug_script
+- [x] Compilation tests in `test_file.cpp` (32 tests) — struct init, stub calls, file load stubs
+- [ ] Wire stubs to real logic — deferred until Lua bridge layer (sc/tscri/sscri) is refactored
+
 ### Whole-migration
 
 The SSZ script layer migration is complete when:
@@ -619,12 +672,28 @@ The SSZ script layer migration is complete when:
   - String `hash()` function matching SSZ behavior
   - 15 tests (CRUD, iteration, hash)
 - [x] Add per-module `#if` guards in `*_static.hpp`. (13 headers: file, math, regex, socket, sound, ogg, mesdialog, alert, thread, time, shell, lua, sdlplugin)
-- [ ] Capture pre-conversion trace logs for representative inputs.
+- [x] Capture pre-conversion trace logs for representative inputs.
 - [x] Add runtime trace mode around SSZ entry points before replacing them.
   - `IKEMEN_ENABLE_PLUGIN_TRACE` flag (default=0) in Makefile.
   - `main/ssz_native/ssz_trace.hpp` with `SSZ_TRACE(msg)` macro.
   - Demonstrated on `Open` (bridge.cpp) and `Run` (ssz.cpp) bridge wrappers.
   - Enable with: `make IKEMEN_ENABLE_PLUGIN_TRACE=1`.
+- [x] Capture pre-conversion trace logs for the baseline.
+  - 43,690 trace entries from 28 unique bridge functions.
+  - File: `docs/pre_conversion_trace.log` (618 KB).
+  - Summary: `docs/pre_conversion_trace_summary.md`.
+- [x] Begin Phase 3: `share_service.hpp/.cpp` scaffolding.
+  - `ShareData` struct w/ ~90 fields + `share_copy`/`share_push` stubs.
+  - Feature flag `IKEMEN_NATIVE_SHARE_LIB`, Makefile wiring, compilation test.
+  - `copy()`/`push()` wiring deferred until dependent modules are native.
+- [x] Phase 3: `system_service.hpp` scaffolding.
+  - `SelectData`, `SelectInfoData`, `SystemData` structs with stub methods.
+  - Feature flag `IKEMEN_NATIVE_SYSTEM_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until sff/fight/common modules are native.
+- [x] Phase 3: `debug_script_service.hpp/.cpp` scaffolding.
+  - `DebugScriptState` struct + 27 Lua callback function stubs.
+  - Feature flag `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until Lua bridge layer (sc/tscri/sscri) is refactored.
 
 ## Naming note
 
