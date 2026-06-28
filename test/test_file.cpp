@@ -20,6 +20,8 @@
 #include "ssz_native/file_service.hpp"
 #include "ssz_native/math_service.hpp"
 #include "ssz_native/regex_service.hpp"
+#include "ssz_native/socket_service.hpp"
+#include "ssz_native/sound_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -436,6 +438,62 @@ static void test_math_service()
     TEST(L"swap(1,2) → (2,1)", x == 2 && y == 1);
 }
 
+// ---- Sound service tests (ssz_native::sound) ----
+
+static void test_sound_service()
+{
+    namespace s = ikemen::ssz_native::sound;
+    std::wcout << L"\n--- Sound service ---" << std::endl;
+
+    // Default construction — client created
+    s::AudioClient ac;
+    TEST(L"AudioClient default constructed", true);
+
+    // Move semantics
+    s::AudioClient ac2;
+    s::AudioClient ac3 = std::move(ac2);
+    TEST(L"AudioClient move: no crash", true);
+
+    s::AudioClient ac4;
+    ac4 = std::move(ac3);
+    TEST(L"AudioClient move-assign: no crash", true);
+
+    // Start/stop on default-constructed client (may fail at runtime but must not crash)
+    (void)ac.start();
+    (void)ac.stop();
+    (void)ac.buffer_ready();
+    TEST(L"AudioClient start/stop/buffer_ready no crash", true);
+}
+
+// ---- Socket service tests (ssz_native::socket) ----
+
+static void test_socket_service()
+{
+    namespace s = ikemen::ssz_native::socket;
+    std::wcout << L"\n--- Socket service ---" << std::endl;
+
+    // Default construction — not open
+    s::SocketHandle sh;
+    TEST(L"SocketHandle default not open", !sh.is_open());
+
+    // Move semantics
+    // (can't open a real socket in unit test, but verify moves work)
+    s::SocketHandle sh2;
+    s::SocketHandle sh3 = std::move(sh2);
+    TEST(L"SocketHandle move: source not open", !sh2.is_open());
+    TEST(L"SocketHandle move: dest not open", !sh3.is_open());
+
+    s::SocketHandle sh4;
+    sh4 = std::move(sh3);
+    TEST(L"SocketHandle move-assign: source not open", !sh3.is_open());
+    TEST(L"SocketHandle move-assign: dest not open", !sh4.is_open());
+
+    // Double close safety
+    sh4.close();
+    sh4.close();
+    TEST(L"SocketHandle double close safe", true);
+}
+
 // ---- Regex service tests (ssz_native::regex) ----
 
 static void test_regex_service()
@@ -636,6 +694,8 @@ int main()
     test_math();
     test_thread();
     test_math_service();
+    test_sound_service();
+    test_socket_service();
     test_regex_service();
     test_file_handle();
     test_file_handle_edges();

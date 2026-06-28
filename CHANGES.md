@@ -155,6 +155,10 @@ Mirrors module-level `lib/file.ssz` API:
 | `main/ssz_native/math_service.cpp` | **NEW** — implementation of PRNG with module-level seed, srand/random/rand/randI/randF |
 | `main/ssz_native/regex_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/regex.ssz` (Phase 2). RAII Regex class wrapping std::wregex/boost::wregex, search/search_all/search_matches, free function compile() |
 | `main/ssz_native/regex_service.cpp` | **NEW** — implementation of regex compile/search with error handling |
+| `main/ssz_native/socket_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/socket.ssz` (Phase 2). RAII SocketHandle wrapping SOCKET, connect/listen/accept/send/recv |
+| `main/ssz_native/socket_service.cpp` | **NEW** — implementation delegating to native socket plugin functions |
+| `main/ssz_native/sound_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/sound.ssz` (Phase 2). RAII AudioClient wrapping opaque Client* handle |
+| `main/ssz_native/sound_service.cpp` | **NEW** — implementation delegating to native sound plugin functions |
 
 ## Post-review fixes (REVIEW.md findings — April 2026)
 
@@ -197,3 +201,21 @@ Mirrors module-level `lib/file.ssz` API:
 | **M10** — Linux error handling returns hardcoded string | Added comment explaining deliberate trade-off for runtime independence |
 | **M11** — Duplicate `Match`/`RegexMatchInfo` types | Added `// TODO: Consolidate` comment referencing bridge layer retirement |
 | **L11** — `search_matches`/`search_all` undocumented as extensions | Added comment: "Extension: not provided by the SSZ native plugin. Added at the service layer." |
+
+## Post-review fixes (REVIEW.md findings — September 2026)
+
+| Finding | Fix |
+|---|---|
+| **H9** — `socket_service.hpp` includes `ssz_value.hpp` unnecessarily | Removed include |
+| **H10** — `socket_service.cpp` duplicates native socket declarations | Added TODO comment referencing M4 tracking |
+| **M12** — Redundant `friend` declarations in `SocketHandle` | Removed both no-op `friend` statements |
+| **M13** — No design note explaining socket_service call-through | Added 6-line design note |
+
+## Post-review fixes (REVIEW.md findings — October 2026)
+
+| Finding | Fix |
+|---|---|
+| **H11** — `sound_service.cpp` duplicates native sound declarations without TODO | Added TODO comment referencing M4 tracking (matching H10 pattern) |
+| **M14** — `AudioClient` has no `is_valid()` method | Added `bool is_valid() const { return client_ != nullptr; }` for API consistency with FileHandle/SocketHandle |
+| **M15** — No design note in `sound_service.hpp` | Added 5-line design note explaining call-through pattern (platform audio backends, mirroring file_service/socket_service) |
+| **M16** — Eager-creation pattern undocumented | Added 4-line comment in header explaining AudioClient eagerly creates the client (unlike FileHandle/SocketHandle which start closed) |
