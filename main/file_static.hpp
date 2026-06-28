@@ -9,10 +9,15 @@
 //       to avoid a linker clash with lua.cpp's "Close".
 //       The SSZ mapping still maps "Close" -> FileClose.
 //
+// The entire registration is guarded by IKEMEN_NATIVE_FILE_LIB.
+// When the native file service is fully active and no SSZ scripts
+// call the bridge, set this flag to 0 to remove bridge registration.
 
 #include "static_plugin_registry.hpp"
 
 #include <cstdio>    // for FILE*
+
+#if IKEMEN_NATIVE_FILE_LIB
 
 struct PluginUtil;
 struct Reference;
@@ -68,3 +73,9 @@ inline bool file_static_register()
 		file_mapping,
 		sizeof(file_mapping) / sizeof(file_mapping[0]));
 }
+
+#else
+// Stub: native file service is active, bridge registration is not needed.
+// file_static_register() still exists so main.cpp can call it unconditionally.
+inline bool file_static_register() { return true; }
+#endif // IKEMEN_NATIVE_FILE_LIB

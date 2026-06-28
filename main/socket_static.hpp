@@ -12,6 +12,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_SOCKET_LIB
+
 #ifdef _WIN32
 #include <winsock2.h>
 #else
@@ -52,3 +54,7 @@ inline bool socket_static_register()
 		socket_mapping,
 		sizeof(socket_mapping) / sizeof(socket_mapping[0]));
 }
+
+#else
+inline bool socket_static_register() { return true; }
+#endif

@@ -35,6 +35,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_MESDIALOG_LIB
+
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
 // (sszdef.h, typeid.h, and arrayandref.hpp are assumed to be
@@ -95,3 +97,7 @@ inline bool mesdialog_static_register()
 		mesdialog_mapping,
 		sizeof(mesdialog_mapping) / sizeof(mesdialog_mapping[0]));
 }
+
+#else
+inline bool mesdialog_static_register() { return true; }
+#endif

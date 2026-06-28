@@ -8,6 +8,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_REGEX_LIB
+
 #ifdef _WIN32
 #include <regex>
 #define RNS std
@@ -40,3 +42,7 @@ inline bool regex_static_register()
 		regex_mapping,
 		sizeof(regex_mapping) / sizeof(regex_mapping[0]));
 }
+
+#else
+inline bool regex_static_register() { return true; }
+#endif

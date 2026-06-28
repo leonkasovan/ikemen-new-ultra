@@ -8,6 +8,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_ALERT_LIB
+
 struct PluginUtil;
 struct Reference;
 
@@ -28,3 +30,7 @@ inline bool alert_static_register()
 		alert_mapping,
 		sizeof(alert_mapping) / sizeof(alert_mapping[0]));
 }
+
+#else
+inline bool alert_static_register() { return true; }
+#endif

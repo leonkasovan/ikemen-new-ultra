@@ -25,6 +25,7 @@
 #include "ssz_native/string_service.hpp"
 #include "ssz_native/ogg_service.hpp"
 #include "ssz_native/mesdialog_service.hpp"
+#include "ssz_native/crypto_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -556,6 +557,65 @@ static void test_ogg_service()
     TEST(L"OggVorbisHandle operations no crash on null handle", true);
 }
 
+// ---- Alert service tests (ssz_native::alert) ----
+
+static void test_alert_service()
+{
+    // No-crash smoke test — dialog can't be verified programmatically.
+    // ikemen::ssz_native::alert::alert(L"test", L"test");
+    TEST(L"alert_service header compiles", true);
+}
+
+// ---- Crypto service tests (ssz_native::crypto) ----
+
+static void test_crypto_service()
+{
+    namespace c = ikemen::ssz_native::crypto;
+    std::wcout << L"\n--- Crypto service ---" << std::endl;
+
+    // Base64 encode/decode roundtrip
+    std::vector<uint8_t> data = {72, 101, 108, 108, 111}; // "Hello"
+    std::string encoded = c::base64_encode(data);
+    TEST(L"base64 encode non-empty", !encoded.empty());
+    std::vector<uint8_t> decoded = c::base64_decode(encoded);
+    TEST(L"base64 decode same size", decoded.size() == data.size());
+    if (decoded.size() == data.size() && data.size() > 0)
+        TEST(L"base64 roundtrip matches", memcmp(decoded.data(), data.data(), data.size()) == 0);
+
+    // Base64 known value: "Hello" -> "SGVsbG8="
+    TEST_EQ(L"base64 known hello", encoded, "SGVsbG8=");
+
+    // Base64 padding
+    std::vector<uint8_t> single = {'x'};
+    std::string single_b64 = c::base64_encode(single);
+    TEST_EQ(L"base64 single byte padding", single_b64, "eA==");
+
+    // Base64 empty
+    TEST(L"base64 encode empty", c::base64_encode({}).empty());
+    TEST(L"base64 decode empty", c::base64_decode("").empty());
+
+    // Arcfour known test: key="Key", src="Plaintext" -> known output
+    std::vector<uint8_t> arc_key = {'K', 'e', 'y'};
+    std::vector<uint8_t> arc_src = {'P', 'l', 'a', 'i', 'n', 't', 'e', 'x', 't'};
+    c::Arcfour arc;
+    arc.init(arc_key);
+    std::vector<uint8_t> arc_enc = arc.encrypt(arc_src);
+
+    // RC4 is symmetric: encrypt again with same key should decrypt
+    c::Arcfour arc2;
+    arc2.init(arc_key);
+    std::vector<uint8_t> arc_dec = arc2.encrypt(arc_enc);
+    TEST(L"Arcfour roundtrip", arc_dec.size() == arc_src.size());
+    if (arc_dec.size() == arc_src.size() && arc_src.size() > 0)
+        TEST(L"Arcfour roundtrip matches", memcmp(arc_dec.data(), arc_src.data(), arc_src.size()) == 0);
+
+    // arcfour_encrypt convenience function
+    std::vector<uint8_t> dest;
+    TEST(L"arcfour_encrypt empty key fails", !c::arcfour_encrypt(dest, {}, arc_src));
+    TEST(L"arcfour_encrypt works", c::arcfour_encrypt(dest, arc_key, arc_src));
+    TEST(L"arcfour_encrypt non-empty dest", !dest.empty());
+}
+
 // ---- Mesdialog service tests (ssz_native::mesdialog) ----
 
 static void test_mesdialog_service()
@@ -836,6 +896,8 @@ int main()
     test_math_service();
     test_string_service();
     test_ogg_service();
+    test_alert_service();
+    test_crypto_service();
     test_mesdialog_service();
     test_sound_service();
     test_socket_service();

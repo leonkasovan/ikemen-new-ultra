@@ -165,6 +165,21 @@ Mirrors module-level `lib/file.ssz` API:
 | `main/ssz_native/ogg_service.cpp` | **NEW** — implementation delegating to native ogg plugin functions |
 | `main/ssz_native/mesdialog_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alpha/mesdialog.ssz` (Phase 2). Free-function API wrapping mesdialog plugin: dialogs, INI, encoding, compression, shared string |
 | `main/ssz_native/mesdialog_service.cpp` | **NEW** — implementation delegating to native mesdialog plugin functions |
+| `main/ssz_native/crypto_service.hpp` | **NEW** — native equivalents of `ssz_script/lib/base64.ssz` and `arcfour.ssz` (Phase 1). Base64 encode/decode, Arcfour RC4 RAII context |
+| `main/ssz_native/crypto_service.cpp` | **NEW** — implementation of base64 and Arcfour algorithms |
+| `main/ssz_native/alert_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alert.ssz`. Alert function wrapping native alert plugin |
+| `main/ssz_native/alert_service.cpp` | **NEW** — implementation delegating to native alert plugin |
+
+## Post-review fixes (REVIEW.md findings — March 2027)
+
+| Finding | Fix |
+|---|---|
+| **H20** — `AGENTS.md` says "21 files, ~3,500" | Updated to "23 files, ~3,700 total" |
+| **M28** — `alert_static.hpp` missing `#if IKEMEN_NATIVE_ALERT_LIB` guard | Wired with standard `#if`/`#else` stub pattern |
+| **M29** — `alert_service.cpp` missing M4 TODO comment | Added comment referencing `plugin_native_api.hpp` M4 consolidation |
+| **L32** — No alert_service smoke test | Added `test_alert_service()` with compile-time verification |
+| `Makefile` | Added `-DIKEMEN_USE_NATIVE_SSZ=1` to CXXFLAGS, per-module feature flags with `?=` defaults, `make native_manifest` target |
+| `main/file_static.hpp` | Added `#if IKEMEN_NATIVE_FILE_LIB` guard around entire bridge registration block with `#else` stub returning `true` — proof of concept for per-module flag wiring |
 
 ## Post-review fixes (REVIEW.md findings — April 2026)
 
@@ -255,3 +270,22 @@ Mirrors module-level `lib/file.ssz` API:
 | **H17** — `mesdialog_service.cpp` TODO says `bridge.cpp:88-102` (off by 3) | Changed to `85-99` to match actual bridge.cpp line numbers |
 | **M23** — 3 unused native declarations (VeryUnsafeCopy, etc.) | Added comment: "declared for completeness with the bridge's forward-declaration block — not exposed in the public API" |
 | **L27** — `CodePage` enum values undocumented | Added per-value comments and usage note for ACP/UTF8 |
+| **M25** — Per-module flags not wired to `*_static.hpp` guards | Wired `file_static.hpp` with `#if IKEMEN_NATIVE_FILE_LIB` guard and `#else` stub. Verified builds with `=1` and `=0`. |
+
+## Post-review fixes (REVIEW.md findings — February 2027)
+
+| Finding | Fix |
+|---|---|
+| **H18** — `crypto_service.o` missing from `TEST_FILE_OBJS` | Added `crypto_service.o` + `ssz.o` + `string_service.o` to fix link errors |
+| **H19** — `AGENTS.md` says "19 files, ~3,100" | Updated to "21 files, ~3,500 total" |
+| **M26** — No `IKEMEN_NATIVE_CRYPTO_LIB` flag | Added flag with `?=` default, `-D` define, `native_manifest` entry |
+| **M27** — `#if` vs `#ifdef` convention undocumented | Added 5-line convention comment in `Makefile` |
+| **M25** — Wire remaining `#if` guards in `*_static.hpp` | Wired `math_static.hpp`, `regex_static.hpp`, `socket_static.hpp`, `sound_static.hpp`, `ogg_static.hpp`, `mesdialog_static.hpp` — all with `#if`/`#else` pattern |
+
+## Build system changes (January 2027)
+
+| Change | Details |
+|---|---|
+| `IKEMEN_USE_NATIVE_SSZ` flag | Added `-DIKEMEN_USE_NATIVE_SSZ=$(IKEMEN_USE_NATIVE_SSZ)` to CXXFLAGS, defaults to 1 |
+| Per-module feature flags | `IKEMEN_NATIVE_FILE_LIB`, `IKEMEN_NATIVE_STRING_LIB`, `IKEMEN_NATIVE_MATH_LIB`, `IKEMEN_NATIVE_REGEX_LIB`, `IKEMEN_NATIVE_SOCKET_LIB`, `IKEMEN_NATIVE_SOUND_LIB`, `IKEMEN_NATIVE_OGG_LIB`, `IKEMEN_NATIVE_MESDIALOG_LIB` — all default to 1, override from command line |
+| `make native_manifest` target | Prints all active native module flags |

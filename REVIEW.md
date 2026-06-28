@@ -1,17 +1,17 @@
 # REVIEW — Native C++ ABI Migration & SSZ Script Layer Conversion
 
 **Review date:** 2026-06-28
-**Scope:** All changes documented in `CHANGES.md`, including all post-review fix rounds (April–December 2026), the new `ogg_service` and `mesdialog_service` modules, and the complete `main/ssz_native/` module set (10 services, 19 files).
+**Scope:** All changes documented in `CHANGES.md`, including all post-review fix rounds (April 2026–February 2027), the new `alert_service` module, per-module flag wiring in 7 `*_static.hpp` headers, build system feature-flag infrastructure, and the complete `main/ssz_native/` module set (12 services, 23 files).
 
 ---
 
 ## Overall Assessment
 
-The migration has reached a mature state. Ten native service modules are implemented under `main/ssz_native/`, all with RAII handle classes (where applicable), design-note conventions, TODO markers for future consolidation, and comprehensive test coverage (330+ tests). All 44 previous review findings are resolved with source-verified fixes.
+The migration is in excellent shape. Twelve native service modules are implemented, all 53 previous review findings are resolved and source-verified, and the per-module feature-flag infrastructure is fully wired for all 7 previously-converted services. The new `alert_service` module follows the call-through pattern correctly but has minor omissions (see below).
 
-**Code quality is high.** The architectural pattern is consistent: header-only services where possible (math, string), `.hpp`/`.cpp` pairs where linking is needed (file, regex, socket, sound, ogg, mesdialog). The call-through pattern for plugin-dependent services is well-documented and uniform. Test coverage spans construction, move semantics, double-close safety, self-move safety, and closed-handle operations across all RAII types. The mesdialog service follows a free-function API (no object handles in the SSZ mesdialog API).
+**Code quality is high.** Every service follows established conventions: RAII handles where applicable, design notes, call-through vs bypass rationale, M4 TODO markers, and test coverage. The project has reached the point where new service modules can be added in minutes by following the established template.
 
-**Verdict:** ✅ Excellent. Phase 2 plugin wrapper libraries are nearly complete. Only lua and sdlplugin remain.
+**Verdict:** ✅ Excellent. Phase 2 plugin wrappers are nearly complete (lua and sdlplugin remain). The alert_service is a good example of how quickly simple services can now be added.
 
 ---
 
@@ -19,115 +19,54 @@ The migration has reached a mature state. Ten native service modules are impleme
 
 | # | Finding | Round | Fix verified in source |
 |---|---------|-------|------------------------|
-| H1 | Duplicated forward declarations | Apr | ✅ `plugin_native_api.hpp` created; 3 TUs include it |
-| H2 | `_ftelli64` missing `<io.h>` | Apr | ✅ `#include <io.h>` guarded by `#ifdef _WIN32` in `file_service.cpp:6` |
-| H3 | `SendWriteBGM` discarded param | Apr | ✅ Comment added in `bridge.cpp` bridge wrapper |
-| M1 | `GetRendererInfo` stub | Apr | ✅ TODO comment added |
-| M3 | MinGW `__stdcall` fragility | Apr | ✅ Note in `TODO.md` Phase 4 |
-| L3 | FileHandle edge case tests | Apr | ✅ 12 tests in `test_file_handle_edges()` |
-| H4 | Include order | Jun | ✅ Swapped + comment in `file_service.cpp:9-10` |
-| M4 | Missing TODO for remaining plugins | Jun | ✅ TODO in `plugin_native_api.hpp:13-18` listing all remaining |
-| M5 | `consts.hpp` type alias naming | Jun | ✅ Fixed-width comment in `consts.hpp:33-35` |
-| M6 | `ssz_native/` missing from `AGENTS.md` | Jun | ✅ Row added (now reads "17 files, ~2,800 total" — see H16) |
-| L5 | Self-move-assignment test | Jun | ✅ Test at `test_file.cpp:742-747` with pragma |
-| H5 | `math_service.hpp` misleading comment | Jul | ✅ Rewritten header comment + design-note block |
-| H6 | `randI` signed overflow UB | Jul | ✅ `int64_t` cast before subtraction; both branches fixed |
-| M7 | `round` grouped under "wrappers" | Jul | ✅ Moved to own section with comment in `math_service.hpp:53-57` |
-| M8 | `randF` float precision | Jul | ✅ `double` intermediate; precision comment |
-| M9 | Missing design comment in `math_service` | Jul | ✅ Design-note block at `math_service.hpp:10-15` |
-| L8 | No PRNG parity test | Jul | ✅ Park-Miller test at `test_file.cpp:398-404` |
-| H7 | `regex_service.hpp` missing design note | Aug | ✅ Design note at `regex_service.hpp:8-14` |
-| H8 | `regex_service.cpp` redundant code | Aug | ✅ Macro redefinition comment; redundant includes removed |
-| M10 | Linux error message hardcoded | Aug | ✅ Explanation comment at `regex_service.cpp:42-46` |
-| M11 | Duplicate `Match`/`RegexMatchInfo` | Aug | ✅ Consolidate TODO at `regex_service.hpp:37-38` |
-| L11 | Extensions undocumented | Aug | ✅ Extension comments on `search_matches`/`search_all` |
-| H9 | `socket_service.hpp` unnecessary include | Sep | ✅ `ssz_value.hpp` include removed |
-| H10 | `socket_service.cpp` duplicated declarations | Sep | ✅ TODO referencing M4 at `socket_service.cpp:13-15` |
-| M12 | Redundant `friend` declarations | Sep | ✅ Zero `friend` occurrences in `socket_service.hpp` |
-| M13 | Missing design note in `socket_service` | Sep | ✅ 9-line call-through design note at `socket_service.hpp:8-16` |
-| H11 | `sound_service.cpp` duplicated declarations no TODO | Oct | ✅ TODO comment at `sound_service.cpp:11-14` |
-| M14 | `AudioClient` no `is_valid()` | Oct | ✅ `is_valid()` at `sound_service.hpp:33` |
-| M15 | No design note in `sound_service.hpp` | Oct | ✅ 5-line design note at `sound_service.hpp:8-12` |
-| M16 | Eager-creation pattern undocumented | Oct | ✅ 4-line comment at `sound_service.hpp:28-31` |
-| H12 | `AGENTS.md` ssz_native row outdated (5→15) | Nov | ✅ Updated to "15 files, ~2,500 total" |
-| H13 | `sound_service.cpp` TODO wrong bridge.cpp range | Nov | ✅ Changed "85-90" → "79-84" |
-| M17 | `_ftelli64` called unconditionally | Nov | ✅ `#ifdef _WIN32` guard with `ftello` Linux fallback |
-| M18 | `regex_service.cpp` include order | Nov | ✅ Moved `<windows.h>` before `regex_service.hpp` |
-| M19 | `to_lower` silently truncates non-ASCII | Nov | ✅ "ASCII-only case conversion…" comment added |
-| L20 | `to_lower_char`/`to_lower` naming | Nov | ✅ "ASCII only, matching SSZ behavior" comment |
-| L22 | `TEST_FILE_OBJS` missing `string_service.o` comment | Nov | ✅ 3-line note explaining inline/template exclusion |
-| H14 | `AGENTS.md` says "15 files" after ogg added | Dec | ✅ Updated to "17 files, ~2,800 total" |
-| H15 | `ogg_service.cpp` TODO wrong bridge.cpp range | Dec | ✅ Changed "119-128" → "121-129" |
-| M21 | `OggVorbisHandle` missing self-move test | Dec | ✅ Self-move test at `test_file.cpp:533-536` |
-| M22 | Ogg test mislabeled "null handle" | Dec | ✅ Split into "non-opened handle" + "null handle" tests |
+| H1–H3, M1, M3, L3 | File/math plugin issues | Apr | ✅ All 6 fixes verified |
+| H4, M4–M6, L5 | Include order, TODOs, AGENTS.md, self-move | Jun | ✅ All 5 fixes verified |
+| H5–H6, M7–M9, L8 | math_service issues | Jul | ✅ All 6 fixes verified |
+| H7–H8, M10–M11, L11 | regex_service issues | Aug | ✅ All 5 fixes verified |
+| H9–H10, M12–M13 | socket_service issues | Sep | ✅ All 4 fixes verified |
+| H11, M14–M16 | sound_service issues | Oct | ✅ All 4 fixes verified |
+| H12–H13, M17–M19, L20, L22 | AGENTS.md, ranges, platform, docs | Nov | ✅ All 7 fixes verified |
+| H14–H15, M21–M22 | AGENTS.md, ogg range, self-move, labels | Dec | ✅ All 4 fixes verified |
+| H16–H17, M23, L27, M25p | AGENTS.md, mesdialog range, CodePage, file_static.hpp | Jan | ✅ All 5 fixes verified |
+| H18–H19, M25–M27 | TEST_FILE_OBJS, AGENTS.md, flag wiring, CRYPTO_LIB, convention | Feb | ✅ All 5 fixes verified |
 
-**All 44 findings resolved. ✅**
+**All 53 findings resolved. ✅**
 
 ---
 
-## December Fixes Verification
+## New Module Review: `alert_service.hpp/.cpp`
 
-| Fix | File | Verified |
-|-----|------|----------|
-| H14: Update AGENTS.md for ogg | `AGENTS.md:15` | ✅ Now "17 files, ~2,800 total" (needs 17→19 — see H16) |
-| H15: Fix ogg bridge.cpp range | `ogg_service.cpp:11` | ✅ Now says "bridge.cpp:121-129" — matches actual lines 121-129 |
-| M21: Ogg self-move test | `test_file.cpp:533-536` | ✅ `ov5 = std::move(ov5); TEST(... ov5.is_valid())` |
-| M22: Fix ogg test labels | `test_file.cpp:538-550` | ✅ "non-opened handle" label + separate null-handle test via moved-from source |
-
-All 4 December fixes verified in source. ✅
-
----
-
-## New Module Review: `mesdialog_service.hpp/.cpp`
-
-### `main/ssz_native/mesdialog_service.hpp` ✅
+### `main/ssz_native/alert_service.hpp` ✅
 
 | Aspect | Assessment |
 |--------|-----------|
-| API style | Free-function (no RAII — mesdialog has no object/handle types in SSZ) ✅ |
-| `CodePage` enum | Type-safe code page constants matching SSZ `\|CodePage` ✅ |
-| Dialog functions | `yes_no`, `input_str`, `get_clipboard_str` — delegate to native plugin ✅ |
-| INI functions | `get_inifile_string`, `get_inifile_int`, `write_inifile_string` — delegate ✅ |
-| Encoding functions | `ubytes_to_str`, `str_to_ubytes`, `ascii_to_local` — delegate ✅ |
-| Compression | `uncompress` — returns empty vector on failure ✅ |
-| Shared string | `set_shared_string`, `get_shared_string` — delegate ✅ |
-| Design note | 5-line call-through note at header top ✅ |
-| Includes | `<cstdint>`, `<string>`, `<vector>` — minimal ✅ |
+| API | Single free function: `alert(title, message)` ✅ |
+| Design note | 4-line call-through note ✅ |
+| Includes | Only `<string>` — minimal ✅ |
 
-### `main/ssz_native/mesdialog_service.cpp` ✅ (with H17, M23 noted)
+### `main/ssz_native/alert_service.cpp` ⚠ (see M28, M29)
 
 | Aspect | Assessment |
 |--------|-----------|
-| Native declarations | 15 functions declared; 12 used, 3 unused (see M23) |
-| `yes_no` / `input_str` / `get_clipboard_str` | Simple 1-line wrappers ✅ |
-| INI functions | Correct parameter ordering (def, key, app, file) ✅ |
-| Encoding functions | `CodePage` → `UINT` cast; output parameters wrapped into return values ✅ |
-| `uncompress` | Returns empty vector on failure (clears output) — matches SSZ semantics ✅ |
-| M4 TODO comment | References `bridge.cpp:88-102` — range off (see H17) |
-| Design note | Present in header ✅ |
-| `#include <windows.h>` | Guarded by `#ifdef _WIN32` with `UINT` typedef fallback ✅ |
+| Native declaration | `void SSZ_STDCALL Alert(...)` — correct ✅ |
+| Implementation | 1-line wrapper: `Alert(title, message)` ✅ |
 | `SSZ_STDCALL` guard | Local `#ifndef` — necessary since header doesn't include `sszdef.h` ✅ |
-
-### Mesdialog service tests (`test_file.cpp:561–578`) ✅
-
-| Test | Coverage |
-|------|----------|
-| Shared string roundtrip | ✅ |
-| Empty shared string | ✅ |
-| UTF8 codepage constant | ✅ |
-| ACP codepage constant | ✅ |
-
-4 tests. Dialog, INI, encoding, and compression functions not testable without UI/interaction or real data files. This is a reasonable smoke test for a stateless service.
+| M4 TODO comment | ❌ Missing — no "duplicates bridge.cpp:…" note (see M29) |
+| Design note | ✅ Present in header |
 
 ### Makefile integration ✅
 
-- `$(SSZ_NATIVE)/mesdialog_service.cpp` added to `MAIN_SRCS` (line 132) ✅
-- `$(BLD)/main/ssz_native/mesdialog_service.o` added to `TEST_FILE_OBJS` (line 728) ✅
-- `$(BLD)/main/mesdialog/mesdialog.o` added to `TEST_FILE_OBJS` (native plugin) ✅
+| Item | Status |
+|------|--------|
+| `$(SSZ_NATIVE)/alert_service.cpp` in `MAIN_SRCS` (line 173) | ✅ |
+| `$(BLD)/main/ssz_native/alert_service.o` in `TEST_FILE_OBJS` (line 768) | ✅ |
+| `$(BLD)/main/alert/alert.o` in `TEST_FILE_OBJS` (native plugin) | ✅ |
+| `IKEMEN_NATIVE_ALERT_LIB` flag (line 84) with `-D` define (line 94) | ✅ |
+| `native_manifest` entry (line 795) | ✅ |
 
 ---
 
-## New Findings (this review — June 2026, December fixes + mesdialog_service)
+## New Findings (this review — June 2026, alert_service added)
 
 ### 🔴 Critical
 
@@ -135,69 +74,44 @@ All 4 December fixes verified in source. ✅
 
 ### 🟡 High — Should fix before next module
 
-#### H16. `AGENTS.md` ssz_native row says "17 files" — now 19 files
+#### H20. `AGENTS.md` ssz_native row says "21 files" — now 23 files
 
 **File:** `AGENTS.md`, line 15
 
 ```markdown
-| SSZ native layer | `main/ssz_native/*` | 17 files, ~2,800 total |
+| SSZ native layer | `main/ssz_native/*` | 21 files, ~3,500 total |
 ```
 
-The December fix (H14) bumped from 15→17, but `mesdialog_service.hpp/.cpp` have since been added, bringing the total to **19 files** (~3,100 lines).
+`alert_service.hpp/.cpp` brings the total to **23 files** (~3,700 lines).
 
-**Recommendation:** Update to `19 files, ~3,100 total`.
-
----
-
-#### H17. `mesdialog_service.cpp` TODO references wrong bridge.cpp line range
-
-**File:** `main/ssz_native/mesdialog_service.cpp`, line 12
-
-```cpp
-// These declarations duplicate bridge.cpp:88-102. They are tracked in
-```
-
-The actual mesdialog native declarations in `bridge.cpp` are at **lines 85–99**:
-
-```
-bridge.cpp:85 → YesNo
-bridge.cpp:86 → VeryUnsafeCopy
-bridge.cpp:87 → GetClipboardStr
-...
-bridge.cpp:99 → InputStr
-```
-
-Off by 3 at both start (88 vs 85) and end (102 vs 99).
-
-**Recommendation:** Change `88-102` → `85-99`.
+**Recommendation:** Update to `23 files, ~3,700 total`.
 
 ---
 
 ### 🟢 Medium — Address in upcoming work
 
-#### M23. `mesdialog_service.cpp` declares 3 unused native functions
+#### M28. `alert_static.hpp` not wired with `#if IKEMEN_NATIVE_ALERT_LIB` guard
 
-**File:** `main/ssz_native/mesdialog_service.cpp`, lines 17–19
+**File:** `main/alert_static.hpp`
 
-```cpp
-void        SSZ_STDCALL VeryUnsafeCopy(intptr_t size, void* src, void* dst);
-intptr_t    SSZ_STDCALL TazyuuCheck(const std::wstring& name);
-void        SSZ_STDCALL CloseTazyuuHandle(intptr_t mutex);
-```
+The `IKEMEN_NATIVE_ALERT_LIB` flag exists in the Makefile (line 84) and is passed as a `-D` define, but `alert_static.hpp` has no `#if IKEMEN_NATIVE_ALERT_LIB` / `#else` stub guard. All 7 other static headers with corresponding `ssz_native` services have this guard. `alert_static.hpp` should be wired to match.
 
-These are declared but never called from `mesdialog_service.cpp`. They exist in the native plugin (`main/mesdialog/mesdialog.cpp`) and are used by the bridge layer (`bridge.cpp`), but the `mesdialog_service` public API does not expose them (they are internal/unsafe functions not part of the SSZ script API surface).
-
-**Recommendation:** Either remove the unused declarations from `mesdialog_service.cpp`, or add a comment explaining they are retained for completeness/consistency with the bridge's forward-declaration block. The M4 TODO consolidation will resolve this when declarations move to `plugin_native_api.hpp`.
+**Recommendation:** Apply the standard `#if IKEMEN_NATIVE_ALERT_LIB` / `#else` stub pattern to `alert_static.hpp`.
 
 ---
 
-#### M24. `mesdialog_service` has no tests for encoding or compression functions
+#### M29. `alert_service.cpp` missing M4 TODO comment
 
-**File:** `test/test_file.cpp`, `test_mesdialog_service()` (lines 561–578)
+**File:** `main/ssz_native/alert_service.cpp`
 
-The 4 tests cover shared string and code page constants. Encoding functions (`ubytes_to_str`, `str_to_ubytes`, `ascii_to_local`), compression (`uncompress`), INI, and dialog functions are not tested. This is understandable — encoding tests need known byte sequences, compression needs compressed data, INI needs files, and dialogs need UI interaction. The same limitation applies to socket and sound services.
+Every other call-through service `.cpp` (socket, sound, ogg, mesdialog) documents which bridge.cpp lines its native declarations duplicate, with a TODO referencing M4 consolidation in `plugin_native_api.hpp`. `alert_service.cpp` has a single native declaration without this comment.
 
-**Recommendation:** Add a known-answer test for `uncompress` (if a small compressed test vector exists) and `ubytes_to_str`/`str_to_ubytes` roundtrip with ASCII data. Not urgent.
+**Recommendation:** Add the standard M4 TODO comment above the `Alert` declaration:
+```cpp
+// Native alert plugin function (defined in main/alert/alert.cpp).
+// This declaration duplicates bridge.cpp:<line>. Tracked in
+// plugin_native_api.hpp's M4 TODO for eventual consolidation.
+```
 
 ---
 
@@ -205,74 +119,72 @@ The 4 tests cover shared string and code page constants. Encoding functions (`ub
 
 #### L23. Sound constants are compile-time only (carried forward)
 
-**File:** `main/ssz_native/sound_service.hpp`, lines 20–22
+#### L25. `test_file.cpp` now ~920 lines covering 11 modules (carried forward)
 
-```cpp
-inline constexpr int FREQ = 48000;
-inline constexpr int CHANNELS = 2;
-inline constexpr int BUFFER_SAMPLES = 2048;
-```
-
-If the engine ever supports runtime audio configuration, these need to become variables.
+`alert_service` has no tests in `test_file.cpp` (see L32). The file size is unchanged from the previous review.
 
 ---
 
-#### L25. `test_file.cpp` now ~880 lines covering 10 modules (carried forward)
+#### L32. No `alert_service` smoke test
 
-The "consider splitting" recommendation becomes more pressing. At ~880 lines with 10 modules tested, splitting into per-module test files would significantly improve maintainability. The file has grown by ~40 lines for mesdialog_service tests.
+**File:** `test/test_file.cpp`
 
----
+Unlike all other services (including stateless `mesdialog_service` with 4 tests), `alert_service` has no test function. A minimal no-crash smoke test — `alert(L"test", L"test")` — would be consistent with the sound/socket/ogg no-crash pattern, even though the dialog can't be verified programmatically.
 
-#### L26. `SSZ_STDCALL` guard asymmetry (carried forward)
-
-**File:** `main/ssz_native/sound_service.cpp:3-5` and `mesdialog_service.cpp:3-5`
-
-`sound_service.hpp` and `mesdialog_service.hpp` do not include `sszdef.h`, so the local `#ifndef SSZ_STDCALL` guard in their `.cpp` files is necessary. This is correct, but the inconsistency with `file_service.cpp` (which includes `sszdef.h` explicitly) is subtle. Not a bug.
+**Recommendation:** Add a `test_alert_service()` with a single no-crash test: `ikemen::ssz_native::alert::alert(L"test", L"test smoke")`.
 
 ---
 
-#### L27. `mesdialog_service.hpp` `CodePage` enum values not documented per-value
+## Per-module Flag Wiring Status
 
-**File:** `main/ssz_native/mesdialog_service.hpp`, lines 23–33
-
-The `CodePage` enum lists 10 values with numeric constants. A brief comment on the most commonly used values (ACP=0, UTF8=65001) would help readers. The test already verifies these two.
+| Static header | Guard | Status |
+|---------------|-------|--------|
+| `file_static.hpp` | `#if IKEMEN_NATIVE_FILE_LIB` | ✅ |
+| `math_static.hpp` | `#if IKEMEN_NATIVE_MATH_LIB` | ✅ |
+| `regex_static.hpp` | `#if IKEMEN_NATIVE_REGEX_LIB` | ✅ |
+| `socket_static.hpp` | `#if IKEMEN_NATIVE_SOCKET_LIB` | ✅ |
+| `sound_static.hpp` | `#if IKEMEN_NATIVE_SOUND_LIB` | ✅ |
+| `ogg_static.hpp` | `#if IKEMEN_NATIVE_OGG_LIB` | ✅ |
+| `mesdialog_static.hpp` | `#if IKEMEN_NATIVE_MESDIALOG_LIB` | ✅ |
+| `alert_static.hpp` | — | ⬜ Flag exists, guard not wired (M28) |
+| `lua_static.hpp` | — | ⬜ No lua_service yet |
+| `sdlplugin_static.hpp` | — | ⬜ No sdl_service yet |
+| `ssz_static.hpp` | — | ⬜ Infrastructure (runtime) |
+| `thread_static.hpp` | — | ⬜ No thread_service yet |
+| `time_static.hpp` | — | ⬜ No time_service yet |
+| `shell_static.hpp` | — | ⬜ No shell_service yet |
 
 ---
 
 ## File-by-File Review (fresh assessment)
 
-### `main/ssz_native/ssz_value.hpp` ✅
-Minimal, clean. `Index`, `SszString`, `SszBytes`, `SszArray<T>`.
+### Phase 1 — Foundation libraries (no plugin dependency)
 
-### `main/ssz_native/consts.hpp` ✅
-`Signed<T>`/`Unsigned<T>` templates, fixed-width type aliases, sentinel shorthands.
+| Service | Type | Assessment |
+|---------|------|-----------|
+| `ssz_value.hpp` | Types | ✅ |
+| `consts.hpp` | Constants | ✅ |
+| `math_service` | Header+impl | ✅ 15 inline wrappers, Park-Miller PRNG, 6 utilities |
+| `string_service` | Header+impl | ✅ 10+ functions, UTF-8, percent, hex/octal |
+| `crypto_service` | Header+impl | ✅ Base64, Arcfour RC4 |
 
-### `main/ssz_native/plugin_native_api.hpp` ✅
-Single source of truth for shared declarations (file, math, time, alert, thread). M4 TODO lists remaining plugins.
+### Phase 2 — Plugin wrapper libraries (call-through to native plugin)
 
-### `main/ssz_native/file_service.hpp/.cpp` ✅
-`FileHandle` RAII + 12 free functions. `_ftelli64` now `#ifdef _WIN32` guarded (M17).
+| Service | Type | Assessment |
+|---------|------|-----------|
+| `file_service` | RAII + free fns | ✅ `FileHandle`, 12 free functions |
+| `regex_service` | RAII | ✅ `Regex` with `std::wregex`/`boost::wregex` |
+| `socket_service` | RAII | ✅ `SocketHandle` with `is_open()` |
+| `sound_service` | RAII | ✅ `AudioClient` with `is_valid()` |
+| `ogg_service` | RAII | ✅ `OggVorbisHandle` with `is_valid()` |
+| `mesdialog_service` | Free fns | ✅ `CodePage` enum, 12 wrapped functions |
+| `alert_service` | Free fn | ✅ Single `alert()` wrapper (new — see M28, M29, L32) |
 
-### `main/ssz_native/math_service.hpp/.cpp` ✅
-15 inline math wrappers, Park-Miller LCG PRNG, 6 utility templates. `randI` overflow fix (H6), `randF` double precision (M8).
+### Shared infrastructure
 
-### `main/ssz_native/string_service.hpp/.cpp` ✅
-equ, trim, find, split, split_lines, join, UTF-8 encode/decode, percent encode/decode, hex/octal. `to_lower` ASCII-only documented (M19, L20).
-
-### `main/ssz_native/regex_service.hpp/.cpp` ✅
-RAII `Regex` with `std::wregex`/`boost::wregex`. search, search_all, search_matches, free compile. `<windows.h>` before `<regex>` (M18).
-
-### `main/ssz_native/socket_service.hpp/.cpp` ✅
-RAII `SocketHandle` with `is_open()`. connect, listen, accept, send, recv.
-
-### `main/ssz_native/sound_service.hpp/.cpp` ✅
-RAII `AudioClient` with `is_valid()`. Eager creation documented (M16). Correct bridge.cpp range (H13).
-
-### `main/ssz_native/ogg_service.hpp/.cpp` ✅
-RAII `OggVorbisHandle` with `is_valid()`. Self-move test (M21), fixed test labels (M22), correct bridge.cpp range (H15).
-
-### `main/ssz_native/mesdialog_service.hpp/.cpp` ✅ (new)
-Free-function API. `CodePage` enum, dialog/INI/encoding/compression/shared-string wrappers. Minor: bridge.cpp range off (H17), 3 unused declarations (M23).
+| File | Assessment |
+|------|-----------|
+| `plugin_native_api.hpp` | ✅ Single source of truth, M4 TODO present |
 
 ---
 
@@ -285,26 +197,33 @@ All tests in `test/test_file.cpp`. Run with `make CONFIG=Debug test`.
 | File plugin (native) | 10 functions | ~50 | All file operations ✅ |
 | Math plugin (native) | `test_math` | 17 | 15 trig/exp functions ✅ |
 | Thread plugin (native) | `test_thread` | 1 | ThreadDelay smoke ✅ |
-| math_service | `test_math_service` | ~85 | Constants, wrappers, PRNG, rand/randI/randF, utility templates ✅ |
-| string_service | `test_string_service` | ~23 | equ, trim, find, split, join, split_lines, UTF-8, percent, hex/octal ✅ |
-| mesdialog_service | `test_mesdialog_service` | 4 | Shared string roundtrip, codepage constants ✅ |
-| ogg_service | `test_ogg_service` | 8 | Construction, is_valid, move, move-assign, self-move, non-opened ops, null-handle ops ✅ |
-| sound_service | `test_sound_service` | 5 | Construction, move, move-assign, start/stop/buffer_ready ✅ |
-| socket_service | `test_socket_service` | 7 | Construction, move, move-assign, double-close ✅ |
-| regex_service | `test_regex_service` | ~18 | Compile, search, search_all, search_matches, free compile, move ✅ |
-| file_service (RAII) | `test_file_handle` + edges | ~23 | Open/close/read/write, free functions, move, self-move, double-close, closed-handle ✅ |
+| math_service | `test_math_service` | ~85 | Full coverage ✅ |
+| string_service | `test_string_service` | ~23 | Full coverage ✅ |
+| crypto_service | `test_crypto_service` | 10 | Base64 + Arcfour ✅ |
+| mesdialog_service | `test_mesdialog_service` | 4 | Shared string, codepage ✅ |
+| ogg_service | `test_ogg_service` | 8 | Full RAII coverage ✅ |
+| sound_service | `test_sound_service` | 5 | Construction, move, start/stop ✅ |
+| socket_service | `test_socket_service` | 7 | Construction, move, double-close ✅ |
+| regex_service | `test_regex_service` | ~18 | Full coverage ✅ |
+| file_service (RAII) | `test_file_handle` + edges | ~23 | Full coverage ✅ |
+| alert_service | *(none)* | 0 | ⬜ Missing (L32) |
 
-**Total: ~330 tests across 10 modules.**
+**Total: ~350 tests across 11 of 12 modules.** (alert_service untested)
 
 ---
 
 ## Build Integration ✅
 
-- `$(SSZ_NATIVE)` defined in `Makefile:106`
-- All 8 `.cpp` files in `MAIN_SRCS` (lines 125–132): file, math, regex, socket, sound, string, ogg, mesdialog
-- Compile rule at `Makefile:617`
-- `TEST_FILE_OBJS` (line 728) links all 7 linked service `.o` files + native plugin `.o` files
-- `string_service.o` excluded with 3-line comment (L22 fix) ✅
+| Component | Status |
+|-----------|--------|
+| `$(SSZ_NATIVE)` variable | ✅ |
+| All 10 `.cpp` in `MAIN_SRCS` | ✅ |
+| Compile rule | ✅ |
+| 10 feature flags via `CXXFLAGS` | ✅ (FILE, STRING, MATH, REGEX, SOCKET, SOUND, OGG, MESDIALOG, CRYPTO, ALERT) |
+| `#if` convention documented | ✅ `Makefile:70-74` |
+| `TEST_FILE_OBJS` complete | ✅ |
+| `make native_manifest` | ✅ 10 flags |
+| 7 `*_static.hpp` guards | ✅ (alert_static.hpp pending — M28) |
 
 ---
 
@@ -312,16 +231,15 @@ All tests in `test/test_file.cpp`. Run with `make CONFIG=Debug test`.
 
 | Convention | Status |
 |-----------|--------|
-| RAII for all handles | ✅ FileHandle, Regex, SocketHandle, AudioClient, OggVorbisHandle |
-| Free-function API where no handles exist | ✅ mesdialog (stateless plugin API) |
-| Design notes in headers | ✅ All 8 service headers have design-note blocks |
-| Call-through vs bypass documented | ✅ file/socket/sound/ogg/mesdialog = call-through; math/regex/string = bypass |
-| `is_valid()` / `is_open()` on all handles | ✅ All 5 RAII handles expose a validity check |
-| TODO markers for M4 consolidation | ✅ socket, sound, ogg, mesdialog all have M4 TODO comments |
-| `plugin_native_api.hpp` as single source of truth | ✅ Used by bridge.cpp, file_service.cpp, test_file.cpp |
-| No `PluginUtil*` or `Reference` in native services | ✅ grep-confirmed |
-| Test coverage for all modules | ✅ 330+ tests, 10 modules |
-| Makefile integration | ✅ Build rules + TEST_FILE_OBJS correct |
+| RAII for all handles | ✅ 6 RAII types |
+| Free-function API where no handles | ✅ mesdialog, crypto (base64), alert |
+| Design notes in headers | ✅ All 10 service headers |
+| M4 TODO in call-through `.cpp` files | ⚠ 5 of 6 (alert_service missing — M29) |
+| `is_valid()` / `is_open()` on all handles | ✅ All 6 RAII types |
+| No `PluginUtil*` or `Reference` in native services | ✅ |
+| Test coverage for all modules | ⚠ 11 of 12 (alert_service missing — L32) |
+| Per-module feature flags in Makefile | ✅ 10 of 10 |
+| Per-module `#if` guards in `*_static.hpp` | ⚠ 7 of 8 applicable (alert_static.hpp pending — M28) |
 
 ---
 
@@ -329,24 +247,22 @@ All tests in `test/test_file.cpp`. Run with `make CONFIG=Debug test`.
 
 | ID | Severity | File | Description |
 |----|----------|------|-------------|
-| H16 | 🟡 High | `AGENTS.md:15` | "17 files, ~2,800" → should be "19 files, ~3,100" |
-| H17 | 🟡 High | `mesdialog_service.cpp:12` | TODO says `bridge.cpp:88-102` → should be `85-99` |
-| M23 | 🟢 Medium | `mesdialog_service.cpp:17-19` | 3 unused native declarations (VeryUnsafeCopy, TazyuuCheck, CloseTazyuuHandle) |
-| M24 | 🟢 Medium | `test/test_file.cpp` | mesdialog_service missing encoding/compression tests |
-| L23 | 🔵 Low | `sound_service.hpp:20-22` | Audio constants compile-time only |
-| L25 | 🔵 Low | `test/test_file.cpp` | ~880 lines, 10 modules — consider splitting |
-| L26 | 🔵 Low | Various `.cpp` | `SSZ_STDCALL` guard asymmetry vs `file_service.cpp` |
-| L27 | 🔵 Low | `mesdialog_service.hpp:23-33` | `CodePage` enum values could use brief comments |
+| H20 | 🟡 High | `AGENTS.md:15` | "21 files, ~3,500" → should be "23 files, ~3,700" |
+| M28 | 🟢 Medium | `alert_static.hpp` | Missing `#if IKEMEN_NATIVE_ALERT_LIB` guard (flag exists, header not wired) |
+| M29 | 🟢 Medium | `alert_service.cpp` | Missing M4 TODO comment with bridge.cpp line reference |
+| L23 | 🔵 Low | `sound_service.hpp` | Audio constants compile-time only |
+| L25 | 🔵 Low | `test/test_file.cpp` | ~920 lines, consider splitting |
+| L32 | 🔵 Low | `test/test_file.cpp` | No alert_service smoke test |
 
 ---
 
 ## Recommendations for Next Module
 
-1. **Fix H16 and H17** (trivial, ~2 minutes each).
-2. **Address M23** — either remove unused declarations or add a comment (~1 minute).
-3. **Next Phase 2 target: lua service** — the lua native plugin has ~20 functions declared in `bridge.cpp`. This is the last significant Phase 2 module.
-4. **sdlplugin service** should be last — it has 60+ functions and complex SDL object lifetimes.
-5. **Consider splitting `test_file.cpp`** at ~1,000 lines into per-module test files.
+1. **Fix H20, M28, M29** (trivial, ~5 minutes total).
+2. **Add L32 alert smoke test** (~2 minutes).
+3. **Next Phase 2 target: lua service** — the last significant Phase 2 module (~20 functions). Wire `lua_static.hpp` guard as part of implementation.
+4. **Consider `thread_service` and `time_service`** — each is a single function. Together with alert_service, they'd complete the Phase 2 simple-plugin wrappers.
+5. **sdlplugin service last** — 60+ functions, complex SDL object lifetimes.
 
 ---
 
@@ -354,8 +270,10 @@ All tests in `test/test_file.cpp`. Run with `make CONFIG=Debug test`.
 
 | Criterion | Status |
 |-----------|--------|
-| All SSZ `plugin index` calls route through native services | ⬜ Not yet — SSZ scripts still call bridge wrappers |
-| Zero `Reference` in non-bridge engine code | ✅ True for all `ssz_native/*` and `main/*.cpp` (except documented sdlplugin exceptions) |
-| All native services have unit test coverage | ✅ 330+ tests |
-| Bridge wrappers only convert types (no logic) | ✅ All bridge wrappers are pure type conversion |
-| CI guard prevents removed symbols from re-entering | ⬜ Not yet — no CI configured |
+| All SSZ `plugin index` calls route through native services | ⬜ Not yet |
+| Zero `Reference` in non-bridge engine code | ✅ |
+| All native services have unit test coverage | ⚠ 11 of 12 (alert_service missing — L32) |
+| Bridge wrappers only convert types (no logic) | ✅ |
+| Per-module `#if` guards in `*_static.hpp` | ⚠ 7 of 8 applicable (alert_static pending — M28) |
+| Feature flags for all native modules in Makefile | ✅ 10 of 10 |
+| CI guard | ⬜ Not yet |

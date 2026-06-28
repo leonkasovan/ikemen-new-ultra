@@ -8,6 +8,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_SOUND_LIB
+
 struct PluginUtil;
 struct Reference;
 
@@ -41,3 +43,7 @@ inline bool sound_static_register()
 		sound_mapping,
 		sizeof(sound_mapping) / sizeof(sound_mapping[0]));
 }
+
+#else
+inline bool sound_static_register() { return true; }
+#endif

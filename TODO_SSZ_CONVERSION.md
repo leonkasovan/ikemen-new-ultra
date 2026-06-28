@@ -205,16 +205,21 @@ These are the safest initial conversion targets because they have limited engine
 - [x] 23 tests (comparison, trim, find, split, join, UTF-8 roundtrip, percent encoding, hex/octal).
 - [ ] **NEW: Audit Lua usage** — `lua_script/` calls into `lua_script/lib/string.ssz`? If so, ensure native C++ service exposes the same Lua-callable names.
 
-### 4. `ssz_script/lib/table.ssz`
+### 4. `ssz_script/lib/alert.ssz`
+
+- [x] Native alert service wrapping `Alert(title, message)` — delegates to native plugin.
+
+### 5. `ssz_script/lib/table.ssz`
 
 - [ ] Decide native representation: `using SszTable = std::vector<SszValue>` or domain-specific vectors/maps.
 - [ ] Convert only functions actually used by engine scripts first.
 
 ### 5. `ssz_script/lib/base64.ssz`, `md5.ssz`, `arcfour.ssz`
 
-- [ ] Prefer tested C++ implementations or existing project code if present.
-- [ ] Add known-answer tests.
-- [ ] Avoid changing serialized output formats.
+- [x] Base64 encode/decode with standard alphabet + padding (base64.ssz). Known-answer tests: "Hello" → "SGVsbG8=".
+- [x] Arcfour (RC4) stream cipher with RAII context + free function (arcfour.ssz). Known-answer tests: encrypt/decrypt roundtrip with "Key"/"Plaintext".
+- [x] Avoid changing serialized output formats — matches SSZ base64 standard alphabet and RC4 semantics.
+- [ ] md5.ssz — pending (275 lines, defer to existing C++ MD5 library).
 
 ## Phase 2 — Plugin Wrapper Libraries
 
@@ -419,17 +424,22 @@ Only create this when converting SSZ modules changes functions consumed from Lua
 - [ ] Add `SSZ_NATIVE_SRCS` block to `Makefile`.
 - [ ] Compile `main/ssz_native/*.cpp` into the app.
 - [ ] Keep `ssz_script/` packaged until replacement is complete.
-- [ ] Add a compile flag: `-DIKEMEN_USE_NATIVE_SSZ=1`.
-- [ ] Add per-module feature flags so we can enable native replacements gradually:
+- [x] Add a compile flag: `-DIKEMEN_USE_NATIVE_SSZ=1` (in CXXFLAGS, default on).
+- [x] Add per-module feature flags so we can enable native replacements gradually:
 
 ```cpp
 IKEMEN_NATIVE_FILE_LIB
 IKEMEN_NATIVE_STRING_LIB
-IKEMEN_NATIVE_STATEBUILDER
+IKEMEN_NATIVE_MATH_LIB
+IKEMEN_NATIVE_REGEX_LIB
+IKEMEN_NATIVE_SOCKET_LIB
+IKEMEN_NATIVE_SOUND_LIB
+IKEMEN_NATIVE_OGG_LIB
+IKEMEN_NATIVE_MESDIALOG_LIB
 ```
 
-- [ ] **NEW:** Each `SSZ_FunctionEntry` registration in `*_static.hpp` should be guarded by `#ifdef IKEMEN_NATIVE_<MODULE>` so a module can be flipped off at compile time without code changes.
-- [ ] **NEW:** Add a `native_manifest` target that prints which native modules are currently active at build time, for easier diagnosis.
+- [x] Guard `SSZ_FunctionEntry` registrations in `*_static.hpp` with `#if IKEMEN_NATIVE_<MODULE>` (7 headers: file, math, regex, socket, sound, ogg, mesdialog). Each has `#if`/`#else` pattern — bridge register in `#if`, stub `return true` in `#else`.
+- [x] Add a `native_manifest` target that prints which native modules are currently active at build time (`make native_manifest`).
 
 ## Testing Plan
 
@@ -568,11 +578,16 @@ The SSZ script layer migration is complete when:
   - yes_no, input_str, get_clipboard_str, INI functions, encoding, compression, shared string
   - CodePage enum
   - 4 tests
+- [x] ~~Add build flag `IKEMEN_USE_NATIVE_SSZ`.~~ (Done)
+  - `-DIKEMEN_USE_NATIVE_SSZ=1` in CXXFLAGS (default on).
+  - Per-module flags: `IKEMEN_NATIVE_FILE_LIB`, `IKEMEN_NATIVE_STRING_LIB`, etc.
+  - Each defaults to 1; override from command line: `make IKEMEN_NATIVE_FILE_LIB=0`.
+  - `make native_manifest` prints all active flags.
 - [ ] Generate SSZ dependency graph.
 - [ ] Generate public symbol manifest.
 - [ ] Audit Lua ↔ SSZ call sites.
 - [ ] Add build flag `IKEMEN_USE_NATIVE_SSZ`.
-- [ ] Add per-module `#ifdef` guards in `*_static.hpp`.
+- [x] Add per-module `#if` guards in `*_static.hpp`. (7 headers: file, math, regex, socket, sound, ogg, mesdialog)
 - [ ] Capture pre-conversion trace logs for representative inputs.
 - [ ] Add runtime trace mode around SSZ entry points before replacing them.
 

@@ -5,8 +5,12 @@
 // Statically register every function exported by math.cpp
 // so that the SSZ runtime resolves them without loading math.dll.
 //
+// When IKEMEN_NATIVE_MATH_LIB=1, the native math_service is active
+// and bridge registration can be skipped. See Makefile for flag docs.
 
 #include "static_plugin_registry.hpp"
+
+#if IKEMEN_NATIVE_MATH_LIB
 
 struct PluginUtil;
 
@@ -55,3 +59,7 @@ inline bool math_static_register()
 		math_mapping,
 		sizeof(math_mapping) / sizeof(math_mapping[0]));
 }
+
+#else
+inline bool math_static_register() { return true; }
+#endif

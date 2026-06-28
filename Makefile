@@ -35,11 +35,18 @@ BLD        = $(ROOT)/build/$(CONFIG)
 
 
 # ---- Common flags ----
+# IKEMEN_USE_NATIVE_SSZ: Master switch for native SSZ replacement modules.
+# When enabled (=1), per-module flags (IKEMEN_NATIVE_FILE_LIB, etc.) are active
+# and can be individually disabled. Set per-module flags on the command line:
+#   make IKEMEN_NATIVE_FILE_LIB=0
 CXXFLAGS   = -std=c++17 -fpermissive -fno-operator-names \
              -Wall -Wno-unused-function -Wno-unused-variable \
              -Wno-attributes -Wno-switch -Wno-sign-compare \
              -Wno-parentheses -Wno-narrowing -Wno-class-memaccess \
-             -fno-strict-aliasing -DUNICODE -D_UNICODE $(ARCH_F)
+             -fno-strict-aliasing -DUNICODE -D_UNICODE $(ARCH_F) \
+              -DIKEMEN_USE_NATIVE_SSZ=$(IKEMEN_USE_NATIVE_SSZ)
+
+IKEMEN_USE_NATIVE_SSZ ?= 1
 
 CFLAGS     = -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable \
              -fno-strict-aliasing $(ARCH_F)
@@ -53,6 +60,38 @@ else
   CFLAGS   += -O3 -DNDEBUG
   TARGET     = $(BLD)/ikemen.exe
 endif
+
+# ---- Native SSZ per-module feature flags ----
+# Each defaults to 1 when IKEMEN_USE_NATIVE_SSZ=1. Override from command line:
+#   make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_STRING_LIB=0
+# Each flag is both a Makefile variable (for native_manifest) and a CXXFLAGS
+# define (for compile-time #if guards in *_static.hpp).
+#
+# Convention for #if vs #ifdef:
+#   Use `#if FLAG` (not `#ifdef FLAG`) in *_static.hpp headers. When FLAG is
+#   undefined (e.g., if the Makefile define isn't passed), the C preprocessor
+#   treats it as 0, which disables the guarded block — a safe default. This
+#   matches the convention: opt-out at build time, safe-disable at compile time.
+IKEMEN_NATIVE_FILE_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_STRING_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_MATH_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_REGEX_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SOCKET_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SOUND_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_OGG_LIB       ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_MESDIALOG_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_CRYPTO_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_ALERT_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
+CXXFLAGS += -DIKEMEN_NATIVE_FILE_LIB=$(IKEMEN_NATIVE_FILE_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_STRING_LIB=$(IKEMEN_NATIVE_STRING_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_MATH_LIB=$(IKEMEN_NATIVE_MATH_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_REGEX_LIB=$(IKEMEN_NATIVE_REGEX_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SOCKET_LIB=$(IKEMEN_NATIVE_SOCKET_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SOUND_LIB=$(IKEMEN_NATIVE_SOUND_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_OGG_LIB=$(IKEMEN_NATIVE_OGG_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_MESDIALOG_LIB=$(IKEMEN_NATIVE_MESDIALOG_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_CRYPTO_LIB=$(IKEMEN_NATIVE_CRYPTO_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_ALERT_LIB=$(IKEMEN_NATIVE_ALERT_LIB)
 
 # ---- Global include paths ----
 GLOBAL_INC  = -I $(MAIN) -I $(SSZ)
@@ -129,7 +168,9 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/sound_service.cpp \
   $(SSZ_NATIVE)/string_service.cpp \
   $(SSZ_NATIVE)/ogg_service.cpp \
-  $(SSZ_NATIVE)/mesdialog_service.cpp
+  $(SSZ_NATIVE)/mesdialog_service.cpp \
+  $(SSZ_NATIVE)/crypto_service.cpp \
+  $(SSZ_NATIVE)/alert_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -722,10 +763,9 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # ---- Regression smoke tests ----
 # Compile and run file-operation tests against the native implementations.
 # Depends on the main build having compiled file.o first.
-# Note: string_service.o is intentionally excluded from TEST_FILE_OBJS because all
-# string_service functions used in tests are defined inline in the header or as
-# templates. If non-inline functions are added to string_service.cpp, add the .o here.
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o
+# string_service.o must be linked because test_string_service() calls non-inline
+# functions (equ, trim, find, split, join, Unicode, percent, hex/octal).
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/ssz/ssz.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
@@ -737,6 +777,23 @@ $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
 
 test: $(TEST_FILE_BIN)
 	$(TEST_FILE_BIN)
+
+# ---- Native SSZ manifest target ----
+# Prints which native modules are currently active at compile time.
+.PHONY: native_manifest
+native_manifest:
+	@echo "=== IKEMEN_USE_NATIVE_SSZ = $(IKEMEN_USE_NATIVE_SSZ) ==="
+	@echo "IKEMEN_NATIVE_FILE_LIB      = $(IKEMEN_NATIVE_FILE_LIB)"
+	@echo "IKEMEN_NATIVE_STRING_LIB    = $(IKEMEN_NATIVE_STRING_LIB)"
+	@echo "IKEMEN_NATIVE_MATH_LIB      = $(IKEMEN_NATIVE_MATH_LIB)"
+	@echo "IKEMEN_NATIVE_REGEX_LIB     = $(IKEMEN_NATIVE_REGEX_LIB)"
+	@echo "IKEMEN_NATIVE_SOCKET_LIB    = $(IKEMEN_NATIVE_SOCKET_LIB)"
+	@echo "IKEMEN_NATIVE_SOUND_LIB     = $(IKEMEN_NATIVE_SOUND_LIB)"
+	@echo "IKEMEN_NATIVE_OGG_LIB       = $(IKEMEN_NATIVE_OGG_LIB)"
+	@echo "IKEMEN_NATIVE_MESDIALOG_LIB = $(IKEMEN_NATIVE_MESDIALOG_LIB)"
+	@echo "IKEMEN_NATIVE_CRYPTO_LIB    = $(IKEMEN_NATIVE_CRYPTO_LIB)"
+	@echo "IKEMEN_NATIVE_ALERT_LIB     = $(IKEMEN_NATIVE_ALERT_LIB)"
+	@echo "=== To disable a module: make IKEMEN_NATIVE_<NAME>_LIB=0 ==="
 
 clean:
 	rm -rf $(BLD)

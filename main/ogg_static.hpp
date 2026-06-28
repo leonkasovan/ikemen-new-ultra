@@ -35,6 +35,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_OGG_LIB
+
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
 // (sszdef.h, typeid.h, and arrayandref.hpp are assumed to be
@@ -84,3 +86,7 @@ inline bool ogg_static_register()
 		ogg_mapping,
 		sizeof(ogg_mapping) / sizeof(ogg_mapping[0]));
 }
+
+#else
+inline bool ogg_static_register() { return true; }
+#endif
