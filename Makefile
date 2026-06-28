@@ -126,7 +126,10 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/math_service.cpp \
   $(SSZ_NATIVE)/regex_service.cpp \
   $(SSZ_NATIVE)/socket_service.cpp \
-  $(SSZ_NATIVE)/sound_service.cpp
+  $(SSZ_NATIVE)/sound_service.cpp \
+  $(SSZ_NATIVE)/string_service.cpp \
+  $(SSZ_NATIVE)/ogg_service.cpp \
+  $(SSZ_NATIVE)/mesdialog_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -719,7 +722,10 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # ---- Regression smoke tests ----
 # Compile and run file-operation tests against the native implementations.
 # Depends on the main build having compiled file.o first.
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o
+# Note: string_service.o is intentionally excluded from TEST_FILE_OBJS because all
+# string_service functions used in tests are defined inline in the header or as
+# templates. If non-inline functions are added to string_service.cpp, add the .o here.
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp

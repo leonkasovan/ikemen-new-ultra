@@ -159,6 +159,12 @@ Mirrors module-level `lib/file.ssz` API:
 | `main/ssz_native/socket_service.cpp` | **NEW** — implementation delegating to native socket plugin functions |
 | `main/ssz_native/sound_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/sound.ssz` (Phase 2). RAII AudioClient wrapping opaque Client* handle |
 | `main/ssz_native/sound_service.cpp` | **NEW** — implementation delegating to native sound plugin functions |
+| `main/ssz_native/string_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/string.ssz` (Phase 1). equ, trim, find, split, join, to_lower, hex/octal formatting, UTF-8 encode/decode, percent encode/decode |
+| `main/ssz_native/string_service.cpp` | **NEW** — implementation of string operations via C++ standard library |
+| `main/ssz_native/ogg_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alpha/ogg.ssz` (Phase 2). RAII OggVorbisHandle wrapping opaque OggVorbis* handle |
+| `main/ssz_native/ogg_service.cpp` | **NEW** — implementation delegating to native ogg plugin functions |
+| `main/ssz_native/mesdialog_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alpha/mesdialog.ssz` (Phase 2). Free-function API wrapping mesdialog plugin: dialogs, INI, encoding, compression, shared string |
+| `main/ssz_native/mesdialog_service.cpp` | **NEW** — implementation delegating to native mesdialog plugin functions |
 
 ## Post-review fixes (REVIEW.md findings — April 2026)
 
@@ -216,6 +222,36 @@ Mirrors module-level `lib/file.ssz` API:
 | Finding | Fix |
 |---|---|
 | **H11** — `sound_service.cpp` duplicates native sound declarations without TODO | Added TODO comment referencing M4 tracking (matching H10 pattern) |
-| **M14** — `AudioClient` has no `is_valid()` method | Added `bool is_valid() const { return client_ != nullptr; }` for API consistency with FileHandle/SocketHandle |
-| **M15** — No design note in `sound_service.hpp` | Added 5-line design note explaining call-through pattern (platform audio backends, mirroring file_service/socket_service) |
-| **M16** — Eager-creation pattern undocumented | Added 4-line comment in header explaining AudioClient eagerly creates the client (unlike FileHandle/SocketHandle which start closed) |
+| **M14** — `AudioClient` has no `is_valid()` method | Added `bool is_valid() const` |
+| **M15** — No design note in `sound_service.hpp` | Added 5-line design note explaining call-through pattern |
+| **M16** — Eager-creation pattern undocumented | Added 4-line comment in header |
+
+## Post-review fixes (REVIEW.md findings — November 2026)
+
+| Finding | Fix |
+|---|---|
+| **H12** — `AGENTS.md` ssz_native row says "5 files, ~200 lines" | Updated to "15 files, ~2,500 total" |
+| **H13** — `sound_service.cpp` TODO says `bridge.cpp:85-90` (wrong range) | Changed to `79-84` to match actual bridge.cpp line numbers |
+| **M17** — `file_service.cpp` `_ftelli64` called unconditionally (Linux incompatible) | Added `#ifdef _WIN32` guard with `ftello` as Linux fallback + TODO comment |
+| **M18** — `regex_service.cpp` includes `<windows.h>` after `<regex>` | Moved `<windows.h>` include before `regex_service.hpp` to avoid STL macro conflicts |
+| **M19** — `string_service.cpp` `to_lower` silently truncates non-ASCII | Added comment: "ASCII-only case conversion, matching SSZ behavior. Non-ASCII characters are truncated to 7-bit." |
+| **L20** — `to_lower_char`/`to_lower` naming asymmetry | Added ASCII-only comment documenting the scope |
+| **L22** — `TEST_FILE_OBJS` excludes `string_service.o` without comment | Added note explaining exclusion (all functions inline/template) |
+
+## Post-review fixes (REVIEW.md findings — December 2026)
+
+| Finding | Fix |
+|---|---|
+| **H14** — `AGENTS.md` says "15 files, ~2,500" | Updated to "17 files, ~2,800 total" |
+| **H15** — `ogg_service.cpp` TODO says `bridge.cpp:119-128` (off by 2) | Changed to `121-129` to match actual bridge.cpp line numbers |
+| **M21** — `OggVorbisHandle` missing self-move-assignment test | Added test: `ov = std::move(ov)` must not invalidate |
+| **M22** — Test mislabeled "null handle" (actually non-opened handle) | Fixed label to "non-opened handle"; added separate null-handle test via moved-from source |
+
+## Post-review fixes (REVIEW.md findings — January 2027)
+
+| Finding | Fix |
+|---|---|
+| **H16** — `AGENTS.md` says "17 files, ~2,800" | Updated to "19 files, ~3,100 total" |
+| **H17** — `mesdialog_service.cpp` TODO says `bridge.cpp:88-102` (off by 3) | Changed to `85-99` to match actual bridge.cpp line numbers |
+| **M23** — 3 unused native declarations (VeryUnsafeCopy, etc.) | Added comment: "declared for completeness with the bridge's forward-declaration block — not exposed in the public API" |
+| **L27** — `CodePage` enum values undocumented | Added per-value comments and usage note for ACP/UTF8 |

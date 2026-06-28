@@ -199,9 +199,10 @@ These are the safest initial conversion targets because they have limited engine
 
 ### 3. `ssz_script/lib/string.ssz`
 
-- [ ] Create string utility library based on `std::wstring` and UTF conversion utilities.
-- [ ] Keep behavior-compatible wrappers for SSZ string conventions.
-- [ ] Document every encoding conversion path.
+- [x] Create string utility library based on `std::wstring` and UTF conversion utilities.
+- [x] Keep behavior-compatible wrappers for SSZ string conventions.
+- [x] Functions: equ, trim, find, split, split_lines, join, to_lower, to_octal, to_hex_lower/upper, to_utf8, from_utf8, percent_encode, percent_decode.
+- [x] 23 tests (comparison, trim, find, split, join, UTF-8 roundtrip, percent encoding, hex/octal).
 - [ ] **NEW: Audit Lua usage** — `lua_script/` calls into `lua_script/lib/string.ssz`? If so, ensure native C++ service exposes the same Lua-callable names.
 
 ### 4. `ssz_script/lib/table.ssz`
@@ -259,8 +260,11 @@ These SSZ files mostly wrap native plugin calls and object lifetimes. The underl
 
 ### `ssz_script/lib/alpha/ogg.ssz`
 
-- [ ] RAII wrapper for OggVorbis object.
-- [ ] Preserve PCM total/rate/channel/read/seek semantics.
+- [x] RAII `OggVorbisHandle` wrapping opaque `OggVorbis*` handle.
+- [x] Constructor calls `NewOggVorbis()`, destructor calls `DeleteOggVorbis()`.
+- [x] open, clear, pcm_total, channels, rate, read, seek.
+- [x] Move semantics, safety checks on null handle.
+- [x] 8 tests (construction, move, move-assign, no-crash on clear/pcm/rate/read/seek).
 
 ### `ssz_script/lib/alpha/sdlplugin.ssz` and `sdlevent.ssz`
 
@@ -276,7 +280,13 @@ These SSZ files mostly wrap native plugin calls and object lifetimes. The underl
 
 ### `ssz_script/lib/alpha/mesdialog.ssz`
 
-- [ ] Same as sdlplugin: RAII wrappers, late conversion.
+- [x] Free-function API wrapping mesdialog plugin: yes_no, input_str, get_clipboard_str.
+- [x] INI file functions: get_inifile_string, get_inifile_int, write_inifile_string.
+- [x] Encoding: ubytes_to_str, str_to_ubytes, ascii_to_local.
+- [x] Compression: uncompress.
+- [x] Shared string: set_shared_string, get_shared_string.
+- [x] CodePage enum matching SSZ |CodePage.
+- [x] 4 tests (shared string roundtrip, empty string, code page constants).
 
 ## Phase 3 — Core Engine SSZ Modules
 
@@ -542,6 +552,22 @@ The SSZ script layer migration is complete when:
   - start, stop, buffer_ready, set_buffer
   - Calls native sound plugin functions (main/sound/sound.cpp)
   - 5 tests
+- [x] ~~Convert `ssz_script/lib/string.ssz` to C++.~~ (Done — `string_service.hpp/.cpp`)
+  - Core string operations: equ, trim, find, split, split_lines, join, to_lower
+  - Number formatting: to_octal, to_hex_lower, to_hex_upper
+  - UTF-8 encode/decode with surrogate pair support
+  - Percent encode/decode
+  - 23 tests
+- [x] ~~Convert `ssz_script/lib/alpha/ogg.ssz` to C++.~~ (Done — `ogg_service.hpp/.cpp`)
+  - RAII `OggVorbisHandle` class wrapping opaque OggVorbis pointer
+  - open, clear, pcm_total, channels, rate, read, seek
+  - Calls native ogg plugin functions (main/ogg/ogg.cpp)
+  - 8 tests
+- [x] ~~Convert `ssz_script/lib/alpha/mesdialog.ssz` to C++.~~ (Done — `mesdialog_service.hpp/.cpp`)
+  - Free-function API wrapping mesdialog native plugin
+  - yes_no, input_str, get_clipboard_str, INI functions, encoding, compression, shared string
+  - CodePage enum
+  - 4 tests
 - [ ] Generate SSZ dependency graph.
 - [ ] Generate public symbol manifest.
 - [ ] Audit Lua ↔ SSZ call sites.

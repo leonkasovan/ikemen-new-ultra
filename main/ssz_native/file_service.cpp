@@ -60,7 +60,12 @@ SszBytes read_all(const std::wstring& path) {
 
     // Determine file size
     Seek(2, 0, f); // END
+#ifdef _WIN32
     int64_t size = _ftelli64(f);
+#else
+    // TODO: Linux: use ftello(f) instead of _ftelli64
+    int64_t size = ftello(f);
+#endif
     Seek(0, 0, f); // SET
 
     if (size > 0) {

@@ -8,7 +8,7 @@
 class Client;
 
 // Native sound plugin functions (defined in main/sound/sound.cpp).
-// These declarations duplicate bridge.cpp:85-90. They are tracked in
+// These declarations duplicate bridge.cpp:79-84. They are tracked in
 // plugin_native_api.hpp's M4 TODO for eventual consolidation.
 // TODO: Move to plugin_native_api.hpp when sound is migrated (Phase 2).
 Client*   SSZ_STDCALL NewClient();

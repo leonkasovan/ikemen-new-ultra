@@ -1,7 +1,10 @@
+#ifdef _WIN32
+#include <windows.h>   // MultiByteToWideChar, CP_THREAD_ACP (before regex_service.hpp to avoid STL macro conflicts)
+#endif
+
 #include "regex_service.hpp"
 
 #ifdef _WIN32
-#include <windows.h>   // MultiByteToWideChar, CP_THREAD_ACP
 #define SSZ_REGEX_NS std
 #else
 #define SSZ_REGEX_NS boost

@@ -22,6 +22,9 @@
 #include "ssz_native/regex_service.hpp"
 #include "ssz_native/socket_service.hpp"
 #include "ssz_native/sound_service.hpp"
+#include "ssz_native/string_service.hpp"
+#include "ssz_native/ogg_service.hpp"
+#include "ssz_native/mesdialog_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -438,6 +441,143 @@ static void test_math_service()
     TEST(L"swap(1,2) → (2,1)", x == 2 && y == 1);
 }
 
+// ---- String service tests (ssz_native::string_util) ----
+
+static void test_string_service()
+{
+    namespace s = ikemen::ssz_native::string_util;
+    std::wcout << L"\n--- String service ---" << std::endl;
+
+    // equ
+    TEST(L"equ same strings", s::equ(L"abc", L"abc"));
+    TEST(L"equ different strings", !s::equ(L"abc", L"def"));
+
+    // trim
+    TEST_EQ(L"trim spaces", s::trim(L"  hello  "), L"hello");
+    TEST_EQ(L"trim tabs", s::trim(L"\t\thello\t"), L"hello");
+    TEST_EQ(L"trim mixed", s::trim(L" \t\r\nhi\r\n\t "), L"hi");
+
+    // find
+    TEST_INT(L"find at start", 0, s::find(L"abc", L"abcdef"));
+    TEST_INT(L"find in middle", 3, s::find(L"def", L"abcdefghi"));
+    TEST_INT(L"find not found", -1, s::find(L"xyz", L"abcdef"));
+    TEST_INT(L"find empty pattern", 0, s::find(L"", L"abc"));
+
+    // split
+    auto parts = s::split(L",", L"a,b,c");
+    TEST(L"split 3 parts", parts.size() == 3);
+
+    // join
+    std::vector<std::wstring> words = {L"a", L"b", L"c"};
+    TEST_EQ(L"join with comma", s::join(L",", words), L"a,b,c");
+
+    // split_lines
+    auto lines = s::split_lines(L"line1\r\nline2\nline3");
+    TEST(L"split_lines 3", lines.size() == 3);
+    if (lines.size() >= 3) {
+        TEST_EQ(L"split_lines line1", lines[0], L"line1");
+        TEST_EQ(L"split_lines line2", lines[1], L"line2");
+        TEST_EQ(L"split_lines line3", lines[2], L"line3");
+    }
+
+    // to_utf8 / from_utf8 roundtrip
+    std::wstring original = L"Hello, 世界!";
+    auto utf8 = s::to_utf8(original);
+    TEST(L"utf8 non-empty", !utf8.empty());
+    TEST_EQ(L"utf8 roundtrip", s::from_utf8(utf8), original);
+
+    // ASCII only roundtrip
+    utf8 = s::to_utf8(L"abc123");
+    TEST_EQ(L"ascii roundtrip", s::from_utf8(utf8), L"abc123");
+
+    // percent encoding
+    TEST_EQ(L"percent encode unreserved", s::percent_encode(L"abc123"), L"abc123");
+    std::wstring encoded = s::percent_encode(L"hello world");
+    TEST(L"percent encode space", encoded.find(L'%') != std::wstring::npos);
+
+    // percent decode
+    TEST_EQ(L"percent decode", s::percent_decode(L"hello%20world"), L"hello world");
+
+    // to_hex_lower / to_hex_upper
+    TEST_EQ(L"hex lower 255", s::to_hex_lower(255), L"ff");
+    TEST_EQ(L"hex upper 255", s::to_hex_upper(255), L"FF");
+    TEST_EQ(L"hex lower 0", s::to_hex_lower(0), L"0");
+
+    // to_octal
+    TEST_EQ(L"octal 8", s::to_octal(8), L"10");
+    TEST_EQ(L"octal 0", s::to_octal(0), L"0");
+}
+
+// ---- Ogg service tests (ssz_native::ogg) ----
+
+static void test_ogg_service()
+{
+    namespace o = ikemen::ssz_native::ogg;
+    std::wcout << L"\n--- Ogg service ---" << std::endl;
+
+    // Default construction — decoder created
+    o::OggVorbisHandle ov;
+    TEST(L"OggVorbisHandle constructed", ov.is_valid());
+
+    // Move semantics
+    o::OggVorbisHandle ov2;
+    o::OggVorbisHandle ov3 = std::move(ov2);
+    TEST(L"OggVorbisHandle move: source invalid", !ov2.is_valid());
+    TEST(L"OggVorbisHandle move: dest valid", ov3.is_valid());
+
+    o::OggVorbisHandle ov4;
+    ov4 = std::move(ov3);
+    TEST(L"OggVorbisHandle move-assign: source invalid", !ov3.is_valid());
+    TEST(L"OggVorbisHandle move-assign: dest valid", ov4.is_valid());
+
+    // Self-move-assignment safety
+    o::OggVorbisHandle ov5;
+    ov5 = std::move(ov5);
+    TEST(L"OggVorbisHandle self-move safe", ov5.is_valid());
+
+    // Can't test open/read without a real .ogg file, but verify no-crash
+    // on a valid-but-non-opened decoder handle
+    o::OggVorbisHandle ov6;
+    ov6.clear();
+    ov6.pcm_total();
+    ov6.channels();
+    ov6.rate();
+    ov6.seek(0.0);
+    int16_t buf2[16];
+    ov6.read(buf2, 16);
+    TEST(L"OggVorbisHandle clear/pcm/rate/read/seek no crash on non-opened handle", true);
+
+    // Operations on a moved-from (null) handle must not crash
+    o::OggVorbisHandle ov7;
+    o::OggVorbisHandle ov8 = std::move(ov7);
+    ov7.clear();
+    ov7.pcm_total();
+    ov7.read(buf2, 16);
+    TEST(L"OggVorbisHandle operations no crash on null handle", true);
+}
+
+// ---- Mesdialog service tests (ssz_native::mesdialog) ----
+
+static void test_mesdialog_service()
+{
+    namespace m = ikemen::ssz_native::mesdialog;
+    std::wcout << L"\n--- Mesdialog service ---" << std::endl;
+
+    // Shared string roundtrip
+    m::set_shared_string(L"hello");
+    std::wstring got = m::get_shared_string();
+    TEST_EQ(L"shared string roundtrip", got, L"hello");
+
+    // Empty shared string
+    m::set_shared_string(L"");
+    got = m::get_shared_string();
+    TEST(L"shared string empty", got.empty());
+
+    // Code page constants
+    TEST(L"UTF8 codepage == 65001", m::UTF8 == 65001);
+    TEST(L"ACP codepage == 0", m::ACP == 0);
+}
+
 // ---- Sound service tests (ssz_native::sound) ----
 
 static void test_sound_service()
@@ -694,6 +834,9 @@ int main()
     test_math();
     test_thread();
     test_math_service();
+    test_string_service();
+    test_ogg_service();
+    test_mesdialog_service();
     test_sound_service();
     test_socket_service();
     test_regex_service();
