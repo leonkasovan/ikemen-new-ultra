@@ -1,0 +1,60 @@
+# SSZ Dependency Graph
+# Generated from all `lib ... = <...>` import statements.
+# Format: module -> imported dependencies
+
+# ── Library modules ──
+
+lib/alert.ssz -> (none)
+lib/arcfour.ssz -> (none)
+lib/base64.ssz -> math.ssz
+lib/consts.ssz -> (none)
+lib/file.ssz -> (none)
+lib/math.ssz -> consts.ssz, time.ssz
+lib/md5.ssz -> string.ssz
+lib/regex.ssz -> (none)
+lib/shell.ssz -> (none)
+lib/socket.ssz -> (none)
+lib/sound.ssz -> (none)
+lib/ssz.ssz -> (none)
+lib/stack.ssz -> (none)
+lib/string.ssz -> math.ssz
+lib/table.ssz -> consts.ssz, string.ssz
+lib/thread.ssz -> (none)
+lib/time.ssz -> (none)
+
+# ── Alpha library modules ──
+
+lib/alpha/lua.ssz -> ssz.ssz
+lib/alpha/mesdialog.ssz -> alert.ssz, math.ssz
+lib/alpha/ogg.ssz -> (none)
+lib/alpha/sdlevent.ssz -> alpha/sdlplugin.ssz, shell.ssz
+lib/alpha/sdlplugin.ssz -> file.ssz
+
+# ── Save/Config ──
+
+save/config.ssz -> alpha/sdlplugin.ssz
+save/configNet.ssz -> alpha/sdlplugin.ssz
+
+# ── Core engine modules ──
+
+ssz/action.ssz -> string.ssz, alpha/sdlplugin.ssz
+ssz/bg.ssz -> math.ssz, string.ssz, alpha/sdlplugin.ssz
+ssz/char.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, ssz.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/command.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, socket.ssz, string.ssz, table.ssz, thread.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/common.ssz -> consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/debug-script.ssz -> alert.ssz, math.ssz, shell.ssz, string.ssz, alpha/lua.ssz
+ssz/fight.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, string.ssz, ssz.ssz, alpha/sdlplugin.ssz
+ssz/fighting.ssz -> alert.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/font.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, regex.ssz, string.ssz, table.ssz, alpha/sdlplugin.ssz
+ssz/ikemen.ssz -> alert.ssz, shell.ssz, string.ssz, ssz.ssz, alpha/lua.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/loader.ssz -> math.ssz, string.ssz, thread.ssz, alpha/lua.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz, file.ssz
+ssz/script.ssz -> consts.ssz, file.ssz, math.ssz, shell.ssz, string.ssz, alpha/lua.ssz, alpha/mesdialog.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz
+ssz/sff.ssz -> consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alert.ssz, alpha/sdlplugin.ssz
+ssz/share.ssz -> alpha/lua.ssz, alpha/sdlevent.ssz
+ssz/sound.ssz -> consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alpha/ogg.ssz, alpha/sdlplugin.ssz
+ssz/stage.ssz -> consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, ssz.ssz
+ssz/statebuilder.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alpha/mesdialog.ssz
+ssz/system-script.ssz -> consts.ssz, math.ssz, string.ssz, alpha/lua.ssz, alpha/sdlevent.ssz, alpha/sdlplugin.ssz, thread.ssz
+ssz/system.ssz -> alert.ssz, file.ssz, math.ssz, string.ssz
+ssz/trigger-script.ssz -> math.ssz, string.ssz, alpha/lua.ssz
+ssz/video.ssz -> alert.ssz, consts.ssz, file.ssz, math.ssz, string.ssz, table.ssz, alpha/sdlplugin.ssz

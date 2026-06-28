@@ -86,6 +86,7 @@ std::vector<MemorySnapshot> g_memEvents;
 #undef SSZ_CORE
 
 #include "bridge.hpp"
+#include "ssz_native/ssz_trace.hpp"
 #include "tostring.hpp"
 
 #ifndef _WIN32
@@ -184,6 +185,7 @@ static GlobalPluginSSZFuncs g_gpsf;
 
 extern "C" PluginSSZFuncs* SSZ_STDCALL GetSSZFuncs()
 {
+	SSZ_TRACE("GetSSZFuncs");
 	return &g_gpsf.sf;
 }
 
@@ -728,34 +730,40 @@ bool SSZ_STDCALL CompilerRun(CompilerState* cs)
 
 extern "C" void SSZ_STDCALL MemMarkBefore(PluginUtil* pu, Reference tag)
 {
+	SSZ_TRACE("MemMarkBefore");
 	MemMarkBefore(ikemen::ssz_bridge::refToWstring(pu, tag));
 }
 
 extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
 {
+	SSZ_TRACE("MemMarkAfter");
 	MemMarkAfter(ikemen::ssz_bridge::refToWstring(pu, tag));
 }
 
 extern "C" bool SSZ_STDCALL Run(PluginUtil* pu, Reference r)
 {
+	SSZ_TRACE("Run");
 	(void)pu;
 	return Run(ikemen::ssz_bridge::refToWstring(pu, r));
 }
 
 extern "C" CompilerState* SSZ_STDCALL NewCompiler(PluginUtil* pu)
 {
+	SSZ_TRACE("NewCompiler");
 	(void)pu;
 	return NewCompiler();
 }
 
 extern "C" void SSZ_STDCALL DeleteCompiler(PluginUtil* pu, CompilerState* cs)
 {
+	SSZ_TRACE("DeleteCompiler");
 	(void)pu;
 	DeleteCompiler(cs);
 }
 
 extern "C" void SSZ_STDCALL CompilerCompile(PluginUtil* pu, Reference* err, Reference file, CompilerState* cs)
 {
+	SSZ_TRACE("CompilerCompile");
 	sszrefnewfunc = pu->psf->newfunc;
 	sszrefdeletefunc = pu->psf->deletefunc;
 	auto error = CompilerCompile(ikemen::ssz_bridge::refToWstring(pu, file), cs);
@@ -767,6 +775,7 @@ extern "C" void SSZ_STDCALL CompilerCompile(PluginUtil* pu, Reference* err, Refe
 extern "C" void SSZ_STDCALL CompilerCompileString(PluginUtil* pu, Reference* err,
 	Reference dir, Reference code, CompilerState* cs)
 {
+	SSZ_TRACE("CompilerCompileString");
 	sszrefnewfunc = pu->psf->newfunc;
 	sszrefdeletefunc = pu->psf->deletefunc;
 	auto error = CompilerCompileString(
@@ -779,6 +788,7 @@ extern "C" void SSZ_STDCALL CompilerCompileString(PluginUtil* pu, Reference* err
 
 extern "C" bool SSZ_STDCALL CompilerRun(PluginUtil* pu, CompilerState* cs)
 {
+	SSZ_TRACE("CompilerRun");
 	(void)pu;
 	return CompilerRun(cs);
 }

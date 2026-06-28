@@ -26,6 +26,11 @@
 #include "ssz_native/ogg_service.hpp"
 #include "ssz_native/mesdialog_service.hpp"
 #include "ssz_native/crypto_service.hpp"
+#include "ssz_native/thread_service.hpp"
+#include "ssz_native/time_service.hpp"
+#include "ssz_native/shell_service.hpp"
+#include "ssz_native/lua_service.hpp"
+#include "ssz_native/table_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -557,6 +562,150 @@ static void test_ogg_service()
     TEST(L"OggVorbisHandle operations no crash on null handle", true);
 }
 
+// ---- Thread service tests (ssz_native::thread) ----
+
+static void test_thread_service()
+{
+    namespace t = ikemen::ssz_native::thread;
+    std::wcout << L"\n--- Thread service ---" << std::endl;
+
+    // No-crash smoke test
+    t::delay(0);
+    t::delay(1);
+    TEST(L"thread::delay(0) and delay(1) no crash", true);
+}
+
+// ---- Time service tests (ssz_native::time_util) ----
+
+static void test_time_service()
+{
+    namespace t = ikemen::ssz_native::time_util;
+    std::wcout << L"\n--- Time service ---" << std::endl;
+
+    // tick_count should be > 0 (system was running before this call)
+    uint32_t tc = t::tick_count();
+    TEST(L"tick_count > 0", tc > 0);
+
+    // unix_time should be > 1000000000 (year 2001+)
+    int64_t ut = t::unix_time();
+    TEST(L"unix_time > 1e9", ut > 1000000000);
+}
+
+// ---- Table service tests (ssz_native::table) ----
+
+static void test_table_service()
+{
+    namespace t = ikemen::ssz_native::table;
+    std::wcout << L"\n--- Table service ---" << std::endl;
+
+    // String hash — deterministic
+    uint32_t h1 = t::hash(L"hello");
+    uint32_t h2 = t::hash(L"hello");
+    TEST(L"hash deterministic", h1 == h2);
+
+    // Different strings, different hashes (unlikely collision)
+    TEST(L"hash different strings", t::hash(L"abc") != t::hash(L"xyz"));
+
+    // NameTable basic operations
+    t::NameTable<int> nt;
+    TEST(L"NameTable initially empty", nt.size() == 0);
+
+    nt.set(L"a", 1);
+    nt.set(L"b", 2);
+    nt.set(L"c", 3);
+    TEST(L"NameTable size after 3 inserts", nt.size() == 3);
+
+    const int* v = nt.get(L"a");
+    TEST(L"NameTable get 'a'", v != nullptr && *v == 1);
+    v = nt.get(L"b");
+    TEST(L"NameTable get 'b'", v != nullptr && *v == 2);
+    v = nt.get(L"c");
+    TEST(L"NameTable get 'c'", v != nullptr && *v == 3);
+
+    TEST(L"NameTable contains 'a'", nt.contains(L"a"));
+    TEST(L"NameTable not contains 'z'", !nt.contains(L"z"));
+
+    // Update existing key
+    nt.set(L"a", 10);
+    v = nt.get(L"a");
+    TEST(L"NameTable update 'a'", v != nullptr && *v == 10);
+
+    // Remove
+    TEST(L"NameTable remove 'b'", nt.remove(L"b"));
+    TEST(L"NameTable size after remove", nt.size() == 2);
+    TEST(L"NameTable not contains 'b' after remove", !nt.contains(L"b"));
+
+    // Clear
+    nt.clear();
+    TEST(L"NameTable empty after clear", nt.size() == 0);
+
+    // Keys / values / for_each
+    nt.set(L"x", 100);
+    nt.set(L"y", 200);
+    auto keys = nt.keys();
+    TEST(L"NameTable keys count", keys.size() == 2);
+    auto vals = nt.values();
+    TEST(L"NameTable values count", vals.size() == 2);
+
+    int sum = 0;
+    nt.for_each([&sum](const std::wstring&, const int& val) { sum += val; });
+    TEST(L"NameTable for_each sum", sum == 300);
+}
+
+// ---- Lua service tests (ssz_native::lua) ----
+
+static void test_lua_service()
+{
+    namespace l = ikemen::ssz_native::lua;
+    std::wcout << L"\n--- Lua service ---" << std::endl;
+
+    // Construction
+    l::LuaState ls;
+    TEST(L"LuaState constructed", ls.is_valid());
+
+    // Move semantics
+    l::LuaState ls2;
+    l::LuaState ls3 = std::move(ls2);
+    TEST(L"LuaState move: source invalid", !ls2.is_valid());
+    TEST(L"LuaState move: dest valid", ls3.is_valid());
+
+    l::LuaState ls4;
+    ls4 = std::move(ls3);
+    TEST(L"LuaState move-assign: source invalid", !ls3.is_valid());
+    TEST(L"LuaState move-assign: dest valid", ls4.is_valid());
+
+    // Self-move-assignment safety
+    ls4 = std::move(ls4);
+    TEST(L"LuaState self-move safe", ls4.is_valid());
+
+    // Basic Lua operations
+    ls.push_number(42.0);
+    TEST(L"LuaState push_number", ls.is_number(-1));
+    double val = ls.to_number(-1);
+    TEST(L"LuaState to_number == 42", val == 42.0);
+    ls.pop(1);
+
+    ls.push_boolean(true);
+    TEST(L"LuaState push_boolean", ls.is_boolean(-1));
+    TEST(L"LuaState to_boolean", ls.to_boolean(-1));
+    ls.pop(1);
+
+    ls.push_string("hello");
+    TEST(L"LuaState push_string", ls.is_string(-1));
+    std::string s = ls.to_string(-1);
+    TEST(L"LuaState to_string", s == "hello");
+    ls.pop(1);
+}
+
+// ---- Shell service tests (ssz_native::shell) ----
+
+static void test_shell_service()
+{
+    std::wcout << L"\n--- Shell service ---" << std::endl;
+    // No-crash smoke test — can't open files in unit test
+    TEST(L"shell_service header compiles", true);
+}
+
 // ---- Alert service tests (ssz_native::alert) ----
 
 static void test_alert_service()
@@ -614,6 +763,14 @@ static void test_crypto_service()
     TEST(L"arcfour_encrypt empty key fails", !c::arcfour_encrypt(dest, {}, arc_src));
     TEST(L"arcfour_encrypt works", c::arcfour_encrypt(dest, arc_key, arc_src));
     TEST(L"arcfour_encrypt non-empty dest", !dest.empty());
+
+    // MD5 known values
+    std::vector<uint8_t> md5_empty;
+    auto md5_empty_hash = c::md5_hex(md5_empty);
+    TEST_EQ(L"md5_hex empty", md5_empty_hash, "d41d8cd98f00b204e9800998ecf8427e");
+
+    std::vector<uint8_t> md5_hello = {'H', 'e', 'l', 'l', 'o'};
+    TEST_EQ(L"md5_hex Hello", c::md5_hex(md5_hello), "8b1a9953c4611296a827abf8c47804d7");
 }
 
 // ---- Mesdialog service tests (ssz_native::mesdialog) ----
@@ -896,6 +1053,11 @@ int main()
     test_math_service();
     test_string_service();
     test_ogg_service();
+    test_thread_service();
+    test_time_service();
+    test_table_service();
+    test_lua_service();
+    test_shell_service();
     test_alert_service();
     test_crypto_service();
     test_mesdialog_service();

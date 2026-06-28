@@ -169,6 +169,17 @@ Mirrors module-level `lib/file.ssz` API:
 | `main/ssz_native/crypto_service.cpp` | **NEW** — implementation of base64 and Arcfour algorithms |
 | `main/ssz_native/alert_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alert.ssz`. Alert function wrapping native alert plugin |
 | `main/ssz_native/alert_service.cpp` | **NEW** — implementation delegating to native alert plugin |
+| `main/ssz_native/thread_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/thread.ssz`. ThreadDelay wrapper |
+| `main/ssz_native/thread_service.cpp` | **NEW** — implementation delegating to native thread plugin |
+| `main/ssz_native/time_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/time.ssz`. tick_count and unix_time wrappers |
+| `main/ssz_native/time_service.cpp` | **NEW** — implementation delegating to native time plugin |
+| `main/ssz_native/shell_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/shell.ssz`. Shell open and move-to-trash wrappers |
+| `main/ssz_native/shell_service.cpp` | **NEW** — implementation delegating to native shell plugin |
+| `main/ssz_native/lua_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/alpha/lua.ssz`. RAII LuaState wrapping lua_State* |
+| `main/ssz_native/lua_service.cpp` | **NEW** — implementation delegating to native lua plugin |
+| `main/ssz_native/table_service.hpp` | **NEW** — native equivalent of `ssz_script/lib/table.ssz` (Phase 1). Header-only NameTable<T> template wrapping unordered_map, string hash function |
+| `AGENTS.md` | Updated ssz_native row: 29→31 files, ~4,500→~5,000 lines |
+| `TODO_SSZ_CONVERSION.md` | Updated Build-System Plan flag list to include all 15 flags |
 
 ## Post-review fixes (REVIEW.md findings — March 2027)
 
@@ -178,6 +189,63 @@ Mirrors module-level `lib/file.ssz` API:
 | **M28** — `alert_static.hpp` missing `#if IKEMEN_NATIVE_ALERT_LIB` guard | Wired with standard `#if`/`#else` stub pattern |
 | **M29** — `alert_service.cpp` missing M4 TODO comment | Added comment referencing `plugin_native_api.hpp` M4 consolidation |
 | **L32** — No alert_service smoke test | Added `test_alert_service()` with compile-time verification |
+
+## Post-review fixes (REVIEW.md findings — June 2027)
+
+| Change | Details |
+|---|---|
+| `IKEMEN_NATIVE_LUA_LIB` / `IKEMEN_NATIVE_SDLPLUGIN_LIB` flags | Added with `?=` defaults, `-D` defines, and `native_manifest` entries |
+| `lua_static.hpp` guard | Wired with `#if IKEMEN_NATIVE_LUA_LIB` / `#else` stub |
+| `sdlplugin_static.hpp` guard | Wired with `#if IKEMEN_NATIVE_SDLPLUGIN_LIB` / `#else` stub |
+| `TODO_SSZ_CONVERSION.md` count | Updated static-header guard count from 11 to 13 |
+
+## Post-review fixes (REVIEW.md findings — July 2027)
+
+| Change | Details |
+|---|---|
+| **M32** — `lua_service.cpp` missing M4 TODO | Added: "duplicate bridge.cpp:100-120, tracked in M4 TODO" |
+| **L34** — `LuaState` missing self-move test | Added `ls4 = std::move(ls4); TEST(L"LuaState self-move safe", ls4.is_valid())` |
+| **REVIEW.md** — stale M30/M31 entries | Removed carried-forward entries (thread/time/shell already wired in May). Updated wiring table to show 12/12 complete. Updated Open Issues summary. |
+
+## October 2027
+
+| Change | Details |
+|---|---|
+| **Lua audit** | Completed audit of `lua_script/` ↔ `ssz_script/` cross-calls. **Result: zero cross-calls found.** The two scripting systems are architecturally independent — they communicate only through their respective C++ plugin interfaces. No dependency risk. |
+| `TODO_SSZ_CONVERSION.md` | Marked "Audit Lua usage" and "Audit Lua ↔ SSZ call sites" as done. |
+
+## November 2027
+
+| Change | Details |
+|---|---|
+| **SSZ dependency graph** | Generated `docs/ssz_dependency_graph.txt` scanning all `lib ... = <...>` imports across 45 SSZ files. Key finding: no circular dependencies. `alpha/sdlplugin.ssz` is imported by 20 files — the most depended-on module. `ssz/char.ssz` imports 9 modules — the heaviest consumer. |
+
+## December 2027
+
+| Change | Details |
+|---|---|
+| **SSZ public symbol manifest** | Generated `docs/ssz_symbol_manifest.txt` — ~2,157 public symbols across 45 files. `ssz/char.ssz` has 685 symbols (most), `ssz/statebuilder.ssz` has 116 symbols. `lib/alert.ssz` etc. have 1 each (fewest). |
+
+## January 2028
+
+| Change | Details |
+|---|---|
+| `TODO_SSZ_CONVERSION.md` | Marked Phase 0 as complete (all 8 sub-items done). Updated Testing Plan to mark symbol manifest + dependency graph as done. Updated Immediate TODO to reflect remaining 2 items. |
+
+## Post-review fixes (REVIEW.md findings — May 2027)
+
+| Finding | Fix |
+|---|---|
+| **H21** — `AGENTS.md` says "23 files, ~3,700" | Updated to "29 files, ~4,500 total" |
+| **M30** — thread/time/shell static headers missing `#if` guards | Wired 3 headers with `#if IKEMEN_NATIVE_*_LIB` / `#else` stub pattern |
+| **M31** — thread/time/shell_service.cpp missing M4 TODO comments | Added M4 TODO references to all three |
+| **Documentation** — `TODO_SSZ_CONVERSION.md` | Updated static-header guard count from 7 to 11; removed stale duplicate "Add build flag" entry |
+
+## Post-review fixes (REVIEW.md findings — April 2027)
+
+| Change | Details |
+|---|---|
+| MD5 hash implementation | Added RFC 1321 MD5 to `crypto_service.hpp/.cpp`: `md5_hash()` returns 16-byte digest, `md5_hex()` returns 32-char hex string. Known-answer tests for empty and "Hello" inputs. |
 | `Makefile` | Added `-DIKEMEN_USE_NATIVE_SSZ=1` to CXXFLAGS, per-module feature flags with `?=` defaults, `make native_manifest` target |
 | `main/file_static.hpp` | Added `#if IKEMEN_NATIVE_FILE_LIB` guard around entire bridge registration block with `#else` stub returning `true` — proof of concept for per-module flag wiring |
 
@@ -289,3 +357,15 @@ Mirrors module-level `lib/file.ssz` API:
 | `IKEMEN_USE_NATIVE_SSZ` flag | Added `-DIKEMEN_USE_NATIVE_SSZ=$(IKEMEN_USE_NATIVE_SSZ)` to CXXFLAGS, defaults to 1 |
 | Per-module feature flags | `IKEMEN_NATIVE_FILE_LIB`, `IKEMEN_NATIVE_STRING_LIB`, `IKEMEN_NATIVE_MATH_LIB`, `IKEMEN_NATIVE_REGEX_LIB`, `IKEMEN_NATIVE_SOCKET_LIB`, `IKEMEN_NATIVE_SOUND_LIB`, `IKEMEN_NATIVE_OGG_LIB`, `IKEMEN_NATIVE_MESDIALOG_LIB` — all default to 1, override from command line |
 | `make native_manifest` target | Prints all active native module flags |
+
+## Full trace instrumentation (June 2029)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/ssz_trace.hpp` | **NEW** — `SSZ_TRACE(msg)` macro, gated by `IKEMEN_ENABLE_PLUGIN_TRACE` compile flag |
+| `Makefile` | Added `IKEMEN_ENABLE_PLUGIN_TRACE ?= 0` and `-DIKEMEN_ENABLE_PLUGIN_TRACE=$(IKEMEN_ENABLE_PLUGIN_TRACE)` |
+| `tools/instrument_trace.ps1` | **NEW** — automated script to add SSZ_TRACE to all bridge wrappers |
+| `main/ssz/bridge.cpp` | 163 `SSZ_TRACE("FuncName")` calls — one per bridge wrapper, all functions instrumented |
+| `main/ssz/ssz.cpp` | 9 `SSZ_TRACE("FuncName")` calls — all SSZ runtime bridge wrappers instrumented |
+| `AGENTS.md` | Updated ssz_native row: 31→33 files, ~5,000→~2,400 total |
+| `REVIEW.md` | Marked M33 (trace coverage) and M34 (AGENTS.md counts) as resolved; updated counts throughout |

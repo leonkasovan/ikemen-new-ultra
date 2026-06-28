@@ -35,6 +35,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_LUA_LIB
+
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
 // (sszdef.h, typeid.h, and arrayandref.hpp are assumed to be
@@ -109,3 +111,7 @@ inline bool lua_static_register()
 		lua_mapping,
 		sizeof(lua_mapping) / sizeof(lua_mapping[0]));
 }
+
+#else
+inline bool lua_static_register() { return true; }
+#endif

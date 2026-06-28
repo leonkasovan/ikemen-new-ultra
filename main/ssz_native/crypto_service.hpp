@@ -49,4 +49,12 @@ private:
 // Convenience function: arcfourEnc(dest, key, src)
 bool arcfour_encrypt(std::vector<uint8_t>& dest, const std::vector<uint8_t>& key, const std::vector<uint8_t>& src);
 
+// ---- MD5 ----
+
+// Compute the MD5 hash of data. Returns 16 bytes (128-bit digest).
+std::vector<uint8_t> md5_hash(const std::vector<uint8_t>& data);
+
+// Compute the MD5 hash as a lowercase hexadecimal string (32 chars).
+std::string md5_hex(const std::vector<uint8_t>& data);
+
 } // namespace ikemen::ssz_native::crypto

@@ -12,6 +12,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_THREAD_LIB
+
 struct PluginUtil;
 
 extern "C"
@@ -31,3 +33,7 @@ inline bool thread_static_register()
 		thread_mapping,
 		sizeof(thread_mapping) / sizeof(thread_mapping[0]));
 }
+
+#else
+inline bool thread_static_register() { return true; }
+#endif

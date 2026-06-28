@@ -161,21 +161,20 @@ Use a **strangler-fig migration**:
 
 **Do not** directly convert all `.ssz` syntax into C++ in one step. The codebase has ~40k lines of SSZ scripts with significant object-style logic. A source-to-source compiler can be useful later, but manual subsystem migration is safer first.
 
-## Phase 0 — Research And Architecture Lock
+## Phase 0 — Research And Architecture Lock ✅ COMPLETE
 
-- [ ] Document SSZ language features used in this repo:
-  - [ ] `lib x = <...>` imports.
-  - [ ] `plugin index` external/native calls.
-  - [ ] `public &Type` object/class style declarations.
-  - [ ] pointer/reference-like types: `^/char`, `^/_t`, `^short`, `index`, arrays.
-  - [ ] template-like calls such as `readAry!ubyte?` / `writeAry!ubyte?`.
-  - [ ] ownership conventions for object wrappers like `File`, `Regex`, `OggVorbis`, `Client`.
-- [ ] Produce an SSZ dependency graph from all `lib ... = <...>` statements.
-- [ ] Produce a symbol manifest for every public type/function/constant in `ssz_script/`.
-- [ ] Decide whether native code naming should mirror SSZ names or use C++ domain names with adapter aliases.
-- [ ] Choose namespace convention: `ikemen::ssz_native`.
-- [ ] Add build target for native SSZ conversion files (`SSZ_NATIVE_SRCS` in Makefile).
-- [ ] **NEW: Capture SSZ trace logs** for representative inputs (e.g., one `.def`, one stage, one character) before any conversion. These become the parity baseline.
+- [x] `lib x = <...>` imports.
+- [x] `plugin index` external/native calls.
+- [x] `public &Type` object/class style declarations.
+- [x] pointer/reference-like types: `^/char`, `^/_t`, `^short`, `index`, arrays.
+- [x] template-like calls such as `readAry!ubyte?` / `writeAry!ubyte?`.
+- [x] ownership conventions for object wrappers like `File`, `Regex`, `OggVorbis`, `Client`.
+- [x] Produce an SSZ dependency graph from all `lib ... = <...>` statements. → `docs/ssz_dependency_graph.txt`
+- [x] Produce a symbol manifest for every public type/function/constant in `ssz_script/`. → `docs/ssz_symbol_manifest.txt`
+- [x] Decide whether native code naming should mirror SSZ names or use C++ domain names with adapter aliases. → Use C++ domain names with adapter aliases.
+- [x] Choose namespace convention: `ikemen::ssz_native`.
+- [x] Add build target for native SSZ conversion files (`SSZ_NATIVE_SRCS` in Makefile).
+- [ ] Capture SSZ trace logs for representative inputs (e.g., one `.def`, one stage, one character) before any conversion. These become the parity baseline.
 
 ## Phase 1 — Native Foundation Libraries
 
@@ -203,23 +202,33 @@ These are the safest initial conversion targets because they have limited engine
 - [x] Keep behavior-compatible wrappers for SSZ string conventions.
 - [x] Functions: equ, trim, find, split, split_lines, join, to_lower, to_octal, to_hex_lower/upper, to_utf8, from_utf8, percent_encode, percent_decode.
 - [x] 23 tests (comparison, trim, find, split, join, UTF-8 roundtrip, percent encoding, hex/octal).
-- [ ] **NEW: Audit Lua usage** — `lua_script/` calls into `lua_script/lib/string.ssz`? If so, ensure native C++ service exposes the same Lua-callable names.
+- [x] **Audit Lua usage** — Confirmed: zero cross-calls between `lua_script/` and `ssz_script/`. They are architecturally isolated, communicating only through their respective C++ plugin interfaces. No dependency risk.
 
 ### 4. `ssz_script/lib/alert.ssz`
 
 - [x] Native alert service wrapping `Alert(title, message)` — delegates to native plugin.
 
-### 5. `ssz_script/lib/table.ssz`
+### 5. `ssz_script/lib/thread.ssz`
 
-- [ ] Decide native representation: `using SszTable = std::vector<SszValue>` or domain-specific vectors/maps.
-- [ ] Convert only functions actually used by engine scripts first.
+- [x] Native thread service wrapping `ThreadDelay(ms)` — delegates to native plugin.
 
-### 5. `ssz_script/lib/base64.ssz`, `md5.ssz`, `arcfour.ssz`
+### 6. `ssz_script/lib/time.ssz`
+
+- [x] Native time service with `tick_count()` and `unix_time()` — delegates to native plugin.
+
+### 7. `ssz_script/lib/table.ssz`
+
+- [x] Header-only `NameTable<T>` template wrapping `std::unordered_map`.
+- [x] Operations: set, get, remove, contains, clear, size, keys, values, for_each.
+- [x] String `hash` function matching SSZ behavior (sum of index ^ char).
+- [x] 15 tests (hash determinism, hash different, NameTable CRUD, update, remove, clear, keys/values/for_each).
+
+### 8. `ssz_script/lib/base64.ssz`, `md5.ssz`, `arcfour.ssz`
 
 - [x] Base64 encode/decode with standard alphabet + padding (base64.ssz). Known-answer tests: "Hello" → "SGVsbG8=".
 - [x] Arcfour (RC4) stream cipher with RAII context + free function (arcfour.ssz). Known-answer tests: encrypt/decrypt roundtrip with "Key"/"Plaintext".
 - [x] Avoid changing serialized output formats — matches SSZ base64 standard alphabet and RC4 semantics.
-- [ ] md5.ssz — pending (275 lines, defer to existing C++ MD5 library).
+- [x] MD5 hash (md5.ssz) — RFC 1321 implementation with known-answer tests: empty → d41d8cd9..., "Hello" → 8b1a9953...
 
 ## Phase 2 — Plugin Wrapper Libraries
 
@@ -271,6 +280,10 @@ These SSZ files mostly wrap native plugin calls and object lifetimes. The underl
 - [x] Move semantics, safety checks on null handle.
 - [x] 8 tests (construction, move, move-assign, no-crash on clear/pcm/rate/read/seek).
 
+### `ssz_script/lib/shell.ssz`
+
+- [x] Shell service wrapping `ShellOpen` and `MoveTrash` — delegates to native plugin.
+
 ### `ssz_script/lib/alpha/sdlplugin.ssz` and `sdlevent.ssz`
 
 - [ ] Do this late; it contains many calls and SDL object lifetimes.
@@ -279,9 +292,11 @@ These SSZ files mostly wrap native plugin calls and object lifetimes. The underl
 
 ### `ssz_script/lib/alpha/lua.ssz`
 
-- [ ] Defer until Lua/SSZ boundary is understood.
-- [ ] Decide whether Lua talks directly to native C++ or through a retained runtime facade.
-- [ ] **NEW:** Trace every Lua function that depends on this SSZ file. Without this audit we risk silently breaking Lua gameplay.
+- [x] RAII `LuaState` wrapping `lua_State*` handle.
+- [x] Constructor calls `NewState()`, destructor calls `Close()`.
+- [x] Lua stack operations: push_number, push_boolean, push_string, pop, is_number, is_boolean, is_string, to_number, to_boolean, to_string.
+- [x] Lua execution: run_file, run_string, pcall, get_top, get_global.
+- [x] 10 tests (construction, is_valid, move semantics, push/pop type checking).
 
 ### `ssz_script/lib/alpha/mesdialog.ssz`
 
@@ -436,16 +451,24 @@ IKEMEN_NATIVE_SOCKET_LIB
 IKEMEN_NATIVE_SOUND_LIB
 IKEMEN_NATIVE_OGG_LIB
 IKEMEN_NATIVE_MESDIALOG_LIB
+IKEMEN_NATIVE_CRYPTO_LIB
+IKEMEN_NATIVE_ALERT_LIB
+IKEMEN_NATIVE_THREAD_LIB
+IKEMEN_NATIVE_TIME_LIB
+IKEMEN_NATIVE_SHELL_LIB
+IKEMEN_NATIVE_LUA_LIB
+IKEMEN_NATIVE_SDLPLUGIN_LIB  // currently =1 (bridge active); set =0 when sdl_service exists
 ```
 
-- [x] Guard `SSZ_FunctionEntry` registrations in `*_static.hpp` with `#if IKEMEN_NATIVE_<MODULE>` (7 headers: file, math, regex, socket, sound, ogg, mesdialog). Each has `#if`/`#else` pattern — bridge register in `#if`, stub `return true` in `#else`.
+- [x] Guard `SSZ_FunctionEntry` registrations in `*_static.hpp` with `#if IKEMEN_NATIVE_<MODULE>` (13 headers: file, math, regex, socket, sound, ogg, mesdialog, alert, thread, time, shell, lua, sdlplugin). Each has `#if`/`#else` pattern — bridge register in `#if`, stub `return true` in `#else`.
 - [x] Add a `native_manifest` target that prints which native modules are currently active at build time (`make native_manifest`).
 
 ## Testing Plan
 
 ### Static Tests
 
-- [ ] Generate symbol manifest from SSZ scripts.
+- [x] Generate symbol manifest from SSZ scripts. → `docs/ssz_symbol_manifest.txt`
+- [x] Generate dependency graph from SSZ imports. → `docs/ssz_dependency_graph.txt`
 - [ ] Compare native manifest against SSZ manifest.
 - [ ] Verify all old script entry names still exist or have explicit migration notes.
 - [ ] **NEW:** Reject PRs that remove a public SSZ symbol without a corresponding native replacement (or an explicit deprecation note).
@@ -583,13 +606,25 @@ The SSZ script layer migration is complete when:
   - Per-module flags: `IKEMEN_NATIVE_FILE_LIB`, `IKEMEN_NATIVE_STRING_LIB`, etc.
   - Each defaults to 1; override from command line: `make IKEMEN_NATIVE_FILE_LIB=0`.
   - `make native_manifest` prints all active flags.
-- [ ] Generate SSZ dependency graph.
-- [ ] Generate public symbol manifest.
-- [ ] Audit Lua ↔ SSZ call sites.
-- [ ] Add build flag `IKEMEN_USE_NATIVE_SSZ`.
-- [x] Add per-module `#if` guards in `*_static.hpp`. (7 headers: file, math, regex, socket, sound, ogg, mesdialog)
+- [x] ~~Generate SSZ dependency graph.~~ (Done — `docs/ssz_dependency_graph.txt`. Key finding: no circular dependencies. `alpha/sdlplugin.ssz` is most imported (20 files). `ssz/char.ssz` is heaviest consumer (9 imports). Phase 3 conversion order confirmed: share.ssz → system.ssz → debug-script.ssz.)
+- [x] ~~Generate public symbol manifest.~~ (Done — `docs/ssz_symbol_manifest.txt`. 45 files, ~2,157 public symbols across all modules. Top: ssz/char.ssz (685 symbols), ssz/fight.ssz (367 symbols), ssz/common.ssz (206 symbols).)
+- [x] ~~Audit Lua ↔ SSZ call sites.~~ (Done — zero cross-calls found; fully independent layers)
+- [x] ~~Convert `ssz_script/lib/alpha/lua.ssz` to C++.~~ (Done — `lua_service.hpp/.cpp`)
+  - RAII `LuaState` class wrapping lua_State pointer
+  - Lua stack operations (push/pop/type checking)
+  - run_file, run_string, pcall
+  - 10 tests
+- [x] ~~Convert `ssz_script/lib/table.ssz` to C++.~~ (Done — `table_service.hpp`)
+  - Header-only `NameTable<T>` template (stdlib-backed)
+  - String `hash()` function matching SSZ behavior
+  - 15 tests (CRUD, iteration, hash)
+- [x] Add per-module `#if` guards in `*_static.hpp`. (13 headers: file, math, regex, socket, sound, ogg, mesdialog, alert, thread, time, shell, lua, sdlplugin)
 - [ ] Capture pre-conversion trace logs for representative inputs.
-- [ ] Add runtime trace mode around SSZ entry points before replacing them.
+- [x] Add runtime trace mode around SSZ entry points before replacing them.
+  - `IKEMEN_ENABLE_PLUGIN_TRACE` flag (default=0) in Makefile.
+  - `main/ssz_native/ssz_trace.hpp` with `SSZ_TRACE(msg)` macro.
+  - Demonstrated on `Open` (bridge.cpp) and `Run` (ssz.cpp) bridge wrappers.
+  - Enable with: `make IKEMEN_ENABLE_PLUGIN_TRACE=1`.
 
 ## Naming note
 

@@ -8,6 +8,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_TIME_LIB
+
 struct PluginUtil;
 
 extern "C"
@@ -29,3 +31,7 @@ inline bool time_static_register()
 		time_mapping,
 		sizeof(time_mapping) / sizeof(time_mapping[0]));
 }
+
+#else
+inline bool time_static_register() { return true; }
+#endif

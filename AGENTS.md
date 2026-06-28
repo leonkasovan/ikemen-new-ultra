@@ -12,7 +12,7 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 | Plugin registry | `main/ssz/static_plugin_registry.hpp` | 170 |
 | Platform abstraction | `main/ssz/sszdef.h` | 176 |
 | Type ID definitions | `main/ssz/typeid.h` | 35 |
-| SSZ native layer | `main/ssz_native/*` | 23 files, ~3,700 total |
+| SSZ native layer | `main/ssz_native/*` | 33 files, ~2,400 total |
 | 13 plugin sources | `main/*/` | 50–200 each |
 | 13 static headers | `main/*_static.hpp` | 30–240 each |
 

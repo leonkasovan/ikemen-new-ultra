@@ -8,6 +8,8 @@
 
 #include "static_plugin_registry.hpp"
 
+#if IKEMEN_NATIVE_SHELL_LIB
+
 struct PluginUtil;
 struct Reference;
 
@@ -30,3 +32,7 @@ inline bool shell_static_register()
 		shell_mapping,
 		sizeof(shell_mapping) / sizeof(shell_mapping[0]));
 }
+
+#else
+inline bool shell_static_register() { return true; }
+#endif

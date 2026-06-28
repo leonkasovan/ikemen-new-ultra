@@ -34,6 +34,9 @@
 //
 
 #include "static_plugin_registry.hpp"
+
+#if IKEMEN_NATIVE_SDLPLUGIN_LIB
+
 #include "SDL.h"
 #include "SDL_ttf.h"
 
@@ -167,7 +170,7 @@ extern "C"
 /// Returns true on success.
 inline bool sdlplugin_static_register()
 {
-	static const SSZ_FunctionEntry sdlplugin_mapping[] =
+	static const 	SSZ_FunctionEntry sdlplugin_mapping[] =
 	{
 		{ "Init",                (void*)Init                },
 		{ "GlInit",              (void*)GlInit              },
@@ -238,3 +241,7 @@ inline bool sdlplugin_static_register()
 		sdlplugin_mapping,
 		sizeof(sdlplugin_mapping) / sizeof(sdlplugin_mapping[0]));
 }
+
+#else
+inline bool sdlplugin_static_register() { return true; }
+#endif
