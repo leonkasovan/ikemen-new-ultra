@@ -136,7 +136,6 @@ CMakeUserPresets.json
 /libpng.vers
 /libtool
 /stamp-h1
-pnglibconf.[ch]
 pnglibconf.dfn
 pnglibconf.pre
 pngprefix.h
