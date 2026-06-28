@@ -19,16 +19,6 @@
 #include "pluginutil.hpp"    // for SSZCALLBACK (used by LuaInit)
 
 // -----------------------------------------------------------------------
-// Class forward-declared in main/sound/sound.cpp
-// -----------------------------------------------------------------------
-class Client;
-
-// -----------------------------------------------------------------------
-// Class forward-declared in main/ogg/ogg.cpp
-// -----------------------------------------------------------------------
-class OggVorbis;
-
-// -----------------------------------------------------------------------
 // Helper: write std::vector<uint8_t> into a Reference as raw bytes.
 // -----------------------------------------------------------------------
 namespace ikemen::ssz_bridge {
@@ -51,8 +41,14 @@ typedef int SOCKET;
 #endif
 
 // -----------------------------------------------------------------------
-// Native implementations defined in main/file/file.cpp
-// -----------------------------------------------------------------------
+// Native implementations from all main/*.cpp files
+#include "ssz_native/plugin_native_api.hpp"
+
+// ---- Plugin-specific forward declarations used only by bridge.cpp ----
+// These are here (not in plugin_native_api.hpp) because they depend on types
+// (RNS, SSZCALLBACK, RegexMatchInfo, SOCKET, Client, OggVorbis, lua_State, etc.)
+// that are only relevant in the bridge context.
+
 #ifdef _WIN32
 #include <regex>
 #define RNS std
@@ -61,108 +57,76 @@ typedef int SOCKET;
 #define RNS boost
 #endif
 
-uint32_t SSZ_STDCALL TickCount();
-int64_t  SSZ_STDCALL UnixTime();
-void     SSZ_STDCALL Alert(const std::wstring& title, const std::wstring& mes);
-void     SSZ_STDCALL ThreadDelay(uint32_t ui);
+typedef void* (SSZ_STDCALL* SSZCALLBACK)(void*, intptr_t, void*, intptr_t, intptr_t);
+class Client;
+class OggVorbis;
+struct lua_State;
+struct DynamicRef;
+
 RNS::wregex* SSZ_STDCALL NewRegex(bool i, const std::wstring& ptn, std::wstring* error);
 void         SSZ_STDCALL DeleteRegex(RNS::wregex* re);
 std::vector<ikemen::ssz_bridge::RegexMatchInfo> SSZ_STDCALL RegexSearch(const std::wstring& str, RNS::wregex* re);
-bool     SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct, const std::wstring& param, const std::wstring& file);
-bool     SSZ_STDCALL MoveTrash(const std::wstring& file);
-void     SSZ_STDCALL SocketClose(SOCKET *psoc);
-bool     SSZ_STDCALL SocketConnect(bool nodelay, int32_t timeout, const std::string& port, const std::string& host, SOCKET *psoc);
-bool     SSZ_STDCALL SocketListen(bool ipv4, int32_t backlog, const std::string& port, SOCKET *psoc);
-SOCKET   SSZ_STDCALL SocketAccept(bool nodelay, int32_t timeout, SOCKET soc);
-bool     SSZ_STDCALL SocketSend(intptr_t size, const char *p, SOCKET *psoc);
-intptr_t SSZ_STDCALL SocketSendAry(intptr_t size, const void *data, intptr_t bytes, SOCKET *psoc);
-bool     SSZ_STDCALL SocketRecv(intptr_t size, char *p, SOCKET *psoc);
-intptr_t SSZ_STDCALL SocketRecvAry(intptr_t size, void *data, intptr_t bytes, SOCKET *psoc);
-Client* SSZ_STDCALL NewClient();
-void    SSZ_STDCALL DeleteClient(Client* client);
-bool    SSZ_STDCALL ClientStart(Client* client);
-bool    SSZ_STDCALL ClientStop(Client* client);
-bool    SSZ_STDCALL ClientBufferReady(Client* client);
-bool    SSZ_STDCALL ClientSetBuffer(const float* buffer, intptr_t frames, Client* client);
-struct lua_State;
-bool       SSZ_STDCALL YesNo(const std::wstring& r);
-void       SSZ_STDCALL VeryUnsafeCopy(intptr_t size, void *src, void *dst);
+bool         SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct, const std::wstring& param, const std::wstring& file);
+bool         SSZ_STDCALL MoveTrash(const std::wstring& file);
+void         SSZ_STDCALL SocketClose(SOCKET* psoc);
+bool         SSZ_STDCALL SocketConnect(bool nodelay, int32_t timeout, const std::string& port, const std::string& host, SOCKET* psoc);
+bool         SSZ_STDCALL SocketListen(bool ipv4, int32_t backlog, const std::string& port, SOCKET* psoc);
+SOCKET       SSZ_STDCALL SocketAccept(bool nodelay, int32_t timeout, SOCKET soc);
+bool         SSZ_STDCALL SocketSend(intptr_t size, const char* p, SOCKET* psoc);
+intptr_t     SSZ_STDCALL SocketSendAry(intptr_t size, const void* data, intptr_t bytes, SOCKET* psoc);
+bool         SSZ_STDCALL SocketRecv(intptr_t size, char* p, SOCKET* psoc);
+intptr_t     SSZ_STDCALL SocketRecvAry(intptr_t size, void* data, intptr_t bytes, SOCKET* psoc);
+Client*      SSZ_STDCALL NewClient();
+void         SSZ_STDCALL DeleteClient(Client* client);
+bool         SSZ_STDCALL ClientStart(Client* client);
+bool         SSZ_STDCALL ClientStop(Client* client);
+bool         SSZ_STDCALL ClientBufferReady(Client* client);
+bool         SSZ_STDCALL ClientSetBuffer(const float* buffer, intptr_t frames, Client* client);
+bool         SSZ_STDCALL YesNo(const std::wstring& r);
+void         SSZ_STDCALL VeryUnsafeCopy(intptr_t size, void* src, void* dst);
 std::wstring SSZ_STDCALL GetClipboardStr();
-intptr_t   SSZ_STDCALL TazyuuCheck(const std::wstring& name);
-void       SSZ_STDCALL CloseTazyuuHandle(intptr_t mutex);
+intptr_t     SSZ_STDCALL TazyuuCheck(const std::wstring& name);
+void         SSZ_STDCALL CloseTazyuuHandle(intptr_t mutex);
 std::wstring SSZ_STDCALL GetInifileString(const std::wstring& def, const std::wstring& key, const std::wstring& app, const std::wstring& file);
-int32_t    SSZ_STDCALL GetInifileInt(int32_t def, const std::wstring& key, const std::wstring& app, const std::wstring& file);
-bool       SSZ_STDCALL WriteInifileString(const std::wstring& str, const std::wstring& key, const std::wstring& app, const std::wstring& file);
-bool       SSZ_STDCALL UnCompress(const void* data, intptr_t bytes, std::vector<uint8_t>& output);
-void       SSZ_STDCALL UbytesToStr(const void* data, intptr_t bytes, UINT cp, std::wstring& output);
-void       SSZ_STDCALL StrToUbytes(const void* data, intptr_t bytes, UINT cp, std::vector<uint8_t>& output);
-void       SSZ_STDCALL AsciiToLocal(const void* data, intptr_t bytes, std::wstring& output);
-void       SSZ_STDCALL SetSharedString(const std::wstring& str);
+int32_t      SSZ_STDCALL GetInifileInt(int32_t def, const std::wstring& key, const std::wstring& app, const std::wstring& file);
+bool         SSZ_STDCALL WriteInifileString(const std::wstring& str, const std::wstring& key, const std::wstring& app, const std::wstring& file);
+bool         SSZ_STDCALL UnCompress(const void* data, intptr_t bytes, std::vector<uint8_t>& output);
+void         SSZ_STDCALL UbytesToStr(const void* data, intptr_t bytes, UINT cp, std::wstring& output);
+void         SSZ_STDCALL StrToUbytes(const void* data, intptr_t bytes, UINT cp, std::vector<uint8_t>& output);
+void         SSZ_STDCALL AsciiToLocal(const void* data, intptr_t bytes, std::wstring& output);
+void         SSZ_STDCALL SetSharedString(const std::wstring& str);
 std::wstring SSZ_STDCALL GetSharedString();
 std::wstring SSZ_STDCALL InputStr(const std::wstring& title);
-void       SSZ_STDCALL LuaInit(intptr_t refcopy, intptr_t refdest, SSZCALLBACK callback, void* handle);
-lua_State* SSZ_STDCALL NewState();
-void       SSZ_STDCALL Close(lua_State* L);
-bool       SSZ_STDCALL RunFile(const std::string& filename, lua_State* L);
-bool       SSZ_STDCALL RunString(const std::string& s, lua_State* L);
-int32_t    SSZ_STDCALL GetTop(lua_State* L);
-void       SSZ_STDCALL GetGlobal(const std::string& var, lua_State* L);
-void       SSZ_STDCALL Register(intptr_t func, const std::string& var, lua_State* L);
-bool       SSZ_STDCALL Pcall(int32_t nresults, int32_t nargs, lua_State* L);
-void       SSZ_STDCALL Pop(int32_t n, lua_State* L);
-void       SSZ_STDCALL PushNumber(double n, lua_State* L);
-bool       SSZ_STDCALL IsNumber(int32_t idx, lua_State* L);
-double     SSZ_STDCALL ToNumber(int32_t idx, lua_State* L);
-void       SSZ_STDCALL PushBoolean(bool b, lua_State* L);
-bool       SSZ_STDCALL IsBoolean(int32_t idx, lua_State* L);
-bool       SSZ_STDCALL ToBoolean(int32_t idx, lua_State* L);
-void       SSZ_STDCALL PushString(const std::string& s, lua_State* L);
-bool       SSZ_STDCALL IsString(int32_t idx, lua_State* L);
-void       SSZ_STDCALL ToString(int32_t idx, lua_State* L, std::string& output);
-void       SSZ_STDCALL PushRef(DynamicRef* userdata, lua_State* L);
-void       SSZ_STDCALL ToRef(int32_t idx, DynamicRef* userdata, lua_State* L);
-OggVorbis* SSZ_STDCALL NewOggVorbis();
-void       SSZ_STDCALL DeleteOggVorbis(OggVorbis* ov);
-bool       SSZ_STDCALL OggVorbisOpen(const std::wstring& file, OggVorbis* ov);
-void       SSZ_STDCALL OggVorbisClear(OggVorbis* ov);
-int64_t    SSZ_STDCALL OggVorbisPcmTotal(OggVorbis* ov);
-int32_t    SSZ_STDCALL OggVorbisChannels(OggVorbis* ov);
-int32_t    SSZ_STDCALL OggVorbisRate(OggVorbis* ov);
-intptr_t   SSZ_STDCALL OggVorbisRead(int16_t* buffer, intptr_t length, OggVorbis* ov);
-int32_t    SSZ_STDCALL OggVorbisSeek(double time, OggVorbis* ov);
-double SSZ_STDCALL Sin(double x);
-double SSZ_STDCALL Cos(double x);
-double SSZ_STDCALL Tan(double x);
-double SSZ_STDCALL ASin(double x);
-double SSZ_STDCALL ACos(double x);
-double SSZ_STDCALL ATan(double x);
-double SSZ_STDCALL Log(double y, double x);
-double SSZ_STDCALL Ln(double x);
-double SSZ_STDCALL Exp(double x);
-double SSZ_STDCALL Sqrt(double x);
-double SSZ_STDCALL Ceil(double x);
-double SSZ_STDCALL Floor(double x);
-bool   SSZ_STDCALL IsFinite(double x);
-bool   SSZ_STDCALL IsInf(double x);
-bool   SSZ_STDCALL IsNaN(double x);
-intptr_t SSZ_STDCALL Open(const std::wstring& md, const std::wstring& fn);
-void     SSZ_STDCALL FileClose(FILE *pFile);
-bool     SSZ_STDCALL Read(intptr_t size, void *p, FILE *pFile);
-intptr_t SSZ_STDCALL ReadAry(intptr_t size, void *data, intptr_t bytes, FILE *pFile);
-bool     SSZ_STDCALL Write(intptr_t size, const void *p, FILE *pFile);
-intptr_t SSZ_STDCALL WriteAry(intptr_t size, const void *data, intptr_t bytes, FILE *pFile);
-bool     SSZ_STDCALL Seek(int32_t origin, int64_t offset, FILE *pFile);
-std::wstring SSZ_STDCALL LoadAsciiText(const std::wstring& path);
-bool     SSZ_STDCALL SaveAsciiText(const std::wstring& txt, const std::wstring& path);
-bool     SSZ_STDCALL Delete(const std::wstring& file);
-bool     SSZ_STDCALL Move(const std::wstring& newn, const std::wstring& oldn);
-bool     SSZ_STDCALL Copy(bool overwrite, const std::wstring& dist, const std::wstring& source);
-std::vector<std::wstring> SSZ_STDCALL Find(const std::wstring& pattern);
-std::vector<std::wstring> SSZ_STDCALL FindDir(const std::wstring& pattern);
-bool     SSZ_STDCALL CreateDir(const std::wstring& dir);
-bool     SSZ_STDCALL RemoveDir(const std::wstring& dir);
-bool     SSZ_STDCALL SetCurrentDir(const std::wstring& dir);
-std::wstring SSZ_STDCALL GetCurrentDir();
+void         SSZ_STDCALL LuaInit(intptr_t refcopy, intptr_t refdest, SSZCALLBACK callback, void* handle);
+lua_State*   SSZ_STDCALL NewState();
+void         SSZ_STDCALL Close(lua_State* L);
+bool         SSZ_STDCALL RunFile(const std::string& filename, lua_State* L);
+bool         SSZ_STDCALL RunString(const std::string& s, lua_State* L);
+int32_t      SSZ_STDCALL GetTop(lua_State* L);
+void         SSZ_STDCALL GetGlobal(const std::string& var, lua_State* L);
+void         SSZ_STDCALL Register(intptr_t func, const std::string& var, lua_State* L);
+bool         SSZ_STDCALL Pcall(int32_t nresults, int32_t nargs, lua_State* L);
+void         SSZ_STDCALL Pop(int32_t n, lua_State* L);
+void         SSZ_STDCALL PushNumber(double n, lua_State* L);
+bool         SSZ_STDCALL IsNumber(int32_t idx, lua_State* L);
+double       SSZ_STDCALL ToNumber(int32_t idx, lua_State* L);
+void         SSZ_STDCALL PushBoolean(bool b, lua_State* L);
+bool         SSZ_STDCALL IsBoolean(int32_t idx, lua_State* L);
+bool         SSZ_STDCALL ToBoolean(int32_t idx, lua_State* L);
+void         SSZ_STDCALL PushString(const std::string& s, lua_State* L);
+bool         SSZ_STDCALL IsString(int32_t idx, lua_State* L);
+void         SSZ_STDCALL ToString(int32_t idx, lua_State* L, std::string& output);
+void         SSZ_STDCALL PushRef(DynamicRef* userdata, lua_State* L);
+void         SSZ_STDCALL ToRef(int32_t idx, DynamicRef* userdata, lua_State* L);
+OggVorbis*   SSZ_STDCALL NewOggVorbis();
+void         SSZ_STDCALL DeleteOggVorbis(OggVorbis* ov);
+bool         SSZ_STDCALL OggVorbisOpen(const std::wstring& file, OggVorbis* ov);
+void         SSZ_STDCALL OggVorbisClear(OggVorbis* ov);
+int64_t      SSZ_STDCALL OggVorbisPcmTotal(OggVorbis* ov);
+int32_t      SSZ_STDCALL OggVorbisChannels(OggVorbis* ov);
+int32_t      SSZ_STDCALL OggVorbisRate(OggVorbis* ov);
+intptr_t     SSZ_STDCALL OggVorbisRead(int16_t* buffer, intptr_t length, OggVorbis* ov);
+int32_t      SSZ_STDCALL OggVorbisSeek(double time, OggVorbis* ov);
 
 namespace ikemen::ssz_bridge {
 
@@ -1026,6 +990,9 @@ extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
     (void)pu;
     (void)outInfo;
     GetRendererInfo();
+    // TODO: Populate outInfo with actual renderer info (backend, device, driver).
+    // Currently a stub — the SSZ script expects an output Reference but the
+    // native GetRendererInfo() is void and logs to console instead.
 }
 
 extern "C" void SSZ_STDCALL EnablePerfMonitor(PluginUtil* pu, bool enable)
@@ -1280,7 +1247,8 @@ extern "C" void SSZ_STDCALL SendCloseBGM(PluginUtil* pu)
 extern "C" intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil* pu, Reference fn)
 {
     (void)pu;
-    (void)fn;
+    (void)fn;  // fn was historically unused in the old implementation too;
+               // preserved as a parameter for ABI compatibility only.
     return SendWriteBGM();
 }
 

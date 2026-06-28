@@ -103,6 +103,8 @@ LDLIBS  = -lwinmm -lole32 -lshell32 -lws2_32 -lopengl32 -lglu32 -lgdi32 \
 # ============================================================
 #  MAIN APPLICATION SOURCES
 # ============================================================
+SSZ_NATIVE = $(MAIN)/ssz_native
+
 MAIN_SRCS = \
   $(MAIN)/main.cpp \
   $(SSZ)/ssz.cpp \
@@ -119,7 +121,10 @@ MAIN_SRCS = \
   $(MAIN)/alert/alert.cpp \
   $(MAIN)/mesdialog/mesdialog.cpp \
   $(MAIN)/ogg/ogg.cpp \
-  $(MAIN)/regex/regex.cpp
+  $(MAIN)/regex/regex.cpp \
+  $(SSZ_NATIVE)/file_service.cpp \
+  $(SSZ_NATIVE)/math_service.cpp \
+  $(SSZ_NATIVE)/regex_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -605,6 +610,11 @@ $(BLD)/main/%.o: $(MAIN)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+# ---- SSZ native compatibility layer (C++) ----
+$(BLD)/main/ssz_native/%.o: $(MAIN)/ssz_native/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
 
 # ---- SDL2 (C) ----
 $(BLD)/sdl2/%.o: $(SDL2_DIR)/src/%.c
@@ -707,7 +717,7 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # ---- Regression smoke tests ----
 # Compile and run file-operation tests against the native implementations.
 # Depends on the main build having compiled file.o first.
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
