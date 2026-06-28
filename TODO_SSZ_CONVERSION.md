@@ -241,14 +241,21 @@ These SSZ files mostly wrap native plugin calls and object lifetimes. The underl
 
 ### `ssz_script/lib/socket.ssz`
 
-- [ ] Native wrapper owns socket handle.
-- [ ] Separate scalar send/recv from array/buffer send/recv.
-- [ ] Preserve timeout, no-delay, IPv4/IPv6 behavior.
+- [x] Native RAII `SocketHandle` wrapping `SOCKET` handle.
+- [x] connect (host, port, timeout, nodelay), listen (port, backlog, ipv4).
+- [x] accept (returns new SocketHandle), close.
+- [x] send/recv (scalar), send_array/recv_array (buffer).
+- [x] Move semantics, double-close safety.
+- [x] Calls native socket plugin functions directly (main/socket/socket.cpp).
+- [x] 7 tests (construction, move, move-assign, double-close).
 
 ### `ssz_script/lib/sound.ssz`
 
-- [ ] Native audio client wrapper.
-- [ ] Define buffer ownership and thread safety clearly.
+- [x] Native RAII `AudioClient` wrapping opaque `Client*` handle.
+- [x] Constructor calls `NewClient()`, destructor calls `DeleteClient()`.
+- [x] start, stop, buffer_ready, set_buffer.
+- [x] Move semantics, safety checks on null client.
+- [x] 5 tests (construction, move, move-assign, no-crash on start/stop/buffer_ready).
 
 ### `ssz_script/lib/alpha/ogg.ssz`
 
@@ -525,6 +532,16 @@ The SSZ script layer migration is complete when:
   - search (capture groups), search_all, search_matches
   - Free function compile()
   - 18 tests
+- [x] ~~Convert `ssz_script/lib/socket.ssz` to C++.~~ (Done — `socket_service.hpp/.cpp`)
+  - RAII `SocketHandle` class wrapping SOCKET handle
+  - connect, listen, accept, send, recv, send_array, recv_array
+  - Calls native socket plugin functions (main/socket/socket.cpp)
+  - 7 tests
+- [x] ~~Convert `ssz_script/lib/sound.ssz` to C++.~~ (Done — `sound_service.hpp/.cpp`)
+  - RAII `AudioClient` class wrapping opaque Client pointer
+  - start, stop, buffer_ready, set_buffer
+  - Calls native sound plugin functions (main/sound/sound.cpp)
+  - 5 tests
 - [ ] Generate SSZ dependency graph.
 - [ ] Generate public symbol manifest.
 - [ ] Audit Lua ↔ SSZ call sites.
