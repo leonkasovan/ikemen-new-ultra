@@ -90,6 +90,11 @@ IKEMEN_NATIVE_SDLPLUGIN_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SHARE_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SYSTEM_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_DEBUG_SCRIPT_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_LOADER_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_COMMON_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SCRIPT_LIB         ?= $(IKEMEN_USE_NATIVE_SSZ)
+IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB  ?= $(IKEMEN_USE_NATIVE_SSZ)
 CXXFLAGS += -DIKEMEN_NATIVE_FILE_LIB=$(IKEMEN_NATIVE_FILE_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_STRING_LIB=$(IKEMEN_NATIVE_STRING_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_MATH_LIB=$(IKEMEN_NATIVE_MATH_LIB)
@@ -108,6 +113,11 @@ CXXFLAGS += -DIKEMEN_NATIVE_SDLPLUGIN_LIB=$(IKEMEN_NATIVE_SDLPLUGIN_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SHARE_LIB=$(IKEMEN_NATIVE_SHARE_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SYSTEM_LIB=$(IKEMEN_NATIVE_SYSTEM_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_DEBUG_SCRIPT_LIB=$(IKEMEN_NATIVE_DEBUG_SCRIPT_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_LOADER_LIB=$(IKEMEN_NATIVE_LOADER_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_COMMON_LIB=$(IKEMEN_NATIVE_COMMON_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_TRIGGER_SCRIPT_LIB=$(IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SCRIPT_LIB=$(IKEMEN_NATIVE_SCRIPT_LIB)
+CXXFLAGS += -DIKEMEN_NATIVE_SYSTEM_SCRIPT_LIB=$(IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB)
 CXXFLAGS += -DIKEMEN_ENABLE_PLUGIN_TRACE=$(IKEMEN_ENABLE_PLUGIN_TRACE)
 
 # Phase 3: module flags defined in the main flags block above.
@@ -200,7 +210,12 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/shell_service.cpp \
   $(SSZ_NATIVE)/lua_service.cpp \
   $(SSZ_NATIVE)/share_service.cpp \
-  $(SSZ_NATIVE)/debug_script_service.cpp
+  $(SSZ_NATIVE)/debug_script_service.cpp \
+  $(SSZ_NATIVE)/loader_service.cpp \
+  $(SSZ_NATIVE)/common_service.cpp \
+  $(SSZ_NATIVE)/trigger_script_service.cpp \
+  $(SSZ_NATIVE)/script_service.cpp \
+  $(SSZ_NATIVE)/system_script_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -797,7 +812,12 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # functions (equ, trim, find, split, join, Unicode, percent, hex/octal).
 TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/time/time.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/shell/shell.o $(BLD)/main/lua/lua.o $(BLD)/main/ssz/ssz.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o $(BLD)/main/ssz_native/thread_service.o $(BLD)/main/ssz_native/time_service.o $(BLD)/main/ssz_native/shell_service.o $(BLD)/main/ssz_native/lua_service.o \
 $(BLD)/main/ssz_native/share_service.o \
-$(BLD)/main/ssz_native/debug_script_service.o
+$(BLD)/main/ssz_native/debug_script_service.o \
+$(BLD)/main/ssz_native/loader_service.o \
+$(BLD)/main/ssz_native/common_service.o \
+$(BLD)/main/ssz_native/trigger_script_service.o \
+$(BLD)/main/ssz_native/script_service.o \
+$(BLD)/main/ssz_native/system_script_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
@@ -833,6 +853,11 @@ native_manifest:
 	@echo "IKEMEN_NATIVE_SHARE_LIB     = $(IKEMEN_NATIVE_SHARE_LIB)"
 	@echo "IKEMEN_NATIVE_SYSTEM_LIB    = $(IKEMEN_NATIVE_SYSTEM_LIB)"
 	@echo "IKEMEN_NATIVE_DEBUG_SCRIPT_LIB = $(IKEMEN_NATIVE_DEBUG_SCRIPT_LIB)"
+	@echo "IKEMEN_NATIVE_LOADER_LIB      = $(IKEMEN_NATIVE_LOADER_LIB)"
+	@echo "IKEMEN_NATIVE_COMMON_LIB      = $(IKEMEN_NATIVE_COMMON_LIB)"
+	@echo "IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB = $(IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB)"
+	@echo "IKEMEN_NATIVE_SCRIPT_LIB         = $(IKEMEN_NATIVE_SCRIPT_LIB)"
+	@echo "IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB  = $(IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB)"
 	@echo "=== To disable a module: make IKEMEN_NATIVE_<NAME>_LIB=0 ==="
 
 clean:

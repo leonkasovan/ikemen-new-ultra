@@ -389,6 +389,63 @@ Mirrors module-level `lib/file.ssz` API:
 | `test/test_file.cpp` | Added `test_debug_script_service()` (32 tests: struct init, 25 stub calls, file stubs, flags mutation) |
 | `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Debug Script Service section; debug-script.ssz marked complete; Immediate TODO updated |
 
+## Phase 3 — Loader service (ssz_script/ssz/loader.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/loader_service.hpp` | **NEW** — LoaderState enum, LoaderData struct, 7 function declarations |
+| `main/ssz_native/loader_service.cpp` | **NEW** — all 7 stub implementations (no-ops) |
+| `Makefile` | Added `IKEMEN_NATIVE_LOADER_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_loader_service()` (13 tests: state enum, struct init, 7 stub calls) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Loader Service section; loader.ssz marked complete; ordering corrected (loader is 284 lines, smaller than common.ssz) |
+
+## Phase 3 — Common service (ssz_script/ssz/common.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/common_service.hpp` | **NEW** — CommonData (~90 fields), TeamMode enum, IXY/FXY/Camera/Layout/PalFX/Section types, 17 function declarations |
+| `main/ssz_native/common_service.cpp` | **NEW** — all 17 stub implementations (no-ops) |
+| `Makefile` | Added `IKEMEN_NATIVE_COMMON_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_common_service()` (~30 tests: default init, nested structs, enums, stubs, field mutation) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Common Service section; common.ssz marked complete; Immediate TODO updated |
+
+## Phase 3 — Trigger script service (ssz_script/ssz/trigger-script.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/trigger_script_service.hpp` | **NEW** — TriggerScriptState struct + register_function declaration (170+ Lua callback functions) |
+| `main/ssz_native/trigger_script_service.cpp` | **NEW** — register_function stub (no-op) |
+| `Makefile` | Added `IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_trigger_script_service()` (2 tests: struct init, stub call) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Trigger Script Service section; trigger-script.ssz marked complete; Immediate TODO updated |
+
+## Phase 3 — Script service (ssz_script/ssz/script.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/script_service.hpp` | **NEW** — ScriptState struct + script_init declaration (250+ Lua callback functions) |
+| `main/ssz_native/script_service.cpp` | **NEW** — script_init stub (no-op) |
+| `Makefile` | Added `IKEMEN_NATIVE_SCRIPT_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_script_service()` (2 tests: struct init, stub call) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — Script Service section; script.ssz marked complete; Immediate TODO updated |
+
+## Phase 3 — System script service (ssz_script/ssz/system-script.ssz, June 2026)
+
+| Change | Details |
+|---|---|
+| `main/ssz_native/system_script_service.hpp` | **NEW** — SystemScriptState struct + system_script_init declaration (200+ system-level Lua callbacks) |
+| `main/ssz_native/system_script_service.cpp` | **NEW** — system_script_init stub (no-op) |
+| `Makefile` | Added `IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB` flag, source/object wiring, native_manifest entry |
+| `test/test_file.cpp` | Added `test_system_script_service()` (2 tests: struct init, stub call) |
+| `TODO_SSZ_CONVERSION.md` | Added Phase 3 — System Script Service section; system-script.ssz marked complete; Immediate TODO updated |
+
+## Post-review fixes (REVIEW.md findings — June 2026, loader_service)
+
+| Finding | Fix |
+|---|---|
+| **M42** — Phase 3 .cpp strategy undocumented | ✅ Already documented in TODO_SSZ_CONVERSION.md:333 (previous cycle) |
+| **M43** — Unused `#include <vector>` in `loader_service.hpp` | Removed the include |
+
 ## Post-review fixes (REVIEW.md findings — June 2026, debug_script_service)
 
 | Finding | Fix |

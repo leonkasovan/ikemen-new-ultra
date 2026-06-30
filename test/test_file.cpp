@@ -34,6 +34,11 @@
 #include "ssz_native/share_service.hpp"
 #include "ssz_native/system_service.hpp"
 #include "ssz_native/debug_script_service.hpp"
+#include "ssz_native/loader_service.hpp"
+#include "ssz_native/common_service.hpp"
+#include "ssz_native/trigger_script_service.hpp"
+#include "ssz_native/script_service.hpp"
+#include "ssz_native/system_script_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -740,6 +745,152 @@ static void test_share_service()
     TEST(L"ShareData vector fields", sd2.com.size() == 1 && sd2.com[0] == 42);
 }
 
+// ---- System script service tests (ssz_native::system_script) ----
+
+static void test_system_script_service()
+{
+    std::wcout << L"\n--- System script service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    SystemScriptState ss;
+    TEST(L"SystemScriptState created", true);
+    system_script_init(nullptr);
+    TEST(L"system_script_init(nullptr) no-crash", true);
+}
+
+// ---- Script service tests (ssz_native::script) ----
+
+static void test_script_service()
+{
+    std::wcout << L"\n--- Script service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    ScriptState ss;
+    TEST(L"ScriptState created", true);
+
+    script_init(nullptr);
+    TEST(L"script_init(nullptr) no-crash", true);
+}
+
+// ---- Trigger script service tests (ssz_native::trigger) ----
+
+static void test_trigger_script_service()
+{
+    std::wcout << L"\n--- Trigger script service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // TriggerScriptState default init
+    TriggerScriptState ts;
+    TEST(L"TriggerScriptState created", true);
+
+    // register_function stub — no-crash test
+    register_function(nullptr);
+    TEST(L"register_function(nullptr) no-crash", true);
+}
+
+// ---- Common service tests (ssz_native::common) ----
+
+static void test_common_service()
+{
+    std::wcout << L"\n--- Common service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // CommonData default init
+    CommonData cd;
+    TEST(L"CommonData coins == 0", cd.coins == 0);
+    TEST(L"CommonData credits == 0", cd.credits == 0);
+    TEST(L"CommonData life == 1.0", cd.life == 1.0f);
+    TEST(L"CommonData power == 0", cd.power == 0);
+    TEST(L"CommonData attack == 1.0", cd.attack == 1.0f);
+    TEST(L"CommonData defence == 1.0", cd.defence == 1.0f);
+    TEST(L"CommonData roundTime == 5994", cd.roundTime == 5994);
+    TEST(L"CommonData roundsToWin == 2", cd.roundsToWin == 2);
+    TEST(L"CommonData zoomMin > 0.8", cd.cam.zoomMin > 0.8f && cd.cam.zoomMin < 0.84f);
+    TEST(L"CommonData zoomMax > 1.07", cd.cam.zoomMax > 1.07f && cd.cam.zoomMax < 1.08f);
+    TEST(L"CommonData intro == 20", cd.intro == 20);
+    TEST(L"CommonData p1mw == 2", cd.p1mw == 2);
+    TEST(L"CommonData clsndraw == false", cd.clsndraw == false);
+    TEST(L"CommonData debugdraw == false", cd.debugdraw == false);
+    TEST(L"CommonData pause == false", cd.pause == false);
+    TEST(L"CommonData maxSimul == 10", cd.maxSimul == 10);
+
+    // Enums
+    TEST(L"TeamMode::Single == 0", TeamMode::Single == TeamMode{0});
+    TEST(L"TeamMode::Simul == 1", TeamMode::Simul == TeamMode{1});
+    TEST(L"TeamMode::Turns == 2", TeamMode::Turns == TeamMode{2});
+
+    // IXY default
+    IXY ixy;
+    TEST(L"IXY x == 0", ixy.x == 0);
+    TEST(L"IXY y == 0", ixy.y == 0);
+
+    // FXY default
+    FXY fxy;
+    TEST(L"FXY x == 0", fxy.x == 0.0f);
+
+    // Stub functions
+    common_flag_init(cd);
+    common_reset_remap_input(cd);
+    common_set_size(cd, 640, 480);
+    TEST(L"common_set_size no-crash", true);
+    TEST(L"common_tick_frame false", common_tick_frame(cd) == false);
+    TEST(L"common_tick_next_frame false", common_tick_next_frame(cd) == false);
+    TEST(L"common_match_over false", common_match_over(cd) == false);
+    TEST(L"common_next_line 0", common_next_line(0, "hello\nworld") == 0);
+    TEST(L"common_split_lines empty", common_split_lines("a\nb").empty());
+    TEST(L"common_atof 0.0", common_atof("3.14") == 0.0);
+    TEST(L"common_atoi 0", common_atoi("42") == 0);
+    TEST(L"common_load_text empty", common_load_text("test.def", false).empty());
+    TEST(L"common_read_file_name empty", common_read_file_name("test.txt", true).empty());
+    TEST(L"common_load_file empty", common_load_file("chars/kfm/kfm.def", cd.debugScript).empty());
+
+    // Field mutation
+    cd.coins = 5;
+    cd.credits = 3;
+    cd.life = 0.5f;
+    cd.power = 3000;
+    cd.intro = 0;
+    cd.clsndraw = true;
+    cd.cam.zoom = true;
+    TEST(L"CommonData fields hold values",
+        cd.coins == 5 && cd.credits == 3 && cd.life == 0.5f &&
+        cd.power == 3000 && cd.intro == 0 && cd.clsndraw == true &&
+        cd.cam.zoom == true);
+}
+
+// ---- Loader service tests (ssz_native::loader) ----
+
+static void test_loader_service()
+{
+    std::wcout << L"\n--- Loader service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // LoaderData default init
+    LoaderData ld;
+    TEST(L"LoaderData state == NotYet", ld.state == LoaderState::NotYet);
+    TEST(L"LoaderData errorMes empty", ld.errorMes.empty());
+
+    // Stub functions
+    loader_error("test error");
+    TEST(L"loader_error no-crash", true);
+    TEST(L"loader_stage returns false", loader_stage() == false);
+    TEST(L"loader_chara returns 0", loader_chara(0) == 0);
+    TEST(L"loader_chara returns 0", loader_chara(1) == 0);
+    TEST(L"loader_state_compile returns false", loader_state_compile() == false);
+    loader_load();
+    TEST(L"loader_load no-crash", true);
+    loader_reset();
+    TEST(L"loader_reset no-crash", true);
+    TEST(L"loader_run_tread returns false", loader_run_tread() == false);
+
+    // State enum values
+    TEST(L"LoaderState values",
+        LoaderState::NotYet == LoaderState{0} &&
+        LoaderState::Loading == LoaderState{1} &&
+        LoaderState::Complete == LoaderState{2} &&
+        LoaderState::Error == LoaderState{3} &&
+        LoaderState::Cancel == LoaderState{4});
+}
+
 // ---- Debug script service tests (ssz_native::debug) ----
 
 static void test_debug_script_service()
@@ -1209,6 +1360,11 @@ int main()
     test_share_service();
     test_system_service();
     test_debug_script_service();
+    test_loader_service();
+    test_common_service();
+    test_trigger_script_service();
+    test_script_service();
+    test_system_script_service();
     test_shell_service();
     test_alert_service();
     test_crypto_service();

@@ -321,11 +321,11 @@ Recommended order (smallest first):
 1. `ssz_script/ssz/share.ssz` — 371 lines ⬜ Phase 3 started (scaffolding complete)
 2. `ssz_script/ssz/system.ssz` — 427 lines ⬜ Phase 3 scaffolding complete
 3. `ssz_script/ssz/debug-script.ssz` — 296 lines ✅ Phase 3 scaffolding complete (Lua callback bridge)
-4. `ssz_script/ssz/common.ssz` — 1199 lines
-5. `ssz_script/ssz/loader.ssz`
-6. `ssz_script/ssz/script.ssz` — 2216 lines
-7. `ssz_script/ssz/system-script.ssz` — 2403 lines
-8. `ssz_script/ssz/trigger-script.ssz` — 1633 lines
+4. `ssz_script/ssz/loader.ssz` — 284 lines ✅ Phase 3 scaffolding complete (loading screen logic)
+5. `ssz_script/ssz/common.ssz` — 1199 lines ✅ Phase 3 scaffolding complete (game state + utilities)
+6. `ssz_script/ssz/script.ssz` — 2216 lines ✅ Phase 3 scaffolding complete (SSZ script runtime API)
+7. `ssz_script/ssz/system-script.ssz` — 2403 lines ✅ Phase 3 scaffolding complete (system-level Lua bridge)
+8. `ssz_script/ssz/trigger-script.ssz` — 1633 lines ✅ Phase 3 scaffolding complete (trigger evaluation engine)
 9. `ssz_script/ssz/statebuilder.ssz` — 9334 lines (last)
 
 `statebuilder.ssz` is the largest file and should be converted only after smaller modules establish patterns.
@@ -585,6 +585,69 @@ An SSZ module can be considered converted only when:
 - [x] Compilation tests in `test_file.cpp` (32 tests) — struct init, stub calls, file load stubs
 - [ ] Wire stubs to real logic — deferred until Lua bridge layer (sc/tscri/sscri) is refactored
 
+## Phase 3 — Loader Service (scaffolding)
+
+- [x] `main/ssz_native/loader_service.hpp` — `LoaderState` enum, `LoaderData` struct, 7 function declarations
+  - `LoaderState`: `NotYet`, `Loading`, `Complete`, `Error`, `Cancel`
+  - `LoaderData`: `state`, `errorMes`, `sszc` (opaque)
+  - Stubs: `loader_error`, `loader_stage`, `loader_chara`, `loader_state_compile`, `loader_load`, `loader_reset`, `loader_run_tread`
+- [x] `main/ssz_native/loader_service.cpp` — all 7 function stubs (no-ops)
+- [x] `IKEMEN_NATIVE_LOADER_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for loader
+- [x] Compilation tests in `test_file.cpp` (13 tests) — state enum, struct init, 7 stub calls
+- [ ] Wire stubs to real logic — deferred until dependent modules (com, chr, sff, stage, statebuilder, system-script, sdlplugin) are at least partially native
+
+## Phase 3 — Common Service (scaffolding)
+
+- [x] `main/ssz_native/common_service.hpp` — `CommonData` struct + nested types + 17 function declarations
+  - `TeamMode` enum: `Single`, `Simul`, `Turns`
+  - Point types: `IXY`, `FXY`
+  - Camera types: `CameraStageData`, `CameraData`
+  - Utility types: `LayoutData`, `PalFXData`, `SectionData` (opaque)
+  - `CommonData` struct with ~90 fields (game state, timer, score, camera, display flags, etc.)
+  - Stubs: `flag_init`, `reset_remap_input`, `set_size`, `tick_frame`, `tick_next_frame`, `tick_interpola`, `add_frame_time`, `reset_frame_time`, `match_over`, `next_line`, `split_lines`, `atof`, `atoi`, `load_text`, `read_file_name`, `load_file`
+- [x] `main/ssz_native/common_service.cpp` — all 17 function stubs (no-ops)
+- [x] `IKEMEN_NATIVE_COMMON_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for common
+- [x] Compilation tests in `test_file.cpp` (~30 tests) — default init, nested structs, enums, stubs, field mutation
+- [ ] Wire stubs to real logic — deferred until dependent modules (file, string, math, mesdialog, sdlevent, sdl, table) are at least partially native
+
+## Phase 3 — Trigger Script Service (scaffolding)
+
+- [x] `main/ssz_native/trigger_script_service.hpp` — `TriggerScriptState` struct + `register_function` declaration
+  - 170+ Lua callback functions in ssz_script/ssz/trigger-script.ssz (trigger evaluation engine)
+  - Functions expose game state to Lua: character position, life, power, state, hit detection, camera, etc.
+  - All follow the pattern `void func(lua_State* L, int& re)`
+  - Headers lists function categories (player/parent/root/helper/target/etc.) but individual stubs are deferred — too numerous (170+) to stub individually during scaffolding
+- [x] `main/ssz_native/trigger_script_service.cpp` — `register_function` stub (no-op)
+- [x] `IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for trigger_script
+- [x] Compilation tests in `test_file.cpp` (2 tests) — struct init, stub call
+- [ ] Wire stubs to real logic — deferred until dependent modules (lua, char, chr, com, cmd, common, math, string) are native
+
+## Phase 3 — Script Service (scaffolding)
+
+- [x] `main/ssz_native/script_service.hpp` — `ScriptState` struct + `script_init` declaration
+  - 250+ Lua-callable functions in ssz_script/ssz/script.ssz (SSZ script runtime API)
+  - Functions cover: argument parsing (numArg, strArg, blArg, refArg), subsystem wrappers (SFF, sound, font, command, video), system-script init, trigger registration
+  - All follow the pattern `void func(lua_State* L, int& re)` or return double/bool
+- [x] `main/ssz_native/script_service.cpp` — `script_init` stub (no-op)
+- [x] `IKEMEN_NATIVE_SCRIPT_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for script
+- [x] Compilation tests in `test_file.cpp` (2 tests) — struct init, stub call
+- [ ] Wire stubs to real logic — deferred until dependent modules (consts, file, math, shell, string, lua, mesdialog, sdlevent, sdlplugin, char, cmd, com, font, sff, sound, video) are native
+
+## Phase 3 — System Script Service (scaffolding)
+
+- [x] `main/ssz_native/system_script_service.hpp` — `SystemScriptState` struct + `system_script_init` declaration
+  - 200+ Lua-callable functions in ssz_script/ssz/system-script.ssz (system-level Lua bridge)
+  - Functions cover: game initialization, match flow, rendering, audio, select screen, pause menu, results screen, main game loop
+- [x] `main/ssz_native/system_script_service.cpp` — `system_script_init` stub (no-op)
+- [x] `IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB` feature flag (default 1) in Makefile
+- [x] `native_manifest` entry for system_script
+- [x] Compilation tests in `test_file.cpp` (2 tests) — struct init, stub call
+- [ ] Wire stubs to real logic — deferred until all dependent modules (consts, math, string, lua, sdlevent, sdlplugin, thread, bg, chr, cmd, com, font, script, sff, sound, system, video) are native
+
 ### Whole-migration
 
 The SSZ script layer migration is complete when:
@@ -694,6 +757,26 @@ The SSZ script layer migration is complete when:
   - `DebugScriptState` struct + 27 Lua callback function stubs.
   - Feature flag `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB`, Makefile wiring, compilation test.
   - Logic wiring deferred until Lua bridge layer (sc/tscri/sscri) is refactored.
+- [x] Phase 3: `loader_service.hpp/.cpp` scaffolding.
+  - `LoaderState` enum, `LoaderData` struct, 7 function stubs.
+  - Feature flag `IKEMEN_NATIVE_LOADER_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until com/chr/sff/stage/statebuilder modules are native.
+- [x] Phase 3: `common_service.hpp/.cpp` scaffolding.
+  - `CommonData` struct (~90 fields), nested types, 17 function stubs.
+  - Feature flag `IKEMEN_NATIVE_COMMON_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until file/string/math/mesdialog/sdlevent/sdl/table modules are native.
+- [x] Phase 3: `trigger_script_service.hpp/.cpp` scaffolding.
+  - `TriggerScriptState` struct, `register_function` stub (170+ Lua callback functions).
+  - Feature flag `IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until lua/char/chr/com/cmd/common/math/string modules are native.
+- [x] Phase 3: `script_service.hpp/.cpp` scaffolding.
+  - `ScriptState` struct, `script_init` stub (250+ Lua callback functions).
+  - Feature flag `IKEMEN_NATIVE_SCRIPT_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until 19+ dependent modules are native.
+- [x] Phase 3: `system_script_service.hpp/.cpp` scaffolding.
+  - `SystemScriptState` struct, `system_script_init` stub (200+ system-level Lua callbacks).
+  - Feature flag `IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB`, Makefile wiring, compilation test.
+  - Logic wiring deferred until all 16 dependent modules are native.
 
 ## Naming note
 
