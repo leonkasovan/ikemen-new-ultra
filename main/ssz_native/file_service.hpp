@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,19 @@ private:
 
 // Read entire file into a byte vector.
 SszBytes read_all(const std::wstring& path);
+
+// Read entire file into an array of T (generic, matching SSZ ..readAll<_t>).
+// Elements are read as raw bytes; sizeof(T) must evenly divide file size.
+template <typename T>
+std::vector<T> read_all_as(const std::wstring& path) {
+    auto bytes = read_all(path);
+    std::vector<T> result;
+    if (bytes.data.empty()) return result;
+    size_t count = bytes.data.size() / sizeof(T);
+    result.resize(count);
+    std::memcpy(result.data(), bytes.data.data(), count * sizeof(T));
+    return result;
+}
 
 // Text file I/O
 std::wstring load_ascii_text(const std::wstring& path);

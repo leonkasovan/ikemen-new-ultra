@@ -350,7 +350,7 @@ void SSZ_STDCALL RegexSearch(PluginUtil*, Reference matches, Reference str, RNS:
 
 // --- file (18) ---
 intptr_t SSZ_STDCALL Open(PluginUtil*, Reference md, Reference fn) {
-    return Open(W(md), W(fn));
+    return Open(W(fn), W(md));
 }
 void     SSZ_STDCALL FileClose(PluginUtil*, FILE* f) { FileClose(f); }
 bool     SSZ_STDCALL Read(PluginUtil*, intptr_t sz, Reference buf, FILE* f) {

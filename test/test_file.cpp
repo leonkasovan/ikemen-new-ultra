@@ -39,6 +39,23 @@
 #include "ssz_native/trigger_script_service.hpp"
 #include "ssz_native/script_service.hpp"
 #include "ssz_native/system_script_service.hpp"
+#include "ssz_native/statebuilder_service.hpp"
+#include "ssz_native/font_service.hpp"
+#include "ssz_native/video_service.hpp"
+#include "ssz_native/action_service.hpp"
+#include "ssz_native/sound_resource_service.hpp"
+#include "ssz_native/fighting_service.hpp"
+#include "ssz_native/bg_service.hpp"
+#include "ssz_native/stage_service.hpp"
+#include "ssz_native/sff_service.hpp"
+#include "ssz_native/command_service.hpp"
+#include "ssz_native/fight_service.hpp"
+#include "ssz_native/char_service.hpp"
+#include "ssz_native/sdlevent_service.hpp"
+#include "ssz_native/sdlplugin_service.hpp"
+#include "ssz_native/config_service.hpp"
+#include "ssz_native/config_net_service.hpp"
+#include "ssz_native/stack_service.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -520,6 +537,99 @@ static void test_string_service()
     // to_octal
     TEST_EQ(L"octal 8", s::to_octal(8), L"10");
     TEST_EQ(L"octal 0", s::to_octal(0), L"0");
+
+    // next_line
+    {
+        std::wstring str = L"hello\nworld\r\nend";
+        intptr_t idx = 0;
+        int r1 = s::next_line(idx, str);
+        TEST(L"next_line finds \\n", r1 == 1);
+        TEST(L"next_line idx after \\n", idx == 6);
+        int r2 = s::next_line(idx, str);
+        TEST(L"next_line finds \\r\\n", r2 == 2);
+        TEST(L"next_line idx after \\r\\n", idx == 13);
+        int r3 = s::next_line(idx, str);
+        TEST(L"next_line no more", r3 == 0);
+    }
+
+    // c_match
+    TEST(L"c_match found", s::c_match(L"abc", L'b'));
+    TEST(L"c_match not found", !s::c_match(L"abc", L'z'));
+
+    // c_find
+    TEST_INT(L"c_find found", 1, s::c_find(L"aeiou", L"hello"));
+    TEST_INT(L"c_find not found", -1, s::c_find(L"xyz", L"hello"));
+
+    // s_to_number
+    {
+        double d;
+        TEST(L"s_to_number double", s::s_to_number(d, L"3.14"));
+        TEST(L"s_to_number double value", std::abs(d - 3.14) < 0.001);
+        int32_t i;
+        TEST(L"s_to_number int", s::s_to_number(i, L"42"));
+        TEST(L"s_to_number int value", i == 42);
+        TEST(L"s_to_number empty fails", !s::s_to_number(i, L""));
+        TEST(L"s_to_number negative", s::s_to_number(i, L"-7"));
+        TEST(L"s_to_number negative value", i == -7);
+    }
+
+    // s_to_n
+    TEST(L"s_to_n int", s::s_to_n<int32_t>(L"123") == 123);
+    TEST(L"s_to_n double", std::abs(s::s_to_n<double>(L"2.5") - 2.5) < 0.001);
+    TEST(L"s_to_n invalid returns 0", s::s_to_n<int32_t>(L"") == 0);
+
+    // sv_to_ary
+    {
+        auto ary = s::sv_to_ary<int32_t>(L",", L"1,2,3");
+        TEST(L"sv_to_ary size", ary.size() == 3);
+        if (ary.size() == 3) {
+            TEST(L"sv_to_ary[0]", ary[0] == 1);
+            TEST(L"sv_to_ary[1]", ary[1] == 2);
+            TEST(L"sv_to_ary[2]", ary[2] == 3);
+        }
+    }
+
+    // copy_array
+    {
+        std::vector<int> src = {1, 2, 3};
+        std::vector<int> dst = {0, 0, 0, 0};
+        s::copy_array(dst, src);
+        TEST(L"copy_array[0]", dst[0] == 1);
+        TEST(L"copy_array[2]", dst[2] == 3);
+        TEST(L"copy_array[3] unchanged", dst[3] == 0);
+    }
+
+    // clone_array
+    {
+        std::vector<int> src = {10, 20, 30};
+        auto cloned = s::clone_array(src);
+        TEST(L"clone_array size", cloned.size() == 3);
+        TEST(L"clone_array[1]", cloned[1] == 20);
+    }
+
+    // each
+    {
+        std::vector<int> ary = {1, 2, 3};
+        s::each<int>([](int& v) { v *= 2; }, ary);
+        TEST(L"each doubled[0]", ary[0] == 2);
+        TEST(L"each doubled[2]", ary[2] == 6);
+    }
+
+    // to_hex (array)
+    {
+        std::vector<uint8_t> bytes = {0xAB, 0xCD};
+        auto hex = s::to_hex(bytes);
+        TEST_EQ(L"to_hex bytes", hex, L"abcd");
+    }
+
+    // to_ubyte
+    {
+        std::vector<uint16_t> shorts = {0x0102};
+        auto ub = s::to_ubyte(shorts);
+        TEST(L"to_ubyte size", ub.size() == 2);
+        TEST(L"to_ubyte little-endian[0]", ub[0] == 0x02);
+        TEST(L"to_ubyte little-endian[1]", ub[1] == 0x01);
+    }
 }
 
 // ---- Ogg service tests (ssz_native::ogg) ----
@@ -658,6 +768,41 @@ static void test_table_service()
     int sum = 0;
     nt.for_each([&sum](const std::wstring&, const int& val) { sum += val; });
     TEST(L"NameTable for_each sum", sum == 300);
+
+    // operate (get-or-create)
+    nt.operate(L"z", [](int& v) { v = 999; });
+    v = nt.get(L"z");
+    TEST(L"NameTable operate creates", v != nullptr && *v == 999);
+    nt.operate(L"z", [](int& v) { v += 1; });
+    v = nt.get(L"z");
+    TEST(L"NameTable operate modifies", v != nullptr && *v == 1000);
+
+    // each_value
+    int vsum = 0;
+    nt.each_value([&vsum](const int& val) { vsum += val; });
+    TEST(L"NameTable each_value sum > 0", vsum > 0);
+
+    // int_hash
+    auto ih1 = t::int_hash<int32_t>(42);
+    auto ih2 = t::int_hash<int32_t>(42);
+    TEST(L"int_hash deterministic", ih1 == ih2);
+    TEST(L"int_hash different", t::int_hash<int32_t>(1) != t::int_hash<int32_t>(2));
+
+    // IntTable
+    t::IntTable<int32_t, std::string> it;
+    TEST(L"IntTable initially empty", it.size() == 0);
+    it.set(1, "one");
+    it.set(2, "two");
+    it.set(3, "three");
+    TEST(L"IntTable size 3", it.size() == 3);
+    const std::string* sv = it.get(2);
+    TEST(L"IntTable get 2", sv != nullptr && *sv == "two");
+    TEST(L"IntTable contains 1", it.contains(1));
+    TEST(L"IntTable not contains 99", !it.contains(99));
+    TEST(L"IntTable remove 2", it.remove(2));
+    TEST(L"IntTable size after remove", it.size() == 2);
+    it.clear();
+    TEST(L"IntTable empty after clear", it.size() == 0);
 }
 
 // ---- Lua service tests (ssz_native::lua) ----
@@ -743,6 +888,300 @@ static void test_share_service()
     TEST(L"ShareData float fields", sd2.zoomMin == 0.5f);
     TEST(L"ShareData string fields", sd2.operatingSystem == "Windows");
     TEST(L"ShareData vector fields", sd2.com.size() == 1 && sd2.com[0] == 42);
+}
+
+// ---- Fight service tests (ssz_native::fight) ----
+
+static void test_fight_service()
+{
+    std::wcout << L"\n--- Fight service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    FightState fs;
+    TEST(L"FightState created", true);
+}
+
+// ---- Stack service tests (ssz_native::stack) ----
+
+static void test_stack_service()
+{
+    std::wcout << L"\n--- Stack service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    Stack<int> s;
+    TEST(L"Stack initially empty", s.empty());
+    TEST(L"Stack size == 0", s.size() == 0);
+
+    s.push(42);
+    TEST(L"Stack not empty after push", !s.empty());
+    TEST(L"Stack size == 1", s.size() == 1);
+
+    s.push(100);
+    TEST(L"Stack size == 2", s.size() == 2);
+
+    int val = s.pop();
+    TEST(L"Stack pop returns last pushed", val == 100);
+    TEST(L"Stack size == 1 after pop", s.size() == 1);
+
+    val = s.pop();
+    TEST(L"Stack pop returns first pushed", val == 42);
+    TEST(L"Stack empty after all pops", s.empty());
+
+    s.push(1);
+    s.push(2);
+    s.push(3);
+    s.clear();
+    TEST(L"Stack empty after clear", s.empty());
+
+    // top()
+    Stack<int> s2;
+    TEST(L"Stack top on empty returns nullptr", s2.top() == nullptr);
+    s2.push(42);
+    s2.push(99);
+    const int* tp = s2.top();
+    TEST(L"Stack top not null", tp != nullptr);
+    TEST(L"Stack top returns last pushed", tp != nullptr && *tp == 99);
+    TEST(L"Stack top does not remove", s2.size() == 2);
+}
+
+// ---- Config service tests (ssz_native::config) ----
+
+static void test_config_service()
+{
+    std::wcout << L"\n--- Config service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    ConfigData cfg;
+    TEST(L"Config Width == 640", cfg.Width == 640);
+    TEST(L"Config Height == 480", cfg.Height == 480);
+    TEST(L"Config GameSpeed == 60", cfg.GameSpeed == 60);
+    TEST(L"Config GlVol == 0.8", std::abs(cfg.GlVol - 0.8f) < 0.001f);
+    TEST(L"Config HelperMax == 56", cfg.HelperMax == 56);
+    TEST(L"Config CharPortraitsGroup == 9000", cfg.CharPortraitsGroup == 9000);
+    TEST(L"Config WindowTitle default", cfg.WindowTitle == "I.K.E.M.E.N. PLUS ULTRA");
+    TEST(L"Config Executable default", cfg.Executable == "Ikemen Plus Ultra.exe");
+    TEST(L"Config IgnoreMostErrors default", cfg.IgnoreMostErrors == true);
+
+    // ConfigNet defaults
+    ConfigData net = make_default_config_net();
+    TEST(L"ConfigNet Width == 1280", net.Width == 1280);
+    TEST(L"ConfigNet Height == 800", net.Height == 800);
+    TEST(L"ConfigNet CharWinnerPortraitIndex == 2", net.CharWinnerPortraitIndex == 2);
+    TEST(L"ConfigNet CharLoserPortraitIndex == 3", net.CharLoserPortraitIndex == 3);
+    TEST(L"ConfigNet CharVSPortraitIndex == 5", net.CharVSPortraitIndex == 5);
+    TEST(L"ConfigNet CharResultsPortraitIndex == 6", net.CharResultsPortraitIndex == 6);
+
+    // make_default_config has input bindings
+    ConfigData full = make_default_config();
+    TEST(L"Config Input[0] jn == -1 (keyboard)", full.Input[0].jn == -1);
+    TEST(L"Config Input[2] jn == 0 (gamepad)", full.Input[2].jn == 0);
+    TEST(L"Config Input[10] jn == -1 (menu keyboard)", full.Input[10].jn == -1);
+
+    // KeyBindings set
+    KeyBindings kb;
+    kb.set(-1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+    TEST(L"KeyBindings set jn", kb.jn == -1);
+    TEST(L"KeyBindings set u", kb.u == 1);
+    TEST(L"KeyBindings set s", kb.s == 14);
+
+    // Config save/load roundtrip
+    {
+        ConfigData save_cfg = make_default_config();
+        save_cfg.Width = 800;
+        save_cfg.Height = 600;
+        save_cfg.GameSpeed = 30;
+        save_cfg.UserName = "TestUser";
+        save_cfg.Input[0].jn = -1;
+        save_cfg.Input[0].u = 273;
+
+        bool saved = config_save("test_config_roundtrip.ini", save_cfg);
+        TEST(L"config_save succeeds", saved);
+
+        ConfigData loaded;
+        bool loaded_ok = config_load("test_config_roundtrip.ini", loaded);
+        TEST(L"config_load succeeds", loaded_ok);
+        TEST(L"config roundtrip Width", loaded.Width == 800);
+        TEST(L"config roundtrip Height", loaded.Height == 600);
+        TEST(L"config roundtrip GameSpeed", loaded.GameSpeed == 30);
+        TEST(L"config roundtrip UserName", loaded.UserName == "TestUser");
+        TEST(L"config roundtrip Input[0].jn", loaded.Input[0].jn == -1);
+        TEST(L"config roundtrip Input[0].u", loaded.Input[0].u == 273);
+
+        std::remove("test_config_roundtrip.ini");
+    }
+
+    // config_load nonexistent returns false
+    {
+        ConfigData c;
+        TEST(L"config_load nonexistent fails", !config_load("nonexistent_config.ini", c));
+    }
+}
+
+// ---- SDL plugin script service tests (ssz_native::sdlplugin) ----
+
+static void test_sdlplugin_script_service()
+{
+    std::wcout << L"\n--- SDL plugin script service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    SdlPluginState ps;
+    TEST(L"SdlPluginState created", true);
+}
+
+// ---- SDL event service tests (ssz_native::sdlevent) ----
+
+static void test_sdlevent_service()
+{
+    std::wcout << L"\n--- SDL event service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    SdlEventState es;
+    TEST(L"SdlEventState created", true);
+    sdlevent_poll();
+    TEST(L"sdlevent_poll() no-crash", true);
+}
+
+// ---- Char service tests (ssz_native::char) ----
+
+static void test_char_service()
+{
+    std::wcout << L"\n--- Char service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    CharState cs;
+    TEST(L"CharState created", true);
+}
+
+// ---- Command service tests (ssz_native::command) ----
+
+static void test_command_service()
+{
+    std::wcout << L"\n--- Command service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    CommandState cs;
+    TEST(L"CommandState created", true);
+}
+
+// ---- SFF service tests (ssz_native::sff) ----
+
+static void test_sff_service()
+{
+    std::wcout << L"\n--- SFF service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    SffState ss;
+    TEST(L"SffState created", true);
+}
+
+// ---- Stage service tests (ssz_native::stage) ----
+
+static void test_stage_service()
+{
+    std::wcout << L"\n--- Stage service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    StageData sd;
+    TEST(L"StageData def empty", sd.def.empty());
+    TEST(L"StageData name empty", sd.name.empty());
+    TEST(L"StageData music empty", sd.music.empty());
+}
+
+// ---- BG service tests (ssz_native::bg) ----
+
+static void test_bg_service()
+{
+    std::wcout << L"\n--- BG service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    BgState bs;
+    TEST(L"BgState created", true);
+}
+
+// ---- Fighting service tests (ssz_native::fighting) ----
+
+static void test_fighting_service()
+{
+    std::wcout << L"\n--- Fighting service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    FightingState fs;
+    TEST(L"FightingState created", true);
+    fighting_init();
+    TEST(L"fighting_init() no-crash", true);
+}
+
+// ---- Sound resource service tests (ssz_native::sound_resource) ----
+
+static void test_sound_resource_service()
+{
+    std::wcout << L"\n--- Sound resource service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    SndNnm sn;
+    TEST(L"SndNnm default group==-1", sn.group == -1);
+    TEST(L"SndNnm default number==0", sn.number == 0);
+    SndNnm sn2{5, 10};
+    TEST(L"SndNnm aggregate init", sn2.group == 5 && sn2.number == 10);
+    WaveData wd;
+    TEST(L"WaveData samplesPerSec==44100", wd.samplesPerSec == 44100);
+    TEST(L"WaveData wav empty", wd.wav.empty());
+    BgmData bd;
+    TEST(L"BgmData fileName empty", bd.fileName.empty());
+    TEST(L"BgmData volume==100", bd.volume == 100);
+}
+
+// ---- Action service tests (ssz_native::action) ----
+
+static void test_action_service()
+{
+    std::wcout << L"\n--- Action service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    Rect r;
+    TEST(L"Rect default l==0", r.l == 0);
+    TEST(L"Rect default r==-1", r.r == -1);
+    Rect r2{10, 20, 30, 40};
+    TEST(L"Rect aggregate init", r2.l == 10 && r2.t == 20 && r2.r == 30 && r2.b == 40);
+    Frame f;
+    TEST(L"Frame default time==-1", f.time == -1);
+    TEST(L"Frame default group==-1", f.group == -1);
+    TEST(L"Frame default clsn empty", f.clsn.empty());
+    ActionData a;
+    TEST(L"ActionData created", true);
+    DrawnClsnData dc;
+    TEST(L"DrawnClsnData created", true);
+}
+
+// ---- Video service tests (ssz_native::video) ----
+
+static void test_video_service()
+{
+    std::wcout << L"\n--- Video service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    VideoData vd;
+    VideoState vs;
+    TEST(L"VideoData fileName empty", vd.fileName.empty());
+    TEST(L"VideoData volume == 100", vd.volume == 100);
+    TEST(L"VideoState videoActive false", vs.videoActive == false);
+    video_play("test.mp4", "", 100, 1);
+    TEST(L"video_play no-crash", true);
+}
+
+// ---- Font service tests (ssz_native::font) ----
+
+static void test_font_service()
+{
+    std::wcout << L"\n--- Font service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    FontData fd;
+    FontState fs;
+    TEST(L"FontData created", true);
+    TEST(L"FontState created", true);
+    font_init();
+    font_render_text("hello", 0, 0, 0xFFFFFFFF);
+    TEST(L"font stubs no-crash", true);
+}
+
+// ---- Statebuilder service tests (ssz_native::statebuilder) ----
+
+static void test_statebuilder_service()
+{
+    std::wcout << L"\n--- Statebuilder service ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    StateBuilderState sb;
+    TEST(L"StateBuilderState created", true);
+    statebuilder_init();
+    TEST(L"statebuilder_init() no-crash", true);
 }
 
 // ---- System script service tests (ssz_native::system_script) ----
@@ -1071,6 +1510,30 @@ static void test_crypto_service()
 
     std::vector<uint8_t> md5_hello = {'H', 'e', 'l', 'l', 'o'};
     TEST_EQ(L"md5_hex Hello", c::md5_hex(md5_hello), "8b1a9953c4611296a827abf8c47804d7");
+
+    // uint_to_b64_char
+    TEST(L"uint_to_b64_char 0 == 'A'", c::uint_to_b64_char(0) == 'A');
+    TEST(L"uint_to_b64_char 25 == 'Z'", c::uint_to_b64_char(25) == 'Z');
+    TEST(L"uint_to_b64_char 26 == 'a'", c::uint_to_b64_char(26) == 'a');
+    TEST(L"uint_to_b64_char 52 == '0'", c::uint_to_b64_char(52) == '0');
+    TEST(L"uint_to_b64_char 62 == '+'", c::uint_to_b64_char(62) == '+');
+    TEST(L"uint_to_b64_char 63 == '/'", c::uint_to_b64_char(63) == '/');
+
+    // Arcfour get_byte
+    {
+        c::Arcfour rc4a, rc4b;
+        std::vector<uint8_t> key = {'K', 'e', 'y'};
+        rc4a.init(key);
+        rc4b.init(key);
+        bool match = true;
+        for (int i = 0; i < 32; i++) {
+            uint8_t a = rc4a.get_byte();
+            std::vector<uint8_t> one = {0};
+            auto enc = rc4b.encrypt(one);
+            if (a != enc[0]) { match = false; break; }
+        }
+        TEST(L"Arcfour get_byte matches encrypt", match);
+    }
 }
 
 // ---- Mesdialog service tests (ssz_native::mesdialog) ----
@@ -1330,6 +1793,22 @@ static void test_file_handle()
 
     // Cleanup free-function test files
     Delete(TMPFILE2);
+
+    // read_all_as<T> template
+    {
+        FileHandle wfh;
+        wfh.open(TMPFILE, L"w+b");
+        int32_t ints[] = {10, 20, 30, 40};
+        wfh.write(ints, sizeof(ints));
+        wfh.close();
+
+        auto result = read_all_as<int32_t>(TMPFILE);
+        TEST(L"read_all_as size", result.size() == 4);
+        if (result.size() == 4) {
+            TEST(L"read_all_as[0]", result[0] == 10);
+            TEST(L"read_all_as[3]", result[3] == 40);
+        }
+    }
 }
 
 // ---- Main ----
@@ -1365,6 +1844,22 @@ int main()
     test_trigger_script_service();
     test_script_service();
     test_system_script_service();
+    test_statebuilder_service();
+    test_font_service();
+    test_video_service();
+    test_action_service();
+    test_sound_resource_service();
+    test_fighting_service();
+    test_bg_service();
+    test_stage_service();
+    test_sff_service();
+    test_command_service();
+    test_fight_service();
+    test_char_service();
+    test_sdlevent_service();
+    test_sdlplugin_script_service();
+    test_config_service();
+    test_stack_service();
     test_shell_service();
     test_alert_service();
     test_crypto_service();

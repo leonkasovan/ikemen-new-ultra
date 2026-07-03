@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
+#include <cwchar>
 
 namespace ikemen::ssz_native::string_util {
 
@@ -224,6 +226,76 @@ std::wstring percent_decode(const std::wstring& str) {
         return from_utf8(utf8);
     }
     return str;
+}
+
+// ---- Next line ----
+
+int next_line(intptr_t& idx, const std::wstring& str) {
+    while (idx < static_cast<intptr_t>(str.size())) {
+        if (str[idx] == L'\n') {
+            idx++;
+            return 1;
+        }
+        if (str[idx] == L'\r') {
+            if (idx + 1 < static_cast<intptr_t>(str.size()) && str[idx + 1] == L'\n') {
+                idx += 2;
+                return 2;
+            }
+            idx++;
+            return 1;
+        }
+        idx++;
+    }
+    return 0;
+}
+
+// ---- Character find ----
+
+intptr_t c_find(const std::wstring& cclass, const std::wstring& str) {
+    for (size_t i = 0; i < str.size(); i++) {
+        if (c_match(cclass, str[i]))
+            return static_cast<intptr_t>(i);
+    }
+    return -1;
+}
+
+// ---- String-to-number ----
+
+bool s_to_number(double& out, const std::wstring& s) {
+    std::wstring t = trim(s);
+    if (t.empty()) return false;
+    wchar_t* end = nullptr;
+    double val = std::wcstod(t.c_str(), &end);
+    if (end == t.c_str()) return false;
+    out = val;
+    return true;
+}
+
+bool s_to_number(float& out, const std::wstring& s) {
+    double d;
+    if (!s_to_number(d, s)) return false;
+    out = static_cast<float>(d);
+    return true;
+}
+
+bool s_to_number(int32_t& out, const std::wstring& s) {
+    std::wstring t = trim(s);
+    if (t.empty()) return false;
+    wchar_t* end = nullptr;
+    long val = std::wcstol(t.c_str(), &end, 10);
+    if (end == t.c_str()) return false;
+    out = static_cast<int32_t>(val);
+    return true;
+}
+
+bool s_to_number(int64_t& out, const std::wstring& s) {
+    std::wstring t = trim(s);
+    if (t.empty()) return false;
+    wchar_t* end = nullptr;
+    long long val = std::wcstoll(t.c_str(), &end, 10);
+    if (end == t.c_str()) return false;
+    out = static_cast<int64_t>(val);
+    return true;
 }
 
 } // namespace ikemen::ssz_native::string_util

@@ -14,7 +14,10 @@
 // is therefore natural — there is no plugin layer to call through.
 
 #include <cstdint>
+#include <cstring>
+#include <functional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace ikemen::ssz_native::string_util {
@@ -49,6 +52,78 @@ std::vector<std::wstring> split_lines(const std::wstring& str);
 // Join vector of strings with delimiter between each pair.
 std::wstring join(const std::wstring& delimiter, const std::vector<std::wstring>& parts);
 
+// Scan str starting at index for a newline. Returns 1 for \n, 2 for \r\n, 0 if none.
+// Advances idx past the newline.
+int next_line(intptr_t& idx, const std::wstring& str);
+
+// Returns true if item is found in cclass (character-class membership test).
+template <typename T>
+bool c_match(const std::vector<T>& cclass, const T& item) {
+    for (const auto& c : cclass)
+        if (c == item) return true;
+    return false;
+}
+
+inline bool c_match(const std::wstring& cclass, wchar_t item) {
+    for (wchar_t c : cclass)
+        if (c == item) return true;
+    return false;
+}
+
+// Returns index of first char in str matching any char in cclass, or -1.
+intptr_t c_find(const std::wstring& cclass, const std::wstring& str);
+
+// ---- String-to-number ----
+
+// Parse string into numeric value. Returns true on success.
+bool s_to_number(double& out, const std::wstring& s);
+bool s_to_number(int32_t& out, const std::wstring& s);
+bool s_to_number(int64_t& out, const std::wstring& s);
+bool s_to_number(float& out, const std::wstring& s);
+
+// Convenience: parse string to number, returning 0 on failure.
+template <typename T>
+T s_to_n(const std::wstring& s) {
+    T d = static_cast<T>(0);
+    s_to_number(d, s);
+    return d;
+}
+
+// Split string by delimiter, convert each piece to T.
+template <typename T>
+std::vector<T> sv_to_ary(const std::wstring& delimiter, const std::wstring& v) {
+    auto parts = split(delimiter, v);
+    std::vector<T> result;
+    result.reserve(parts.size());
+    for (const auto& p : parts)
+        result.push_back(s_to_n<T>(p));
+    return result;
+}
+
+// ---- Array operations ----
+
+// Copy elements from src into dist, up to the shorter length.
+template <typename T>
+void copy_array(std::vector<T>& dist, const std::vector<T>& src) {
+    size_t len = dist.size() < src.size() ? dist.size() : src.size();
+    for (size_t i = 0; i < len; i++)
+        dist[i] = src[i];
+}
+
+// Clone: return a copy of src.
+template <typename T>
+std::vector<T> clone_array(const std::vector<T>& src) {
+    return src;
+}
+
+// Apply callback to each element (by reference, allowing mutation). Returns the array.
+template <typename T>
+std::vector<T>& each(const std::function<void(T&)>& callback, std::vector<T>& ary) {
+    for (auto& elem : ary)
+        callback(elem);
+    return ary;
+}
+
 // ---- Number-to-string ----
 
 // Integer to octal string.
@@ -59,6 +134,40 @@ std::wstring to_hex_lower(uint64_t value);
 
 // Integer to uppercase hex string.
 std::wstring to_hex_upper(uint64_t value);
+
+// Convert array of any trivial type to lowercase hex string (big-endian per element).
+template <typename T>
+std::wstring to_hex(const std::vector<T>& src) {
+    static_assert(std::is_trivially_copyable<T>::value, "to_hex requires trivially copyable type");
+    std::wstring result;
+    const wchar_t* hex = L"0123456789abcdef";
+    for (const auto& elem : src) {
+        for (int j = static_cast<int>(sizeof(T)) * 8 - 4; j >= 0; j -= 4) {
+            uint64_t v;
+            if constexpr (std::is_signed<T>::value) {
+                v = static_cast<uint64_t>(static_cast<typename std::make_unsigned<T>::type>(elem)) >> j;
+            } else {
+                v = static_cast<uint64_t>(elem) >> j;
+            }
+            result += hex[v & 0xf];
+        }
+    }
+    return result;
+}
+
+// Convert array of any trivial type to byte array (little-endian).
+template <typename T>
+std::vector<uint8_t> to_ubyte(const std::vector<T>& src) {
+    static_assert(std::is_trivially_copyable<T>::value, "to_ubyte requires trivially copyable type");
+    std::vector<uint8_t> result;
+    result.reserve(src.size() * sizeof(T));
+    for (const auto& elem : src) {
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(&elem);
+        for (size_t j = 0; j < sizeof(T); j++)
+            result.push_back(p[j]);
+    }
+    return result;
+}
 
 // ---- Encoding ----
 

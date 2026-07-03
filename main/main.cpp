@@ -20,6 +20,11 @@
 #include "thread_static.hpp"
 #include "time_static.hpp"
 
+#if IKEMEN_NATIVE_CONFIG_LIB
+#include "ssz_native/config_service.hpp"
+#include "ssz_native/config_net_service.hpp"
+#endif
+
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -405,6 +410,20 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");
+
+#if IKEMEN_NATIVE_CONFIG_LIB
+	{
+		using namespace ikemen::ssz_native;
+		ConfigData cfg = make_default_config();
+		if (config_load("save/config.ini", cfg)) {
+			LOG_DEBUG("SSZ", "Native config loaded from save/config.ini");
+		} else {
+			LOG_DEBUG("SSZ", "Using default native config (save/config.ini not found)");
+		}
+		LOG_DEBUG("SSZ", "Config: %dx%d Renderer=%d GameSpeed=%d",
+			cfg.Width, cfg.Height, cfg.Renderer, cfg.GameSpeed);
+	}
+#endif
 
 	updateCharInSelectDef("data/select.def");
 	updateStageInSelectDef("data/select.def");

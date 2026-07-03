@@ -133,26 +133,61 @@ struct SystemData {
 
 // select_* — methods on SelectData
 inline int SelectData::getCharNo(int i) const {
-	// Phase 3 stub
-	return 0;
+	int n = static_cast<int>(charlist.size());
+	if (n > 0) {
+		i %= n;
+		if (i < 0) i += n;
+	}
+	return i;
 }
 inline const SelectCharData* SelectData::getChar(int i) const {
+	int n = getCharNo(i);
+	if (n >= 0 && n < static_cast<int>(charlist.size()))
+		return &charlist[n];
 	return nullptr;
 }
-inline int SelectData::getStageNo(int i) const { return 0; }
-inline const SelectStageData* SelectData::getStage(int i) const { return nullptr; }
+inline int SelectData::getStageNo(int i) const {
+	int n = static_cast<int>(stagelist.size());
+	if (n > 0) {
+		i %= n;
+		if (i < 0) i += n;
+	}
+	return i;
+}
+inline const SelectStageData* SelectData::getStage(int i) const {
+	int n = getStageNo(i);
+	if (n >= 0 && n < static_cast<int>(stagelist.size()))
+		return &stagelist[n];
+	return nullptr;
+}
 inline int SelectData::setStageNo(int i) {
-	curStageNo = 0;
-	return 0;
+	int n = static_cast<int>(stagelist.size());
+	curStageNo = i % (n + 1);
+	if (curStageNo < 0) curStageNo += n + 1;
+	return curStageNo;
 }
 inline void SelectData::selectStage(int no) { selectedStageNo = no; }
-inline std::string SelectData::getStageName(int i) const { return {}; }
+inline std::string SelectData::getStageName(int i) const {
+	int n = static_cast<int>(stagelist.size());
+	i %= n + 1;
+	if (i < 0) i += n + 1;
+	if (i == 0) return "RANDOM";
+	return stagelist[i - 1].name;
+}
 inline bool SelectData::addChar(const std::string&) { return false; }
 inline std::string SelectData::addStage(const std::string&) { return {}; }
 
 // select_info_* — methods on SelectInfoData
 inline void SelectInfoData::Player::reset() { selchr.clear(); }
-inline bool SelectInfoData::addSelchr(int, int, int) { return false; }
+inline bool SelectInfoData::addSelchr(int pn, int cn, int pl) {
+	if (pn < 0 || pn >= static_cast<int>(p.size())) return false;
+	if (!sel) return false;
+	int n = sel->getCharNo(cn);
+	if (n < 0 || n >= static_cast<int>(sel->charlist.size())) return false;
+	if (sel->charlist[n].def.empty()) return false;
+	p[pn].selchr.push_back({n, pl});
+	return true;
+}
 inline void SelectInfoData::reset() {
 	for (auto& pl : p) pl.reset();
 	if (sel) sel->selectedStageNo = -1;

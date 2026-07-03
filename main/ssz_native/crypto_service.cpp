@@ -98,6 +98,16 @@ std::vector<uint8_t> Arcfour::encrypt(const std::vector<uint8_t>& src) {
     return dest;
 }
 
+uint8_t Arcfour::get_byte() {
+    x_ = static_cast<uint8_t>(x_ + 1);
+    uint8_t sx = state_[x_];
+    y_ = static_cast<uint8_t>(y_ + sx);
+    uint8_t sy = state_[y_];
+    state_[x_] = sy;
+    state_[y_] = sx;
+    return state_[static_cast<uint8_t>(sx + sy)];
+}
+
 bool arcfour_encrypt(std::vector<uint8_t>& dest, const std::vector<uint8_t>& key, const std::vector<uint8_t>& src) {
     if (key.empty()) return false;
     Arcfour rc4;

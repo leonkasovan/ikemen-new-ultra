@@ -17,6 +17,13 @@ namespace ikemen::ssz_native::crypto {
 
 // ---- Base64 ----
 
+// Convert a 6-bit value to its base64 character.
+inline char uint_to_b64_char(uint8_t n) {
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    return alphabet[n & 0x3f];
+}
+
 // Encode binary data to base64 string.
 std::string base64_encode(const std::vector<uint8_t>& data);
 
@@ -36,6 +43,9 @@ public:
 
     // Encrypt (or decrypt) a buffer in-place.
     std::vector<uint8_t> encrypt(const std::vector<uint8_t>& src);
+
+    // Generate a single cipher stream byte (matching SSZ Arcfour::getByte).
+    uint8_t get_byte();
 
     // Non-copyable, movable.
     Arcfour(const Arcfour&) = delete;

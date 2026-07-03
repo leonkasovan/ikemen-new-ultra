@@ -89,6 +89,86 @@ public:
             callback(key, val);
     }
 
+    // Get-or-create: call callback with reference to value (creates default if missing).
+    void operate(const std::wstring& name, const std::function<void(T&)>& callback) {
+        callback(map_[name]);
+    }
+
+    // Iterate values only.
+    void each_value(const std::function<void(const T&)>& callback) const {
+        for (const auto& [_, val] : map_)
+            callback(val);
+    }
+
+private:
+    Map map_;
+};
+
+// ---- Integer hash ----
+
+template <typename T>
+T int_hash(T n) {
+    T h = n;
+    for (T i = static_cast<T>(8); (static_cast<size_t>(i) >> 3) < sizeof(T); i += static_cast<T>(8))
+        h ^= h >> i;
+    return h;
+}
+
+// ---- IntTable ----
+
+template <typename Key, typename T>
+class IntTable {
+public:
+    using Map = std::unordered_map<Key, T>;
+
+    IntTable() = default;
+
+    void set(Key name, const T& item) { map_[name] = item; }
+
+    const T* get(Key name) const {
+        auto it = map_.find(name);
+        if (it != map_.end()) return &it->second;
+        return nullptr;
+    }
+
+    bool remove(Key name) { return map_.erase(name) > 0; }
+
+    bool contains(Key name) const { return map_.find(name) != map_.end(); }
+
+    size_t size() const { return map_.size(); }
+
+    void clear() { map_.clear(); }
+
+    std::vector<Key> keys() const {
+        std::vector<Key> result;
+        result.reserve(map_.size());
+        for (const auto& [key, _] : map_)
+            result.push_back(key);
+        return result;
+    }
+
+    std::vector<T> values() const {
+        std::vector<T> result;
+        result.reserve(map_.size());
+        for (const auto& [_, val] : map_)
+            result.push_back(val);
+        return result;
+    }
+
+    void for_each(const std::function<void(Key, const T&)>& callback) const {
+        for (const auto& [key, val] : map_)
+            callback(key, val);
+    }
+
+    void operate(Key name, const std::function<void(T&)>& callback) {
+        callback(map_[name]);
+    }
+
+    void each_value(const std::function<void(const T&)>& callback) const {
+        for (const auto& [_, val] : map_)
+            callback(val);
+    }
+
 private:
     Map map_;
 };
