@@ -1555,3 +1555,30 @@ extern "C" bool SSZ_STDCALL UnbindGlContext(PluginUtil* pu)
     (void)pu;
     return UnbindGlContext();
 }
+
+// =========================================================================
+// Share wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_SHARE_LIB
+#include "ssz_native/share_service.hpp"
+
+extern "C" void SSZ_STDCALL ShareCopy(PluginUtil* pu)
+{
+    //SSZ_TRACE("ShareCopy");
+    (void)pu;
+    ikemen::ssz_native::share_copy();
+}
+
+extern "C" void SSZ_STDCALL SharePush(PluginUtil* pu)
+{
+    //SSZ_TRACE("SharePush");
+    (void)pu;
+    ikemen::ssz_native::share_push();
+}
+
+#else
+// When IKEMEN_NATIVE_SHARE_LIB=0, the bridge wrappers don't exist and the
+// share_static.hpp stubs provide no-op registration. The SSZ share.ssz
+// script is used instead.
+#endif

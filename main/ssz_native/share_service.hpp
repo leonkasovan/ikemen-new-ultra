@@ -22,6 +22,8 @@
 
 namespace ikemen::ssz_native {
 
+struct CommonData;  // forward decl — full definition in common_service.hpp
+
 struct ShareData {
 	// --- chr subsystem ---
 	// c: &chr.Char         (opaque, populated when char module converted)
@@ -155,17 +157,36 @@ struct ShareData {
 	bool dbgdw{};
 	bool clsndw{};
 	bool stsdw{};
+	bool alvl{};
 	bool fullscr{};
+	std::vector<bool> powsh;
 	float bgmusic{};
 	// camstg: &.com.Camera::Stage (opaque)
 };
 
 // copy() — snapshot current game state into dst.
-// Phase 3: stub — does nothing until dependent modules are converted.
+// Reads from the internal share state (populated by modules via pull functions).
 void share_copy(ShareData& dst);
 
 // push() — restore game state from src.
-// Phase 3: stub — does nothing until dependent modules are converted.
+// Writes to the internal share state (consumed by modules via push functions).
 void share_push(const ShareData& src);
+
+// No-arg convenience wrappers for bridge/SSZ ABI.
+// These operate directly on the internal static g_snapshot:
+//   share_copy() — copies g_snapshot -> a temporary (for now a no-op
+//                   placeholder; modules call share_pull_from_* to fill it).
+//   share_push()  — pushes a default-constructed ShareData into g_snapshot
+//                   (placeholder until modules call share_push_to_*).
+void share_copy();
+void share_push();
+
+// Pull CommonData fields into a ShareData snapshot.
+// Used by common_service to publish its state to the share system.
+void share_pull_from_common(const CommonData& src, ShareData& dst);
+
+// Push ShareData fields back into CommonData.
+// Used by common_service to restore state from the share system.
+void share_push_to_common(const ShareData& src, CommonData& dst);
 
 } // namespace ikemen::ssz_native

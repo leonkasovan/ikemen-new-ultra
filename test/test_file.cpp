@@ -1184,29 +1184,123 @@ static void test_share_service()
 {
     std::wcout << L"\n--- Share service ---" << std::endl;
     using namespace ikemen::ssz_native;
+
+    // Default-initialized fields
     ShareData sd;
-    // Default-initialized fields are zero/false/empty
     TEST(L"ShareData default init tm == 0", sd.tm == 0);
     TEST(L"ShareData default init zoom == false", sd.zoom == false);
     TEST(L"ShareData default init team1VS2Life == 0", sd.team1VS2Life == 0.0f);
     TEST(L"ShareData default init operatingSystem empty", sd.operatingSystem.empty());
     TEST(L"ShareData default init com empty", sd.com.empty());
-    // copy/push are stubs — verify they compile and don't crash
-    share_copy(sd);
-    share_push(sd);
+    TEST(L"ShareData default init powsh empty", sd.powsh.empty());
+    TEST(L"ShareData default init alvl == false", sd.alvl == false);
+
+    // copy/push roundtrip through internal snapshot
+    ShareData sd1;
+    sd1.chr_home = 1;
+    sd1.chr_match = 2;
+    sd1.chr_round = 3;
+    sd1.life = 0.75f;
+    sd1.power = 3000;
+    sd1.zoom = true;
+    sd1.zoomMin = 0.5f;
+    sd1.zoomMax = 2.0f;
+    sd1.zoomSpeed = 8.0f;
+    sd1.operatingSystem = "Windows";
+    sd1.gameMode = "arcade";
+    sd1.com.push_back(42);
+    sd1.taglevel.push_back(1);
+    sd1.autoguard.push_back(false);
+    sd1.powsh.push_back(true);
+    sd1.inputRemap.push_back(-1);
+    sd1.dbgdw = true;
+    sd1.clsndw = true;
+    sd1.stsdw = true;
+    sd1.alvl = true;
+    sd1.fullscr = true;
+    sd1.exitMatch = true;
+    sd1.suaveMode = 2;
+    sd1.abyssSP1 = "test";
+    sd1.dlua = "debug.lua";
+
+    share_push(sd1);
 
     ShareData sd2;
-    sd2.chr_home = 1;
-    sd2.zoom = true;
-    sd2.zoomMin = 0.5f;
-    sd2.zoomMax = 2.0f;
-    sd2.operatingSystem = "Windows";
-    sd2.com.push_back(42);
-    TEST(L"ShareData fields hold values", sd2.chr_home == 1);
-    TEST(L"ShareData bool fields", sd2.zoom == true);
-    TEST(L"ShareData float fields", sd2.zoomMin == 0.5f);
-    TEST(L"ShareData string fields", sd2.operatingSystem == "Windows");
-    TEST(L"ShareData vector fields", sd2.com.size() == 1 && sd2.com[0] == 42);
+    share_copy(sd2);
+
+    // Verify roundtrip
+    TEST(L"share roundtrip chr_home", sd2.chr_home == 1);
+    TEST(L"share roundtrip chr_match", sd2.chr_match == 2);
+    TEST(L"share roundtrip chr_round", sd2.chr_round == 3);
+    TEST(L"share roundtrip life", sd2.life == 0.75f);
+    TEST(L"share roundtrip power", sd2.power == 3000);
+    TEST(L"share roundtrip zoom", sd2.zoom == true);
+    TEST(L"share roundtrip zoomMin", sd2.zoomMin == 0.5f);
+    TEST(L"share roundtrip zoomMax", sd2.zoomMax == 2.0f);
+    TEST(L"share roundtrip operatingSystem", sd2.operatingSystem == "Windows");
+    TEST(L"share roundtrip gameMode", sd2.gameMode == "arcade");
+    TEST(L"share roundtrip com size", sd2.com.size() == 1);
+    TEST(L"share roundtrip com[0]", sd2.com.size() > 0 && sd2.com[0] == 42);
+    TEST(L"share roundtrip powsh size", sd2.powsh.size() == 1);
+    TEST(L"share roundtrip powsh[0]", sd2.powsh.size() > 0 && sd2.powsh[0] == true);
+    TEST(L"share roundtrip taglevel size", sd2.taglevel.size() == 1);
+    TEST(L"share roundtrip autoguard size", sd2.autoguard.size() == 1);
+    TEST(L"share roundtrip inputRemap size", sd2.inputRemap.size() == 1);
+    TEST(L"share roundtrip dbgdw", sd2.dbgdw == true);
+    TEST(L"share roundtrip clsndw", sd2.clsndw == true);
+    TEST(L"share roundtrip stsdw", sd2.stsdw == true);
+    TEST(L"share roundtrip alvl", sd2.alvl == true);
+    TEST(L"share roundtrip exitMatch", sd2.exitMatch == true);
+    TEST(L"share roundtrip suaveMode", sd2.suaveMode == 2);
+    TEST(L"share roundtrip abyssSP1", sd2.abyssSP1 == "test");
+    TEST(L"share roundtrip dlua", sd2.dlua == "debug.lua");
+
+    // CommonData ↔ ShareData roundtrip
+    {
+        CommonData cd;
+        cd.home = 1;
+        cd.match = 2;
+        cd.round = 3;
+        cd.life = 0.75f;
+        cd.power = 3000;
+        cd.cam.zoom = true;
+        cd.cam.zoomMin = 0.5f;
+        cd.cam.zoomMax = 2.0f;
+        cd.operatingSystem = "Windows";
+        cd.gameMode = "arcade";
+        cd.com.push_back(42);
+        cd.powerShare.push_back(true);
+        cd.debugdraw = true;
+        cd.autolevel = true;
+        cd.suaveMode = 2;
+
+        ShareData s;
+        share_pull_from_common(cd, s);
+
+        TEST(L"pull_from_common home", s.chr_home == 1);
+        TEST(L"pull_from_common match", s.chr_match == 2);
+        TEST(L"pull_from_common round", s.chr_round == 3);
+        TEST(L"pull_from_common life", s.life == 0.75f);
+        TEST(L"pull_from_common power", s.power == 3000);
+        TEST(L"pull_from_common zoom", s.zoom == true);
+        TEST(L"pull_from_common zoomMin", s.zoomMin == 0.5f);
+        TEST(L"pull_from_common operatingSystem", s.operatingSystem == "Windows");
+        TEST(L"pull_from_common gameMode", s.gameMode == "arcade");
+        TEST(L"pull_from_common com", s.com.size() == 1 && s.com[0] == 42);
+        TEST(L"pull_from_common powsh", s.powsh.size() == 1 && s.powsh[0] == true);
+        TEST(L"pull_from_common dbgdw", s.dbgdw == true);
+        TEST(L"pull_from_common alvl", s.alvl == true);
+        TEST(L"pull_from_common suaveMode", s.suaveMode == 2);
+
+        // Push back
+        CommonData cd2;
+        share_push_to_common(s, cd2);
+        TEST(L"push_to_common home", cd2.home == 1);
+        TEST(L"push_to_common life", cd2.life == 0.75f);
+        TEST(L"push_to_common zoom", cd2.cam.zoom == true);
+        TEST(L"push_to_common debugdraw", cd2.debugdraw == true);
+        TEST(L"push_to_common autolevel", cd2.autolevel == true);
+    }
 }
 
 // ---- Fight service tests (ssz_native::fight) ----

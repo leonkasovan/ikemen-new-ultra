@@ -12,6 +12,7 @@
 #include "sdlplugin_static.hpp"
 #include "alert_static.hpp"
 #include "file_static.hpp"
+#include "share_static.hpp"
 #include "math_static.hpp"
 #include "regex_static.hpp"
 #include "shell_static.hpp"
@@ -379,6 +380,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!file_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register File functions");
+		return 1;
+	}
+	if (!share_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Share functions");
 		return 1;
 	}
 	if (!math_static_register()) {

@@ -94,6 +94,7 @@ These are the current script/plugin boundary declarations to preserve during the
 - `sound_static.hpp`: IKEMEN_NATIVE_SOUND_LIB
 - `thread_static.hpp`: IKEMEN_NATIVE_THREAD_LIB
 - `time_static.hpp`: IKEMEN_NATIVE_TIME_LIB
+- `share_static.hpp`: IKEMEN_NATIVE_SHARE_LIB
 
 ### Script-service runtime integration gap
 
@@ -185,7 +186,7 @@ Recommended order:
 
 Pending items:
 
-- [ ] Replace `share_service.cpp` no-op copy/push with real state accessors.
+- [x] Replace `share_service.cpp` no-op copy/push with real state accessors.
 - [ ] Replace `common_service.cpp` false/no-op helpers with SSZ-equivalent logic.
 - [ ] Replace `loader_service.cpp` false/no-op loader functions with real behavior.
 - [ ] Replace Lua callback registration stubs with actual registrations and function bodies.
@@ -329,6 +330,8 @@ The first vertical slice is complete:
 3. ✅ Tiny native boot-side path proven with rollback (`IKEMEN_NATIVE_CONFIG_LIB` loads config at startup).
 4. ✅ `string/math/table/crypto/stack` parity hardened (missing symbols added, tests expanded).
 5. ✅ `string_service` `&Format` object implemented (printf-style formatter with %d/%i/%u/%o/%x/%X/%c/%s/%f/%F/%e/%E/%g/%G, flags, width, precision).
+6. ✅ `share_service` real copy/push with CommonData integration (~110+ field mappings), internal snapshot state, and module integration helpers.
+7. ✅ `share_static.hpp` — native share plugin registration guarded by `IKEMEN_NATIVE_SHARE_LIB`, wired into `main.cpp` bootstrap, with rollback verified.
 
 ## Immediate Next Step
 
@@ -336,4 +339,5 @@ The first vertical slice is complete:
 2. ✅ Verify rollback: `make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_CONFIG_LIB=0` still builds and runs old behavior.
 3. Capture and commit startup/gameplay traces (`IKEMEN_ENABLE_PLUGIN_TRACE=1`).
 4. ✅ Implement `string_service` `&Format` object (printf-style formatter, ~300 lines of SSZ).
-5. Begin P3: `share_service` real `copy()`/`push()` state transfer.
+5. ✅ Begin P3: `share_service` real `copy()`/`push()` state transfer.
+6. ✅ Wire `IKEMEN_NATIVE_SHARE_LIB` to an actual script-layer replacement route (share static registration, bridge wrappers, main.cpp bootstrap).
