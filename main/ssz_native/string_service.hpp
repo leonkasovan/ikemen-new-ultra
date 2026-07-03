@@ -124,7 +124,39 @@ std::vector<T>& each(const std::function<void(T&)>& callback, std::vector<T>& ar
     return ary;
 }
 
-// ---- Number-to-string ----
+// ---- Format object (printf-style formatter) ----
+//
+// Matches the SSZ &Format object from ssz_script/lib/string.ssz.
+// Supports %d, %i, %u, %o, %x, %X, %c, %s, %f, %F, %e, %E, %g, %G
+// with flags: 0, -, +, space, #  and width/precision.
+//
+class Format {
+public:
+    std::wstring out;   // Accumulated output buffer (public, like SSZ)
+
+    char set(const std::wstring& format);
+    bool isError() const { return next_ == L'\x7f'; }
+    char d(int64_t i);
+    char u(uint64_t u);
+    char f(double val);
+    char c(wchar_t ch);
+    char s(const std::wstring& str);
+    void putSpace(int n);
+
+private:
+    char  setError()    { return next_ = L'\x7f'; }
+    char  setNext();
+    void  putStr(const std::wstring& str);
+
+    std::wstring fmt_;
+    wchar_t next_  = L'\0';
+    int     acc_   = -1;
+    int     width_ = 0;
+    int     sign_  = 0;   // 0=none, 1=+, -1=space
+    bool    zero_  = false;
+    bool    left_  = false;
+    bool    sharp_ = false;
+};
 
 // Integer to octal string.
 std::wstring to_octal(uint64_t value);

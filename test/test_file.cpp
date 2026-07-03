@@ -14,6 +14,7 @@
 #include <cstring>
 #include <iostream>
 #include <cmath>
+#include <limits>
 
 #include "sszdef.h"
 #include "ssz_native/plugin_native_api.hpp"
@@ -629,6 +630,324 @@ static void test_string_service()
         TEST(L"to_ubyte size", ub.size() == 2);
         TEST(L"to_ubyte little-endian[0]", ub[0] == 0x02);
         TEST(L"to_ubyte little-endian[1]", ub[1] == 0x01);
+    }
+}
+
+// ---- Format object tests ----
+
+static void test_format_service()
+{
+    using Fmt = ikemen::ssz_native::string_util::Format;
+    std::wcout << L"\n--- Format ---" << std::endl;
+
+    // Basic literal text (no format specifiers)
+    {
+        Fmt fmt;
+        fmt.set(L"hello");
+        TEST(L"Format literal no pct", fmt.out == L"hello");
+    }
+
+    // %% escape
+    {
+        Fmt fmt;
+        fmt.set(L"100%%");
+        TEST(L"Format %% escape", fmt.out == L"100%");
+    }
+
+    // %d signed decimal
+    {
+        Fmt fmt;
+        fmt.set(L"%d");
+        fmt.d(42);
+        TEST(L"Format %d: 42", fmt.out == L"42");
+    }
+
+    // %d negative
+    {
+        Fmt fmt;
+        fmt.set(L"%d");
+        fmt.d(-42);
+        TEST(L"Format %d: -42", fmt.out == L"-42");
+    }
+
+    // %u unsigned
+    {
+        Fmt fmt;
+        fmt.set(L"%u");
+        fmt.u(42u);
+        TEST(L"Format %u: 42", fmt.out == L"42");
+    }
+
+    // %x lowercase hex
+    {
+        Fmt fmt;
+        fmt.set(L"%x");
+        fmt.u(255u);
+        TEST(L"Format %x: ff", fmt.out == L"ff");
+    }
+
+    // %X uppercase hex
+    {
+        Fmt fmt;
+        fmt.set(L"%X");
+        fmt.u(255u);
+        TEST(L"Format %X: FF", fmt.out == L"FF");
+    }
+
+    // %o octal
+    {
+        Fmt fmt;
+        fmt.set(L"%o");
+        fmt.u(8u);
+        TEST(L"Format %o: 10", fmt.out == L"10");
+    }
+
+    // %c character
+    {
+        Fmt fmt;
+        fmt.set(L"%c");
+        fmt.c(L'A');
+        TEST(L"Format %c: A", fmt.out == L"A");
+    }
+
+    // %s string
+    {
+        Fmt fmt;
+        fmt.set(L"%s");
+        fmt.s(L"hello");
+        TEST(L"Format %s: hello", fmt.out == L"hello");
+    }
+
+    // Width padding (right-aligned)
+    {
+        Fmt fmt;
+        fmt.set(L"%5d");
+        fmt.d(42);
+        TEST(L"Format %5d: '   42'", fmt.out == L"   42");
+    }
+
+    // Left-justified
+    {
+        Fmt fmt;
+        fmt.set(L"%-5d");
+        fmt.d(42);
+        TEST(L"Format %-5d: '42   '", fmt.out == L"42   ");
+    }
+
+    // Zero-padded
+    {
+        Fmt fmt;
+        fmt.set(L"%05d");
+        fmt.d(42);
+        TEST(L"Format %05d: '00042'", fmt.out == L"00042");
+    }
+
+    // Zero-padded negative
+    {
+        Fmt fmt;
+        fmt.set(L"%05d");
+        fmt.d(-42);
+        TEST(L"Format %05d negative: '-0042'", fmt.out == L"-0042");
+    }
+
+    // Positive sign
+    {
+        Fmt fmt;
+        fmt.set(L"%+d");
+        fmt.d(42);
+        TEST(L"Format %+d: '+42'", fmt.out == L"+42");
+    }
+
+    // Space sign
+    {
+        Fmt fmt;
+        fmt.set(L"% d");
+        fmt.d(42);
+        TEST(L"Format '% d': ' 42'", fmt.out == L" 42");
+    }
+
+    // Precision
+    {
+        Fmt fmt;
+        fmt.set(L"%.5d");
+        fmt.d(42);
+        TEST(L"Format %.5d: '00042'", fmt.out == L"00042");
+    }
+
+    // Sharp with hex
+    {
+        Fmt fmt;
+        fmt.set(L"%#x");
+        fmt.u(255u);
+        TEST(L"Format %#x: '0xff'", fmt.out == L"0xff");
+    }
+
+    // Sharp with octal
+    {
+        Fmt fmt;
+        fmt.set(L"%#o");
+        fmt.u(8u);
+        TEST(L"Format %#o: '010'", fmt.out == L"010");
+    }
+
+    // Multiple specifiers with literal text
+    {
+        Fmt fmt;
+        fmt.set(L"val = %d, hex = %x");
+        fmt.d(42);
+        fmt.u(255u);
+        TEST(L"Format multi: 'val = 42, hex = ff'", fmt.out == L"val = 42, hex = ff");
+    }
+
+    // Float %f
+    {
+        Fmt fmt;
+        fmt.set(L"%f");
+        fmt.f(3.1415926535);
+        // Default precision is 6
+        TEST(L"Format %f: 3.141593", fmt.out == L"3.141593");
+    }
+
+    // Float %.2f
+    {
+        Fmt fmt;
+        fmt.set(L"%.2f");
+        fmt.f(3.14159);
+        TEST(L"Format %.2f: '3.14'", fmt.out == L"3.14");
+    }
+
+    // Float %e scientific
+    {
+        Fmt fmt;
+        fmt.set(L"%e");
+        fmt.f(1000.0);
+        TEST(L"Format %e starts with 1.0",
+            fmt.out.size() >= 3 && fmt.out[0] == L'1' && fmt.out[1] == L'.');
+    }
+
+    // Float %g compact
+    {
+        Fmt fmt;
+        fmt.set(L"%g");
+        fmt.f(100.0);
+        // 100 in %g is "100"
+        TEST(L"Format %g: 100", fmt.out == L"100");
+    }
+
+    // NaN
+    {
+        Fmt fmt;
+        fmt.set(L"%f");
+        fmt.f(std::numeric_limits<double>::quiet_NaN());
+        TEST(L"Format %f NaN: 'nan'", fmt.out == L"nan");
+    }
+
+    // Infinity
+    {
+        Fmt fmt;
+        fmt.set(L"%f");
+        fmt.f(std::numeric_limits<double>::infinity());
+        TEST(L"Format %f inf: 'inf'", fmt.out == L"inf");
+    }
+
+    // Negative infinity
+    {
+        Fmt fmt;
+        fmt.set(L"%f");
+        fmt.f(-std::numeric_limits<double>::infinity());
+        TEST(L"Format %f -inf: '-inf'", fmt.out == L"-inf");
+    }
+
+    // Width with string
+    {
+        Fmt fmt;
+        fmt.set(L"%10s");
+        fmt.s(L"hi");
+        TEST(L"Format %10s: '        hi'", fmt.out == L"        hi");
+    }
+
+    // Left-justified with string
+    {
+        Fmt fmt;
+        fmt.set(L"%-10s");
+        fmt.s(L"hi");
+        TEST(L"Format %-10s: 'hi        '", fmt.out == L"hi        ");
+    }
+
+    // isError false after valid format
+    {
+        Fmt fmt;
+        fmt.set(L"%d");
+        TEST(L"Format isError false after set", !fmt.isError());
+    }
+
+    // isError on invalid specifier
+    {
+        Fmt fmt;
+        fmt.set(L"%q");
+        // Invalid specifier causes error
+        TEST(L"Format isError for %q", fmt.isError());
+    }
+
+    // Error propagation — calling method after error returns error
+    {
+        Fmt fmt;
+        fmt.set(L"%d");
+        fmt.d(42);
+        fmt.d(99); // No more specifiers -> error
+        TEST(L"Format error propagation", fmt.isError());
+    }
+
+    // %%d should produce literal %d
+    {
+        Fmt fmt;
+        fmt.set(L"%%d");
+        TEST(L"Format %%d: '%d'", fmt.out == L"%d");
+    }
+
+    // Float width padding
+    {
+        Fmt fmt;
+        fmt.set(L"%8.2f");
+        fmt.f(3.14);
+        TEST(L"Format %8.2f width", fmt.out.size() == 8);
+        TEST(L"Format %8.2f right-aligned",
+            fmt.out.substr(4) == L"3.14");
+    }
+
+    // Float with + sign
+    {
+        Fmt fmt;
+        fmt.set(L"%+f");
+        fmt.f(1.5);
+        TEST(L"Format %+f starts with +",
+            !fmt.out.empty() && fmt.out[0] == L'+');
+    }
+
+    // Negative float
+    {
+        Fmt fmt;
+        fmt.set(L"%f");
+        fmt.f(-2.5);
+        TEST(L"Format %f -2.5",
+            !fmt.out.empty() && fmt.out[0] == L'-');
+    }
+
+    // putSpace directly
+    {
+        Fmt fmt;
+        fmt.set(L"");  // empty format, next = 0
+        fmt.out.clear();
+        fmt.putSpace(5);
+        TEST(L"Format putSpace(5)", fmt.out == L"     ");
+    }
+
+    // Width wider than digits for unsigned
+    {
+        Fmt fmt;
+        fmt.set(L"%6u");
+        fmt.u(42u);
+        TEST(L"Format %6u: '    42'", fmt.out == L"    42");
     }
 }
 
@@ -1831,6 +2150,7 @@ int main()
     test_thread();
     test_math_service();
     test_string_service();
+    test_format_service();
     test_ogg_service();
     test_thread_service();
     test_time_service();

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cwchar>
 
@@ -296,6 +298,288 @@ bool s_to_number(int64_t& out, const std::wstring& s) {
     if (end == t.c_str()) return false;
     out = static_cast<int64_t>(val);
     return true;
+}
+
+// =====================================================================
+// Format object — printf-style formatter (ssz_script/lib/string.ssz &Format)
+// =====================================================================
+
+char Format::set(const std::wstring& format) {
+    fmt_ = format;
+    out.clear();
+    next_ = L'\0';
+    return setNext();
+}
+
+char Format::setNext() {
+    if (isError()) return next_;
+
+    // Copy literal text up to the next '%', then parse the specifier
+    while (true) {
+        {
+            size_t pct = fmt_.find(L'%');
+            out.append(fmt_, 0, pct);
+            if (pct == std::wstring::npos) {
+                fmt_.clear();
+                return next_ = L'\0';
+            }
+            fmt_ = fmt_.substr(pct + 1);
+        }
+
+        if (fmt_.empty()) return setError();
+
+        // Reset flags
+        sign_ = 0;
+        zero_ = left_ = sharp_ = false;
+        width_ = 0;
+        acc_ = -1;
+
+        size_t i = 0;
+
+        // Parse flags
+        while (i < fmt_.size()) {
+            wchar_t c = fmt_[i];
+            if (c == L'0')       { zero_ = true; }
+            else if (c == L'-')  { left_ = true; }
+            else if (c == L'+')  { sign_ = 1; }
+            else if (c == L' ')  { if (sign_ == 0) sign_ = -1; }
+            else if (c == L'#')  { sharp_ = true; }
+            else break;
+            i++;
+        }
+
+        // Parse width
+        while (i < fmt_.size() && fmt_[i] >= L'0' && fmt_[i] <= L'9') {
+            width_ = width_ * 10 + static_cast<int>(fmt_[i] - L'0');
+            i++;
+        }
+
+        // Parse precision
+        if (i < fmt_.size() && fmt_[i] == L'.') {
+            i++;
+            acc_ = 0;
+            while (i < fmt_.size() && fmt_[i] >= L'0' && fmt_[i] <= L'9') {
+                acc_ = acc_ * 10 + static_cast<int>(fmt_[i] - L'0');
+                i++;
+            }
+        }
+
+        // Skip length modifier
+        if (i < fmt_.size() && (fmt_[i] == L'h' || fmt_[i] == L'l' || fmt_[i] == L'L'))
+            i++;
+
+        // Handle %% escape
+        if (i < fmt_.size() && fmt_[i] == L'%') {
+            out += L'%';
+            fmt_ = fmt_.substr(i + 1);
+            continue; // restart the loop to look for more literal text
+        }
+
+        // Validate conversion specifier
+        static const std::wstring valid = L"diuoxXcsfFeEgG";
+        if (i >= fmt_.size() || c_match(valid, fmt_[i]) == false)
+            return setError();
+
+        next_ = fmt_[i];
+        fmt_ = fmt_.substr(i + 1);
+        return next_;
+    }
+}
+
+void Format::putSpace(int n) {
+    for (int i = 0; i < n; i++)
+        out += L' ';
+}
+
+void Format::putStr(const std::wstring& str) {
+    int pad = width_ - static_cast<int>(str.size());
+    if (!left_ && pad > 0) putSpace(pad);
+    out += str;
+    if (left_ && pad > 0) putSpace(pad);
+}
+
+char Format::d(int64_t i) {
+    if (!c_match(std::wstring(L"di"), next_)) {
+        if (c_match(std::wstring(L"uoxX"), next_))
+            return u(static_cast<uint64_t>(i));
+        if (c_match(std::wstring(L"fFeEgG"), next_))
+            return f(static_cast<double>(i));
+        if (next_ == L'c')  return c(static_cast<wchar_t>(i));
+        if (next_ == L's')  return s(std::wstring(1, static_cast<wchar_t>(i)));
+        return setError();
+    }
+
+    // Absolute value
+    uint64_t abs_val;
+    bool negative = (i < 0);
+    if (negative) {
+        abs_val = static_cast<uint64_t>(-(i + 1)) + 1;
+    } else {
+        abs_val = static_cast<uint64_t>(i);
+    }
+
+    // Build sign prefix
+    std::wstring prefix;
+    if (negative) {
+        prefix += L'-';
+    } else if (sign_ == 1) {
+        prefix += L'+';
+    } else if (sign_ == -1) {
+        prefix += L' ';
+    }
+
+    // Digit string
+    std::wstring str = std::to_wstring(abs_val);
+
+    // Determine minimum digit count (precision or zero-pad)
+    int min_digits = acc_;
+    if (zero_ && min_digits + static_cast<int>(prefix.size()) < width_)
+        min_digits = width_ - static_cast<int>(prefix.size());
+
+    // Apply zero-padding to digits
+    int pad_count = min_digits - static_cast<int>(str.size());
+    if (pad_count > 0)
+        str = std::wstring(pad_count, L'0') + str;
+
+    putStr(prefix + str);
+    return setNext();
+}
+
+char Format::u(uint64_t u) {
+    if (!c_match(std::wstring(L"uoxX"), next_)) {
+        if (c_match(std::wstring(L"di"), next_))
+            return d(static_cast<int64_t>(u));
+        if (c_match(std::wstring(L"fFeEgG"), next_))
+            return f(static_cast<double>(u));
+        if (next_ == L'c')  return c(static_cast<wchar_t>(u));
+        if (next_ == L's')  return s(std::wstring(1, static_cast<wchar_t>(u)));
+        return setError();
+    }
+
+    std::wstring buf;
+
+    // Sign prefix for unsigned (only + or space, never -)
+    if (sign_ != 0)
+        buf += (sign_ > 0 ? L'+' : L' ');
+
+    // Convert number to string based on format specifier
+    std::wstring str;
+    switch (next_) {
+    case L'u': str = std::to_wstring(u); break;
+    case L'o': str = to_octal(u); break;
+    case L'x': str = to_hex_lower(u); break;
+    case L'X': str = to_hex_upper(u); break;
+    }
+
+    // Sharp flag: alternate form prefixes
+    if (sharp_) {
+        switch (next_) {
+        case L'o':
+            if (static_cast<int>(str.size()) >= acc_) buf += L'0';
+            break;
+        case L'x': buf += L"0x"; break;
+        case L'X': buf += L"0X"; break;
+        }
+    }
+
+    // Zero-padding
+    int min_digits = acc_;
+    if (zero_ && min_digits + static_cast<int>(buf.size()) < width_)
+        min_digits = width_ - static_cast<int>(buf.size());
+    int pad_count = min_digits - static_cast<int>(str.size());
+    if (pad_count > 0)
+        str = std::wstring(pad_count, L'0') + str;
+
+    buf += str;
+    putStr(buf);
+    return setNext();
+}
+
+char Format::f(double val) {
+    if (!c_match(std::wstring(L"fFeEgG"), next_)) {
+        if (c_match(std::wstring(L"di"), next_))
+            return d(static_cast<int64_t>(val));
+        if (c_match(std::wstring(L"uoxX"), next_))
+            return u(static_cast<uint64_t>(val));
+        if (next_ == L'c')  return c(static_cast<wchar_t>(val));
+        return setError();
+    }
+
+    // Build sign prefix manually
+    std::wstring prefix;
+    bool negative = (val < 0.0);
+    if (negative) {
+        prefix += L'-';
+    } else if (sign_ == 1) {
+        prefix += L'+';
+    } else if (sign_ == -1) {
+        prefix += L' ';
+    }
+
+    double abs_val = std::fabs(val);
+
+    // NaN
+    if (std::isnan(val)) {
+        const wchar_t* nan_str = (next_ >= L'a' && next_ <= L'z') ? L"nan" : L"NAN";
+        putStr(prefix + nan_str);
+        return setNext();
+    }
+
+    // Infinity
+    if (!std::isfinite(val)) {
+        const wchar_t* inf_str = (next_ >= L'a' && next_ <= L'z') ? L"inf" : L"INF";
+        putStr(prefix + inf_str);
+        return setNext();
+    }
+
+    // Build printf format for the ABSOLUTE value (sign handled separately)
+    int precision = (acc_ < 0) ? 6 : acc_;
+    char fmt_buf[32];
+    int fi = 0;
+    fmt_buf[fi++] = '%';
+    if (sharp_) fmt_buf[fi++] = '#';
+    fmt_buf[fi++] = '.';
+    fi += std::sprintf(fmt_buf + fi, "%d", precision);
+    fmt_buf[fi++] = static_cast<char>(next_); // f, F, e, E, g, G
+    fmt_buf[fi] = '\0';
+
+    char narrow_out[512];
+    int written = std::snprintf(narrow_out, sizeof(narrow_out), fmt_buf, abs_val);
+    if (written < 0 || written >= static_cast<int>(sizeof(narrow_out)))
+        return setError();
+
+    std::wstring str(narrow_out, narrow_out + written);
+
+    // handle zero-padding: if zero_ flag is set, expand to reach width_
+    if (zero_ && !left_) {
+        int total = static_cast<int>(prefix.size() + str.size());
+        int need = width_ - total;
+        if (need > 0)
+            str = std::wstring(need, L'0') + str;
+    }
+
+    putStr(prefix + str);
+    return setNext();
+}
+
+char Format::c(wchar_t ch) {
+    if (next_ != L'c' && next_ != L's') {
+        if (c_match(std::wstring(L"di"), next_))
+            return d(static_cast<int64_t>(ch));
+        if (c_match(std::wstring(L"uoxX"), next_))
+            return u(static_cast<uint64_t>(ch));
+        if (c_match(std::wstring(L"fFeEgG"), next_))
+            return f(static_cast<double>(ch));
+        return setError();
+    }
+    putStr(std::wstring(1, ch));
+    return setNext();
+}
+
+char Format::s(const std::wstring& str) {
+    if (next_ != L's') return setError();
+    putStr(str);
+    return setNext();
 }
 
 } // namespace ikemen::ssz_native::string_util

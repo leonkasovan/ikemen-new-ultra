@@ -127,11 +127,11 @@ Recommended target: **file/config/system boot path**, because `file.ssz`, `confi
 
 - [x] Finish `file_service` parity against `ssz_script/lib/file.ssz`.
 - [x] Add parity tests for all `file.ssz` APIs: open, close, readAry, writeAry, load/save text, find, findDir, delete, move, copy, create/remove dir, current dir.
-- [ ] Wire `IKEMEN_NATIVE_FILE_LIB` to an actual script-layer replacement route, not only static plugin wrappers.
+- [x] Wire `IKEMEN_NATIVE_FILE_LIB` to an actual script-layer replacement route, not only static plugin wrappers.
 - [x] Convert `save/config.ssz` and `save/configNet.ssz` from struct defaults into load/save/migration behavior.
 - [x] Add tests comparing saved config content and loaded values against the SSZ-generated files.
 - [x] Wire the minimal native config path into startup behind `IKEMEN_NATIVE_CONFIG_LIB`.
-- [ ] Verify rollback: `make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_CONFIG_LIB=0` still builds and runs old behavior.
+- [x] Verify rollback: `make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_CONFIG_LIB=0` still builds and runs old behavior.
 
 ### P2 — Make Foundation Libraries Parity-Tested
 
@@ -322,19 +322,18 @@ A module is **not converted** merely because a native file exists. It is convert
 - [ ] `make CONFIG=Debug test` passes.
 - [ ] `make CONFIG=Release` builds.
 
-## Immediate Next Step
-
 The first vertical slice is complete:
 
 1. ✅ `file_service` parity finished (generic `read_all_as<T>`, all 17 SSZ symbols covered).
 2. ✅ Native config load/save wired (`KeyBindings`, INI serializer/deserializer, net portrait defaults fixed).
 3. ✅ Tiny native boot-side path proven with rollback (`IKEMEN_NATIVE_CONFIG_LIB` loads config at startup).
 4. ✅ `string/math/table/crypto/stack` parity hardened (missing symbols added, tests expanded).
+5. ✅ `string_service` `&Format` object implemented (printf-style formatter with %d/%i/%u/%o/%x/%X/%c/%s/%f/%F/%e/%E/%g/%G, flags, width, precision).
 
-Next priorities:
+## Immediate Next Step
 
-1. Wire `IKEMEN_NATIVE_FILE_LIB` to an actual script-layer replacement route (not only static plugin wrappers).
-2. Verify rollback: `make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_CONFIG_LIB=0` still builds and runs old behavior.
+1. ✅ Wire `IKEMEN_NATIVE_FILE_LIB` to an actual script-layer replacement route (not only static plugin wrappers).
+2. ✅ Verify rollback: `make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_CONFIG_LIB=0` still builds and runs old behavior.
 3. Capture and commit startup/gameplay traces (`IKEMEN_ENABLE_PLUGIN_TRACE=1`).
-4. Implement `string_service` `&Format` object (printf-style formatter, ~300 lines of SSZ).
+4. ✅ Implement `string_service` `&Format` object (printf-style formatter, ~300 lines of SSZ).
 5. Begin P3: `share_service` real `copy()`/`push()` state transfer.
