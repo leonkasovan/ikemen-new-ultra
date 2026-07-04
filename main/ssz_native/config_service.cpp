@@ -136,7 +136,7 @@ bool config_load(const std::string& path, ConfigData& cfg) {
 	std::ifstream in(path);
 	if (!in.is_open()) return false;
 
-	cfg = ConfigData{};
+	cfg = make_default_config();
 
 	std::string line;
 	while (std::getline(in, line)) {

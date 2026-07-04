@@ -20,5 +20,6 @@ struct VideoState {
 };
 
 void video_play(const std::string& file, const std::string& capturePath, int volume, int audioTrack);
+void video_play();
 
 } // namespace ikemen::ssz_native

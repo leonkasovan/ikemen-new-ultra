@@ -33,7 +33,11 @@ bool FileHandle::read(void* data, intptr_t size) {
 
 intptr_t FileHandle::read_array(void* data, intptr_t elem_size, intptr_t count) {
     if (!fp_) return -1;
-    return ReadAry(elem_size, data, count * elem_size, fp_);
+    if (elem_size <= 0 || count < 0) return -1;
+    // Check multiplication overflow: max byte count must fit in intptr_t
+    intptr_t byte_count;
+    if (__builtin_mul_overflow(count, elem_size, &byte_count)) return -1;
+    return ReadAry(elem_size, data, byte_count, fp_);
 }
 
 bool FileHandle::write(const void* data, intptr_t size) {
@@ -43,7 +47,11 @@ bool FileHandle::write(const void* data, intptr_t size) {
 
 intptr_t FileHandle::write_array(const void* data, intptr_t elem_size, intptr_t count) {
     if (!fp_) return -1;
-    return WriteAry(elem_size, data, count * elem_size, fp_);
+    if (elem_size <= 0 || count < 0) return -1;
+    // Check multiplication overflow: max byte count must fit in intptr_t
+    intptr_t byte_count;
+    if (__builtin_mul_overflow(count, elem_size, &byte_count)) return -1;
+    return WriteAry(elem_size, data, byte_count, fp_);
 }
 
 bool FileHandle::seek(int64_t offset, SeekOrigin origin) {

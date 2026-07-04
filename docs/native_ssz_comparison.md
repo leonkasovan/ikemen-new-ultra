@@ -1,8 +1,8 @@
 ﻿# Native SSZ Manifest Comparison
 
-**Generated:** 2026-07-03
+**Generated:** 2026-07-04
 **Total symbols:** 2069
-**Scaffolded symbols:** 2061 (99.6%)
+**Scaffolded symbols:** 2069 (100%)
 
 | SSZ File | Symbols | Native Service | Scaffolded |
 |----------|---------|----------------|------------|
@@ -22,8 +22,8 @@
 | lib/shell.ssz | 2 | shell_service | Y |
 | lib/socket.ssz | 10 | socket_service | Y |
 | lib/sound.ssz | 5 | sound_service | Y |
-| lib/ssz.ssz | 5 | ssz_service | N |
-| lib/stack.ssz | 3 | stack_service | N |
+| lib/ssz.ssz | 5 | ssz_service | Y |
+| lib/stack.ssz | 3 | stack_service | Y |
 | lib/string.ssz | 21 | string_service | Y |
 | lib/table.ssz | 25 | table_service | Y |
 | lib/thread.ssz | 1 | thread_service | Y |
@@ -52,14 +52,9 @@
 | ssz/trigger-script.ssz | 1 | trigger_script_service | Y |
 | ssz/video.ssz | 5 | video_service | Y |
 
-## Unscaffolded
-
-- lib/ssz.ssz
-- lib/stack.ssz
-
 ## Summary
 
 - **45 of 45 SSZ files checked**
-- **43 of 45 have native scaffolding** (99.6% of symbols)
+- **45 of 45 have native scaffolding** (100% of symbols)
 - Remaining: wire stubs to real native logic
 

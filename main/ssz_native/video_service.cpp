@@ -5,5 +5,6 @@
 namespace ikemen::ssz_native {
 
 void video_play(const std::string&, const std::string&, int, int) {}
+void video_play() { video_play("", "", 100, 1); }
 
 } // namespace ikemen::ssz_native

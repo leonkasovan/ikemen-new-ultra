@@ -22,6 +22,8 @@
 
 #include <string>
 #include <vector>
+#include <cctype>
+#include "common_service.hpp"
 
 namespace ikemen::ssz_native {
 
@@ -133,13 +135,24 @@ struct SystemData {
 
 // No-arg convenience functions for bridge/SSZ ABI.
 // These operate on an internal static SystemData instance.
-// Currently stubs — will be wired as module state integration progresses.
 void system_add_char();
 void system_add_stage();
 int  system_set_stage_no(int i);
 void system_select_stage(int no);
 bool system_add_selchr(int pn, int cn, int pl);
 void system_sel_reset();
+
+// Parameterized versions — receive the def file path from the bridge.
+bool system_add_char(const std::string& defPath);
+std::string system_add_stage(const std::string& defPath);
+std::string system_get_stage_name(int i);
+
+// Access the selected stage def path from internal state.
+std::string system_get_selected_stage_def();
+int system_get_selected_stage_no();
+
+// Get the def path for a selected character by player slot.
+std::string system_get_selected_char_def(int pn);
 
 // select_* — methods on SelectData
 inline int SelectData::getCharNo(int i) const {
@@ -179,13 +192,120 @@ inline int SelectData::setStageNo(int i) {
 inline void SelectData::selectStage(int no) { selectedStageNo = no; }
 inline std::string SelectData::getStageName(int i) const {
 	int n = static_cast<int>(stagelist.size());
+	if (n == 0) return {};
 	i %= n + 1;
 	if (i < 0) i += n + 1;
 	if (i == 0) return "RANDOM";
 	return stagelist[i - 1].name;
 }
-inline bool SelectData::addChar(const std::string&) { return false; }
-inline std::string SelectData::addStage(const std::string&) { return {}; }
+inline bool SelectData::addChar(const std::string& defPath) {
+	if (defPath.empty()) return false;
+	// Parse .def file to extract character info
+	SelectCharData ch;
+	ch.def = defPath;
+	ch.name = defPath; // fallback — real name from [Info] section
+	
+	// Try to read the .def file for name
+	std::string buf = common_load_text(defPath, false);
+	if (!buf.empty()) {
+		auto lines = common_split_lines(buf);
+		bool inInfo = false;
+		for (const auto& line : lines) {
+			if (line.empty()) continue;
+			if (line[0] == '[') {
+				std::string sec = line;
+				for (auto& c : sec) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				inInfo = (sec.find("[info]") != std::string::npos);
+				continue;
+			}
+			if (inInfo) {
+				size_t eq = line.find('=');
+				if (eq != std::string::npos) {
+					std::string key = line.substr(0, eq);
+					// trim key
+					{
+						size_t s = key.find_first_not_of(" \t");
+						if (s != std::string::npos) key = key.substr(s);
+						size_t e = key.find_last_not_of(" \t");
+						if (e != std::string::npos) key = key.substr(0, e + 1);
+					}
+					if (key == "name" || key == "displayname") {
+						ch.name = line.substr(eq + 1);
+						// trim value
+						{
+							size_t s = ch.name.find_first_not_of(" \t");
+							if (s != std::string::npos) ch.name = ch.name.substr(s);
+							size_t e = ch.name.find_last_not_of(" \t\r\n");
+							if (e != std::string::npos) ch.name = ch.name.substr(0, e + 1);
+						}
+					} else if (key == "sprite") {
+						ch.sprite = line.substr(eq + 1);
+						{
+							size_t s = ch.sprite.find_first_not_of(" \t");
+							if (s != std::string::npos) ch.sprite = ch.sprite.substr(s);
+							size_t e = ch.sprite.find_last_not_of(" \t\r\n");
+							if (e != std::string::npos) ch.sprite = ch.sprite.substr(0, e + 1);
+						}
+					} else if (key == "anim") {
+						ch.anim = line.substr(eq + 1);
+						{
+							size_t s = ch.anim.find_first_not_of(" \t");
+							if (s != std::string::npos) ch.anim = ch.anim.substr(s);
+							size_t e = ch.anim.find_last_not_of(" \t\r\n");
+							if (e != std::string::npos) ch.anim = ch.anim.substr(0, e + 1);
+						}
+					}
+				}
+			}
+		}
+	}
+	charlist.push_back(std::move(ch));
+	return true;
+}
+inline std::string SelectData::addStage(const std::string& defPath) {
+	if (defPath.empty()) return {};
+	SelectStageData st;
+	st.def = defPath;
+	st.name = defPath;
+	// Parse .def for stage name
+	std::string buf = common_load_text(defPath, false);
+	if (!buf.empty()) {
+		auto lines = common_split_lines(buf);
+		bool inInfo = false;
+		for (const auto& line : lines) {
+			if (line.empty()) continue;
+			if (line[0] == '[') {
+				std::string sec = line;
+				for (auto& c : sec) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				inInfo = (sec.find("[info]") != std::string::npos);
+				continue;
+			}
+			if (inInfo) {
+				size_t eq = line.find('=');
+				if (eq != std::string::npos) {
+					std::string key = line.substr(0, eq);
+	                {
+						size_t s = key.find_first_not_of(" \t");
+						if (s != std::string::npos) key = key.substr(s);
+						size_t e = key.find_last_not_of(" \t");
+						if (e != std::string::npos) key = key.substr(0, e + 1);
+					}
+					if (key == "name" || key == "displayname") {
+						st.name = line.substr(eq + 1);
+						{
+							size_t s = st.name.find_first_not_of(" \t");
+							if (s != std::string::npos) st.name = st.name.substr(s);
+							size_t e = st.name.find_last_not_of(" \t\r\n");
+							if (e != std::string::npos) st.name = st.name.substr(0, e + 1);
+						}
+					}
+				}
+			}
+		}
+	}
+	stagelist.push_back(std::move(st));
+	return stagelist.back().name;
+}
 
 // select_info_* — methods on SelectInfoData
 inline void SelectInfoData::Player::reset() { selchr.clear(); }

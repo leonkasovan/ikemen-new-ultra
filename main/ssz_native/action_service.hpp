@@ -32,4 +32,7 @@ struct DrawnClsnData {
 	// cl, x, y, xs, ys — for debug collision rendering
 };
 
+// Phase 4: stub.
+void action_init();
+
 } // namespace ikemen::ssz_native

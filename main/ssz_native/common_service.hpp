@@ -221,7 +221,7 @@ float common_tick_interpola(const CommonData&);
 bool common_add_frame_time(CommonData&, float t);
 void common_reset_frame_time(CommonData&);
 bool common_match_over(const CommonData&);
-int common_next_line(int i, const std::string& str);
+int common_next_line(int& i, const std::string& str);
 std::vector<std::string> common_split_lines(const std::string& str);
 double common_atof(const std::string& str);
 int common_atoi(const std::string& str);
@@ -232,7 +232,6 @@ std::string common_load_file(const std::string& deffile, std::string& file,
 
 // No-arg convenience wrappers for bridge/SSZ ABI.
 // These operate on an internal static CommonData instance.
-// Stubs for now — will be wired as module state integration progresses.
 void common_flag_init();
 void common_reset_remap_input();
 void common_set_size(int w, int h);
@@ -242,5 +241,11 @@ float common_tick_interpola();
 bool common_add_frame_time(float t);
 void common_reset_frame_time();
 bool common_match_over();
+
+// Accessor for the internal static CommonData instance.
+// Used by other native services (e.g. loader) that need to read
+// common state (round, team mode, select info) without having
+// their own pointer to the CommonData.
+CommonData& common_get_state();
 
 } // namespace ikemen::ssz_native

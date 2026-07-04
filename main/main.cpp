@@ -10,24 +10,36 @@
 #include "mesdialog_static.hpp"
 #include "ogg_static.hpp"
 #include "sdlplugin_static.hpp"
+#include "action_static.hpp"
 #include "alert_static.hpp"
+#include "bg_static.hpp"
 #include "char_static.hpp"
+#include "command_static.hpp"
 #include "common_static.hpp"
 #include "debug_script_static.hpp"
+#include "fighting_static.hpp"
+#include "fight_static.hpp"
 #include "loader_static.hpp"
 #include "system_static.hpp"
 #include "system_script_static.hpp"
 #include "trigger_script_static.hpp"
 #include "script_static.hpp"
 #include "file_static.hpp"
+#include "font_static.hpp"
+#include "sff_static.hpp"
 #include "share_static.hpp"
 #include "math_static.hpp"
 #include "regex_static.hpp"
 #include "shell_static.hpp"
 #include "socket_static.hpp"
 #include "sound_static.hpp"
+#include "sound_resource_static.hpp"
+#include "stack_static.hpp"
+#include "stage_static.hpp"
+#include "statebuilder_static.hpp"
 #include "thread_static.hpp"
 #include "time_static.hpp"
+#include "video_static.hpp"
 
 #if IKEMEN_NATIVE_CONFIG_LIB
 #include "ssz_native/config_service.hpp"
@@ -382,16 +394,40 @@ int main(int argc, char *argv[]) {
 		LOG_INFO("Ikemen", "Failed to register SDL plugin functions");
 		return 1;
 	}
+	if (!action_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Action functions");
+		return 1;
+	}
 	if (!alert_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Alert functions");
+		return 1;
+	}
+	if (!bg_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register BG functions");
 		return 1;
 	}
 	if (!char_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Char functions");
 		return 1;
 	}
+	if (!command_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Command functions");
+		return 1;
+	}
+	if (!fighting_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Fighting functions");
+		return 1;
+	}
+	if (!fight_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Fight functions");
+		return 1;
+	}
 	if (!file_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register File functions");
+		return 1;
+	}
+	if (!font_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Font functions");
 		return 1;
 	}
 	if (!common_static_register()) {
@@ -422,6 +458,14 @@ int main(int argc, char *argv[]) {
 		LOG_INFO("Ikemen", "Failed to register Script functions");
 		return 1;
 	}
+	if (!statebuilder_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register StateBuilder functions");
+		return 1;
+	}
+	if (!sff_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register SFF functions");
+		return 1;
+	}
 	if (!share_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Share functions");
 		return 1;
@@ -446,12 +490,28 @@ int main(int argc, char *argv[]) {
 		LOG_INFO("Ikemen", "Failed to register Sound functions");
 		return 1;
 	}
+	if (!sound_resource_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Sound Resource functions");
+		return 1;
+	}
+	if (!stack_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Stack functions");
+		return 1;
+	}
+	if (!stage_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Stage functions");
+		return 1;
+	}
 	if (!thread_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Thread functions");
 		return 1;
 	}
 	if (!time_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Time functions");
+		return 1;
+	}
+	if (!video_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Video functions");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");

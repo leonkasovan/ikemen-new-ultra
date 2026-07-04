@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 namespace ikemen::ssz_native::consts {
 
@@ -46,5 +47,17 @@ using index_t  = intptr_t;  // pointer-width   (SSZ: &Signed!index?)
 inline constexpr int32_t SENTINEL_MIN = Signed<int32_t>::MIN;
 inline constexpr int32_t SENTINEL_MAX = Signed<int32_t>::MAX;
 inline constexpr uint32_t SENTINEL_UMAX = Unsigned<uint32_t>::MAX;
+
+// null<T>() — returns a null/empty value matching SSZ .consts.null!T?()
+// For pointer types, returns nullptr. For array types, returns empty vector.
+template <typename T>
+T* null() { return nullptr; }
+
+template <typename T>
+std::vector<T> null_array() { return {}; }
+
+// Convenience: null for commonly used wrapped types
+template <typename T>
+inline T null_value() { return T{}; }
 
 } // namespace ikemen::ssz_native::consts

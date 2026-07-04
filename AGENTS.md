@@ -85,7 +85,7 @@ Get-Content -Path "install\ikemen-debug.log" -Tail 30   # last 30 lines
 Get-Content -Path "install\ikemen-debug.log" | Select-String "PATTERN"  # grep
 ```
 
-- `make install` copies `build/Debug/ikemen-debug.exe` to `install/ikemen-debug.exe`
+- `make install` copies `build/Release/ikemen.exe` to `install/ikemen.exe`
 - Lua scripts in `install/script/` are read at runtime — no rebuild needed for Lua-only changes
 - C++ changes require rebuild + `make install`
 - `2>&1` merges stderr into stdout so all output goes to the log file

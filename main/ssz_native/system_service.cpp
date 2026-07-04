@@ -32,4 +32,44 @@ void system_select_stage(int no) { (void)g_system_inited; g_system_state.selinf.
 bool system_add_selchr(int pn, int cn, int pl) { (void)g_system_inited; return g_system_state.selinf.addSelchr(pn, cn, pl); }
 void system_sel_reset() { (void)g_system_inited; g_system_state.selReset(); }
 
-} // namespace ikemen::ssz_native
+// ── Parameterized functions ──
+// These receive the def file path from the bridge and perform real work.
+
+bool system_add_char(const std::string& defPath) {
+	return g_system_state.selinf.sel->addChar(defPath);
+}
+
+std::string system_add_stage(const std::string& defPath) {
+	return g_system_state.selinf.sel->addStage(defPath);
+}
+
+std::string system_get_stage_name(int i) {
+	return g_system_state.selinf.sel->getStageName(i);
+}
+
+std::string system_get_selected_stage_def() {
+	auto* sel = g_system_state.selinf.sel;
+	if (!sel) return {};
+	int no = sel->selectedStageNo;
+	if (no < 0 || no == 0) return {}; // RANDOM or not set
+	int idx = no - 1;
+	if (idx >= 0 && idx < static_cast<int>(sel->stagelist.size()))
+		return sel->stagelist[idx].def;
+	return {};
+}
+
+int system_get_selected_stage_no() {
+	auto* sel = g_system_state.selinf.sel;
+	return sel ? sel->selectedStageNo : -1;
+}
+
+std::string system_get_selected_char_def(int pn) {
+	auto* sel = g_system_state.selinf.sel;
+	if (!sel) return {};
+	if (pn < 0 || pn >= static_cast<int>(g_system_state.selinf.p.size())) return {};
+	auto& player = g_system_state.selinf.p[pn];
+	if (player.selchr.empty()) return {};
+	int idx = player.selchr[0].i;
+	if (idx < 0 || idx >= static_cast<int>(sel->charlist.size())) return {};
+	return sel->charlist[idx].def;
+} } // namespace ikemen::ssz_native

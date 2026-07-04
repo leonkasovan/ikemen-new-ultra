@@ -249,13 +249,21 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/statebuilder_service.cpp \
   $(SSZ_NATIVE)/sdlevent_service.cpp \
   $(SSZ_NATIVE)/sdlplugin_service.cpp \
+  $(SSZ_NATIVE)/sff_service.cpp \
   $(SSZ_NATIVE)/font_service.cpp \
   $(SSZ_NATIVE)/video_service.cpp \
   $(SSZ_NATIVE)/action_service.cpp \
+  $(SSZ_NATIVE)/bg_service.cpp \
   $(SSZ_NATIVE)/fighting_service.cpp \
+  $(SSZ_NATIVE)/fight_service.cpp \
   $(SSZ_NATIVE)/config_service.cpp \
   $(SSZ_NATIVE)/system_service.cpp \
-  $(SSZ_NATIVE)/char_service.cpp
+  $(SSZ_NATIVE)/char_service.cpp \
+  $(SSZ_NATIVE)/command_service.cpp \
+  $(SSZ_NATIVE)/sound_resource_service.cpp \
+  $(SSZ_NATIVE)/stage_service.cpp \
+  $(SSZ_NATIVE)/stack_service.o \
+  $(SSZ_NATIVE)/ssz_service.o
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
@@ -865,7 +873,10 @@ $(BLD)/main/ssz_native/font_service.o \
 $(BLD)/main/ssz_native/video_service.o \
 $(BLD)/main/ssz_native/action_service.o \
 $(BLD)/main/ssz_native/fighting_service.o \
-$(BLD)/main/ssz_native/config_service.o
+$(BLD)/main/ssz_native/config_service.o \
+$(BLD)/main/ssz_native/sound_resource_service.o \
+$(BLD)/main/ssz_native/stack_service.o \
+$(BLD)/main/ssz_native/ssz_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
@@ -942,4 +953,3 @@ install: $(TARGET)
 	cp -rf lua_script/script/ install/
 	cp -rf lua_script/save/ install/
 	@echo "=== Installed to install/ ==="
-  

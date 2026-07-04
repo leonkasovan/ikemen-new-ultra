@@ -11,6 +11,8 @@ Release
 *.bak
 *.exe
 *.zip
+*.txt
+nul
 .codegraph/*
 opencode.*
 .vscode/*

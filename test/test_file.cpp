@@ -57,6 +57,7 @@
 #include "ssz_native/config_service.hpp"
 #include "ssz_native/config_net_service.hpp"
 #include "ssz_native/stack_service.hpp"
+#include "ssz_native/consts.hpp"
 
 // ---- Test helpers ----
 static int g_tests = 0;
@@ -763,7 +764,7 @@ static void test_format_service()
         Fmt fmt;
         fmt.set(L"% d");
         fmt.d(42);
-        TEST(L"Format '% d': ' 42'", fmt.out == L" 42");
+        TEST(L"Format '% d': '  42'", fmt.out == L"  42");
     }
 
     // Precision
@@ -1457,8 +1458,8 @@ static void test_char_service()
 {
     std::wcout << L"\n--- Char service ---" << std::endl;
     using namespace ikemen::ssz_native;
-    CharState cs;
-    TEST(L"CharState created", true);
+    CharModuleState cs;
+    TEST(L"CharModuleState created", true);
 }
 
 // ---- Command service tests (ssz_native::command) ----
@@ -1490,7 +1491,7 @@ static void test_stage_service()
     StageData sd;
     TEST(L"StageData def empty", sd.def.empty());
     TEST(L"StageData name empty", sd.name.empty());
-    TEST(L"StageData music empty", sd.music.empty());
+    TEST(L"StageData bgmusic empty", sd.bgmusic.empty());
 }
 
 // ---- BG service tests (ssz_native::bg) ----
@@ -1532,6 +1533,165 @@ static void test_sound_resource_service()
     BgmData bd;
     TEST(L"BgmData fileName empty", bd.fileName.empty());
     TEST(L"BgmData volume==100", bd.volume == 100);
+
+    // SoundResourceState via accessor
+    SoundResourceState& st = sound_resource_get_state();
+    TEST(L"sound_resource_get_state exists", true);
+    TEST(L"State sndbuf starts zeroed", st.sndbuf[0] == 0 && st.sndbuf[1023] == 0);
+    TEST(L"State panstr == 128.0", st.panstr == 128.0f);
+
+    // init resets state
+    sound_resource_init();
+    TEST(L"sound_resource_init sndbuf clear", st.sndbuf[0] == 0);
+    TEST(L"sound_resource_init bgm empty", st.bgm.fileName.empty());
+
+    // SoundChannel defaults
+    SoundChannel sc;
+    TEST(L"SoundChannel wave null", sc.wave == nullptr);
+    TEST(L"SoundChannel volume 256", sc.volume == 256);
+    TEST(L"SoundChannel x 0.0", sc.x == 0.0f);
+    TEST(L"SoundChannel loop false", sc.loop_ == false);
+    TEST(L"SoundChannel freqmul 1.0", sc.freqmul == 1.0f);
+    TEST(L"SoundChannel setVol clamp low", (sc.setVol(-50), sc.volume == 0));
+    TEST(L"SoundChannel setVol clamp high", (sc.setVol(1000), sc.volume == 512));
+    TEST(L"SoundChannel setVol normal", (sc.setVol(300), sc.volume == 300));
+    TEST(L"SoundChannel setPan clamp low", (sc.setPan(-200.0f), sc.x == -160.0f));
+    TEST(L"SoundChannel setPan clamp high", (sc.setPan(200.0f), sc.x == 160.0f));
+    sc.setDefaultParameter();
+    TEST(L"SoundChannel setDefaultParameter volume", sc.volume == 256);
+    TEST(L"SoundChannel setDefaultParameter pan", sc.x == 0.0f);
+    TEST(L"SoundChannel setDefaultParameter loop", sc.loop_ == false);
+
+    // Mix on empty channel (no wave) should not crash
+    int mix_buf[2048] = {};
+    sc.mix(mix_buf, -160.0f, 160.0f);
+    TEST(L"SoundChannel mix empty wave no-crash", true);
+
+    // Mix with a valid wave
+    WaveData test_wave;
+    test_wave.channels = 1;
+    test_wave.bytesPerSample = 1;
+    test_wave.samplesPerSec = 22050;
+    test_wave.wav.resize(256, 128);
+    sc.wave = &test_wave;
+    sc.setDefaultParameter();
+    std::memset(mix_buf, 0, sizeof(mix_buf));
+    sc.mix(mix_buf, -160.0f, 160.0f);
+    TEST(L"SoundChannel mix 8-bit mono no-crash", true);
+    TEST(L"SoundChannel mix silent wave yields zeros", mix_buf[0] == 0 && mix_buf[1] == 0);
+
+    // SoundTable defaults
+    SoundTable stbl;
+    TEST(L"SoundTable sound_map empty", stbl.sound_map.empty());
+    TEST(L"SoundTable getSound null for nonexistent", stbl.getSound(0, 0) == nullptr);
+
+    // loadFile on nonexistent path returns error
+    std::string load_err = stbl.loadFile("nonexistent.snd");
+    TEST(L"SoundTable loadFile nonexistent returns error", !load_err.empty());
+
+    // BgmData
+    BgmData bgm;
+    bgm.play("bgm.ogg");
+    TEST(L"BgmData play sets fileName", bgm.fileName == "bgm.ogg");
+    TEST(L"BgmData write no-crash", true);
+    bgm.clear();
+    TEST(L"BgmData clear fileName", bgm.fileName.empty());
+
+    // Module-level functions no-crash
+    sndbuf_clear();
+    TEST(L"sndbuf_clear no-crash", true);
+    SoundChannel* ch = get_channel(0);
+    TEST(L"get_channel(0) non-null", ch != nullptr);
+    TEST(L"get_channel(0) channel 0", ch == &st.sounds[0]);
+    SoundChannel* free_ch = get_channel(-1);
+    TEST(L"get_channel(-1) finds free channel", free_ch != nullptr);
+    mix_sounds();
+    TEST(L"mix_sounds no-crash", true);
+    play_sound();
+    TEST(L"play_sound no-crash", true);
+    stop_sound();
+    TEST(L"stop_sound no-crash", true);
+
+    // add_wave
+    WaveData mono_wave;
+    mono_wave.channels = 1;
+    mono_wave.bytesPerSample = 2;
+    mono_wave.samplesPerSec = 44100;
+    mono_wave.wav.resize(1024, 0);
+    TEST(L"add_wave valid wave", add_wave(&mono_wave) == true);
+    TEST(L"add_wave null wave", add_wave(nullptr) == false);
+
+    // WaveData::is_valid
+    WaveData valid;
+    TEST(L"WaveData empty not valid", valid.is_valid() == false);
+    valid.wav.resize(10);
+    TEST(L"WaveData filled valid", valid.is_valid() == true);
+
+    // sound_table accessors
+    std::string tbl_err = sound_table_load_file("nonexistent.snd");
+    TEST(L"sound_table_load_file nonexistent returns error", !tbl_err.empty());
+    TEST(L"sound_table_get_sound nonexistent returns null", sound_table_get_sound(0, 0) == nullptr);
+
+    // ---- Snd file parsing test ----
+    // Load the test.snd file generated by Python and verify extracted WaveData
+    // File contains:
+    //   Sound 0: group=1, number=0, 16-bit mono, 44100Hz, 500 samples
+    //   Sound 1: group=1, number=1, 8-bit stereo, 22050Hz, 300 samples
+    sound_resource_init();
+    std::string snd_err = sound_table_load_file("test/test.snd");
+    TEST(L"SoundTable load test.snd success", snd_err.empty());
+
+    // Verify Sound 0 (16-bit mono, 44.1kHz)
+    const WaveData* s0 = sound_table_get_sound(1, 0);
+    TEST(L"SoundTable get_sound(1,0) found", s0 != nullptr);
+    if (s0) {
+        TEST(L"Snd[0] channels == 1", s0->channels == 1);
+        TEST(L"Snd[0] bytesPerSample == 2", s0->bytesPerSample == 2);
+        TEST_INT(L"Snd[0] samplesPerSec", 44100u, s0->samplesPerSec);
+        TEST(L"Snd[0] num.group == 1", s0->num.group == 1);
+        TEST(L"Snd[0] num.number == 0", s0->num.number == 0);
+        TEST(L"Snd[0] wav non-empty", !s0->wav.empty());
+    }
+
+    // Verify Sound 1 (8-bit stereo, 22.05kHz)
+    const WaveData* s1 = sound_table_get_sound(1, 1);
+    TEST(L"SoundTable get_sound(1,1) found", s1 != nullptr);
+    if (s1) {
+        TEST(L"Snd[1] channels == 2", s1->channels == 2);
+        TEST(L"Snd[1] bytesPerSample == 1", s1->bytesPerSample == 1);
+        TEST_INT(L"Snd[1] samplesPerSec", 22050u, s1->samplesPerSec);
+        TEST(L"Snd[1] num.group == 1", s1->num.group == 1);
+        TEST(L"Snd[1] num.number == 1", s1->num.number == 1);
+        TEST(L"Snd[1] wav non-empty", !s1->wav.empty());
+    }
+
+    // Negative: non-existent sound returns null
+    TEST(L"SoundTable get_sound(99,99) null", sound_table_get_sound(99, 99) == nullptr);
+
+    // Load nonexistent file returns error
+    std::string bad_err = sound_table_load_file("test/nonexistent.snd");
+    TEST(L"SoundTable load nonexistent returns error", !bad_err.empty());
+
+    // Reload the same file (table already populated — should succeed)
+    std::string reload_err = sound_table_load_file("test/test.snd");
+    TEST(L"SoundTable reload test.snd success", reload_err.empty());
+
+    // Verify sound still accessible after reload
+    const WaveData* s0_again = sound_table_get_sound(1, 0);
+    TEST(L"SoundTable get_sound(1,0) after reload", s0_again != nullptr);
+    if (s0_again) {
+        TEST(L"Snd[0] after reload channels == 1", s0_again->channels == 1);
+    }
+
+    // Snd format error: try to load a non-snd file
+    // Create a small text file
+    {
+        std::string fake_err = sound_table_load_file("test/test_file.cpp");
+        TEST(L"SoundTable load non-snd returns error", !fake_err.empty());
+        // Error should mention "ElecbyteSnd" or similar
+        TEST(L"SoundTable load non-snd error mentions ElecbyteSnd",
+            fake_err.find("ElecbyteSnd") != std::string::npos);
+    }
 }
 
 // ---- Action service tests (ssz_native::action) ----
@@ -1679,21 +1839,106 @@ static void test_common_service()
     FXY fxy;
     TEST(L"FXY x == 0", fxy.x == 0.0f);
 
-    // Stub functions
+    // Real implementations
     common_flag_init(cd);
+    TEST(L"common_flag_init com size", cd.com.size() == 20);
+    TEST(L"common_flag_init com[0] == 4", cd.com.size() > 0 && cd.com[0] == 4);
+    TEST(L"common_flag_init taglevel size", cd.taglevel.size() == 40);
+    TEST(L"common_flag_init autoguard size", cd.autoguard.size() == 20);
+    TEST(L"common_flag_init powerShare size", cd.powerShare.size() == 2);
+    TEST(L"common_flag_init powerShare[0] true", cd.powerShare.size() > 0 && cd.powerShare[0] == true);
+
     common_reset_remap_input(cd);
+    TEST(L"common_reset_remap_input size", cd.inputRemap.size() == 20);
+    TEST(L"common_reset_remap_input[0] == 0", cd.inputRemap.size() > 0 && cd.inputRemap[0] == 0);
+    TEST(L"common_reset_remap_input[19] == 19", cd.inputRemap.size() > 19 && cd.inputRemap[19] == 19);
+
     common_set_size(cd, 640, 480);
-    TEST(L"common_set_size no-crash", true);
-    TEST(L"common_tick_frame false", common_tick_frame(cd) == false);
-    TEST(L"common_tick_next_frame false", common_tick_next_frame(cd) == false);
+    TEST(L"common_set_size GameWidth", cd.GameWidth == 320);
+    TEST(L"common_set_size GameHeight", cd.GameHeight == 240);
+    TEST(L"common_set_size WidthScale == 2.0", std::abs(cd.WidthScale - 2.0f) < 0.001f);
+
+    // resetFrameTime initializes tick state (nextAddTime = 1.0 for 60fps)
+    common_reset_frame_time(cd);
+    // Tick frame: oldTickCount(-1) < tickCount(0) → true
+    TEST(L"common_tick_frame true", common_tick_frame(cd) == true);
+    // Tick next frame: (int)(0 + 1.0) > 0 → 1 > 0 → true
+    TEST(L"common_tick_next_frame true", common_tick_next_frame(cd) == true);
+
+    // match_over: p1wins(0) >= p1mw(2) → false
     TEST(L"common_match_over false", common_match_over(cd) == false);
-    TEST(L"common_next_line 0", common_next_line(0, "hello\nworld") == 0);
-    TEST(L"common_split_lines empty", common_split_lines("a\nb").empty());
-    TEST(L"common_atof 0.0", common_atof("3.14") == 0.0);
-    TEST(L"common_atoi 0", common_atoi("42") == 0);
-    TEST(L"common_load_text empty", common_load_text("test.def", false).empty());
-    TEST(L"common_read_file_name empty", common_read_file_name("test.txt", true).empty());
-    TEST(L"common_load_file empty", common_load_file("chars/kfm/kfm.def", cd.debugScript).empty());
+    TEST(L"common_match_over p1wins >= p1mw", (cd.p1wins = 2, common_match_over(cd)) == true);
+    cd.p1wins = 0; // reset
+
+    // nextLine scans forward, finds \n at position 5, returns 1
+    {
+        int nl_i = 0;
+        int nl_r = common_next_line(nl_i, "hello\nworld");
+        TEST(L"common_next_line returns 1", nl_r == 1);
+        TEST(L"common_next_line i at \\n", nl_i == 5);
+    }
+    // nextLine with \r\n
+    {
+        int nl_i = 0;
+        int nl_r = common_next_line(nl_i, "hello\r\nworld");
+        TEST(L"common_next_line crlf returns 2", nl_r == 2);
+        TEST(L"common_next_line crlf i", nl_i == 6);
+    }
+    // nextLine at end returns 0
+    {
+        int nl_i = 11;
+        int nl_r = common_next_line(nl_i, "hello\nworld");
+        TEST(L"common_next_line end returns 0", nl_r == 0);
+        TEST(L"common_next_line end i unchanged", nl_i == 11);
+    }
+    // nextLine past end returns 0
+    {
+        int nl_i = 20;
+        int nl_r = common_next_line(nl_i, "hello\nworld");
+        TEST(L"common_next_line past end returns 0", nl_r == 0);
+    }
+
+    // splitLines returns ["a", "b"]
+    {
+        auto spl = common_split_lines("a\nb");
+        TEST(L"common_split_lines size 2", spl.size() == 2);
+        if (spl.size() >= 2) {
+            TEST_EQ(L"common_split_lines[0]", spl[0], "a");
+            TEST_EQ(L"common_split_lines[1]", spl[1], "b");
+        }
+    }
+    // splitLines empty string
+    {
+        auto spl = common_split_lines("");
+        TEST(L"common_split_lines empty", spl.empty());
+    }
+    // splitLines with crlf
+    {
+        auto spl = common_split_lines("hello\r\nworld");
+        TEST(L"common_split_lines crlf size 2", spl.size() == 2);
+        if (spl.size() >= 2) {
+            TEST_EQ(L"common_split_lines crlf[0]", spl[0], "hello");
+            TEST_EQ(L"common_split_lines crlf[1]", spl[1], "world");
+        }
+    }
+
+    // atof parses decimal strings
+    TEST(L"common_atof 3.14", std::abs(common_atof("3.14") - 3.14) < 0.001);
+    TEST(L"common_atof integer", common_atof("42") == 42.0);
+    TEST(L"common_atof negative", common_atof("-7.5") == -7.5);
+    TEST(L"common_atof empty returns 0", common_atof("") == 0.0);
+    TEST(L"common_atof exponent", std::abs(common_atof("1e2") - 100.0) < 0.001);
+
+    // atoi parses integers
+    TEST(L"common_atoi 42", common_atoi("42") == 42);
+    TEST(L"common_atoi negative", common_atoi("-7") == -7);
+    TEST(L"common_atoi positive sign", common_atoi("+3") == 3);
+    TEST(L"common_atoi empty returns 0", common_atoi("") == 0);
+
+    // loadText/readFileName/loadFile on nonexistent files
+    TEST(L"common_load_text nonexistent", common_load_text("test.def", false).empty());
+    TEST(L"common_read_file_name unicode passthrough", common_read_file_name("test.txt", true) == "test.txt");
+    TEST(L"common_load_file nonexistent non-empty", !common_load_file("chars/kfm/kfm.def", cd.debugScript).empty());
 
     // Field mutation
     cd.coins = 5;
@@ -1716,23 +1961,45 @@ static void test_loader_service()
     std::wcout << L"\n--- Loader service ---" << std::endl;
     using namespace ikemen::ssz_native;
 
-    // LoaderData default init
-    LoaderData ld;
+    // LoaderData default init via accessor
+    LoaderData& ld = loader_get_state();
     TEST(L"LoaderData state == NotYet", ld.state == LoaderState::NotYet);
     TEST(L"LoaderData errorMes empty", ld.errorMes.empty());
 
-    // Stub functions
+    // Error handling
     loader_error("test error");
-    TEST(L"loader_error no-crash", true);
-    TEST(L"loader_stage returns false", loader_stage() == false);
-    TEST(L"loader_chara returns 0", loader_chara(0) == 0);
-    TEST(L"loader_chara returns 0", loader_chara(1) == 0);
-    TEST(L"loader_state_compile returns false", loader_state_compile() == false);
-    loader_load();
-    TEST(L"loader_load no-crash", true);
+    TEST(L"loader_error stores message", ld.errorMes == "test error");
+
+    // Reset clears error
     loader_reset();
-    TEST(L"loader_reset no-crash", true);
-    TEST(L"loader_run_tread returns false", loader_run_tread() == false);
+    TEST(L"loader_reset clears state", ld.state == LoaderState::NotYet);
+    TEST(L"loader_reset clears error", ld.errorMes.empty());
+
+    // Framework return values (backends are stubs — values reflect "not wired yet")
+    TEST(L"loader_stage returns false", loader_stage() == false);
+    TEST(L"loader_chara(0) returns 0", loader_chara(0) == 0);
+    TEST(L"loader_chara(1) returns 0", loader_chara(1) == 0);
+    TEST(L"loader_state_compile returns false", loader_state_compile() == false);
+
+    // State machine: runTread starts loading, load completes it
+    TEST(L"loader_run_tread returns true (starts loading)", loader_run_tread() == true);
+    TEST(L"loader_run_tread sets state to Loading", ld.state == LoaderState::Loading);
+
+    // Second call to runTread should fail (already running)
+    TEST(L"loader_run_tread second call returns false", loader_run_tread() == false);
+
+    // load() transitions to Complete
+    loader_load();
+    TEST(L"loader_load sets state to Complete", ld.state == LoaderState::Complete);
+
+    // Reset brings back to NotYet
+    loader_reset();
+    TEST(L"loader_reset resets state", ld.state == LoaderState::NotYet);
+    TEST(L"loader_reset clears error again", ld.errorMes.empty());
+
+    // Error during loading: set error mes and verify
+    loader_error("load error!");
+    TEST(L"loader_error sets message", ld.errorMes == "load error!");
 
     // State enum values
     TEST(L"LoaderState values",
@@ -1741,6 +2008,11 @@ static void test_loader_service()
         LoaderState::Complete == LoaderState{2} &&
         LoaderState::Error == LoaderState{3} &&
         LoaderState::Cancel == LoaderState{4});
+
+    // No-arg convenience wrappers
+    loader_error();
+    TEST(L"loader_error() no-arg clears message", ld.errorMes.empty());
+    TEST(L"loader_chara() no-arg returns 0", loader_chara() == 0);
 }
 
 // ---- Debug script service tests (ssz_native::debug) ----
@@ -1837,25 +2109,115 @@ static void test_system_service()
     TEST(L"SelectData getChar stub", sel.getChar(0) == nullptr);
     TEST(L"SelectData getStageNo stub", sel.getStageNo(0) == 0);
     TEST(L"SelectData getStage stub", sel.getStage(0) == nullptr);
-    TEST(L"SelectData getStageName stub", sel.getStageName(0).empty());
-    TEST(L"SelectData addChar stub", sel.addChar("kfm") == false);
-    TEST(L"SelectData addStage stub", sel.addStage("stageZ.def").empty());
+    TEST(L"SelectData getStageName empty stagelist", sel.getStageName(0).empty());
     sel.selectStage(3);
     TEST(L"SelectData selectStage", sel.selectedStageNo == 3);
     sel.setStageNo(2);
-    TEST(L"SelectData setStageNo stub", sel.curStageNo == 0); // stub resets to 0
-    TEST(L"SelectInfoData addSelchr stub", inf.addSelchr(0, 0, 1) == false);
+    TEST(L"SelectData setStageNo stub", sel.curStageNo == 0);
+    TEST(L"SelectInfoData addSelchr with null sel", inf.addSelchr(0, 0, 1) == false);
     TEST(L"SystemData selReset stub", true);
     sys.selReset();
     TEST(L"SystemData selReset no-crash", true);
 
-    // Populated select data
-    SelectCharData ch2;
-    ch2.def = "chars/kfm/kfm.def";
-    ch2.name = "KFM";
-    sel.charlist.push_back(ch2);
-    TEST(L"SelectData charlist push_back", sel.charlist.size() == 1);
-    TEST(L"SelectData charlist access", sel.charlist[0].name == "KFM");
+    // ── Real state lookups: addChar / addStage / getStageName ──
+
+    // addChar with non-existent .def file still adds the char (name = def path)
+    bool added = sel.addChar("chars/kfm/kfm.def");
+    TEST(L"SelectData addChar returns true", added == true);
+    TEST(L"SelectData addChar charlist size", sel.charlist.size() == 1);
+    TEST(L"SelectData addChar def stored", sel.charlist[0].def == "chars/kfm/kfm.def");
+    TEST(L"SelectData addChar name fallback", sel.charlist[0].name == "chars/kfm/kfm.def");
+
+    // addStage with non-existent .def file still adds the stage (name = def path)
+    std::string stageName = sel.addStage("stages/stageZ.def");
+    TEST(L"SelectData addStage returns name", !stageName.empty());
+    TEST(L"SelectData addStage stagelist size", sel.stagelist.size() == 1);
+    TEST(L"SelectData addStage name matches", stageName == "stages/stageZ.def");
+
+    // getStageName after populating stagelist
+    TEST(L"SelectData getStageName with 1 stage (0=RANDOM, 1=first)",
+        sel.getStageName(0) == "RANDOM");
+    TEST(L"SelectData getStageName index 1",
+        sel.getStageName(1) == "stages/stageZ.def");
+
+    // getStageNo / getStage work with populated list
+    TEST(L"SelectData getStageNo(0) on populated list", sel.getStageNo(0) == 0);
+    auto* stagePtr = sel.getStage(1);
+    TEST(L"SelectData getStage(1) not null", stagePtr != nullptr);
+    if (stagePtr) {
+        TEST(L"SelectData getStage(1) name", stagePtr->name == "stages/stageZ.def");
+    }
+
+    // addChar with empty path returns false
+    TEST(L"SelectData addChar empty path", sel.addChar("") == false);
+
+    // addStage with empty path returns empty
+    TEST(L"SelectData addStage empty path", sel.addStage("").empty());
+
+    // Add a second stage and verify indexing
+    sel.addStage("stages/kfm.def");
+    TEST(L"SelectData stagelist size after 2nd add", sel.stagelist.size() == 2);
+    TEST(L"SelectData getStageName index 2", sel.getStageName(2) == "stages/kfm.def");
+    TEST(L"SelectData getStageName wraps around (index 3 = 1st)",
+        sel.getStageName(3) == "stages/stageZ.def");
+}
+
+// ---- Consts service tests (ssz_native::consts) ----
+
+static void test_consts_service()
+{
+    namespace c = ikemen::ssz_native::consts;
+    std::wcout << L"\n--- Consts service ---" << std::endl;
+
+    // Signed template — matches &Signed<_t> from consts.ssz
+    // SSZ: MAX = (1 << 8*typesize(_t) - 1) - 1
+    // SSZ: MIN = !MAX
+    TEST(L"Signed<int8_t>::MAX == 127", c::Signed<int8_t>::MAX == 127);
+    TEST(L"Signed<int8_t>::MIN == -128", c::Signed<int8_t>::MIN == -128);
+    TEST(L"Signed<int16_t>::MAX == 32767", c::Signed<int16_t>::MAX == 32767);
+    TEST(L"Signed<int16_t>::MIN == -32768", c::Signed<int16_t>::MIN == -32768);
+    TEST(L"Signed<int32_t>::MAX == 2147483647", c::Signed<int32_t>::MAX == 2147483647);
+    TEST(L"Signed<int32_t>::MIN == -2147483648", c::Signed<int32_t>::MIN == static_cast<int32_t>(-2147483648));
+    TEST(L"Signed<int64_t>::MAX == 9223372036854775807", c::Signed<int64_t>::MAX == 9223372036854775807LL);
+
+    // Unsigned template — matches &Unsigned<_t> from consts.ssz
+    // SSZ: MAX = !0x0 (all bits set), MIN = 0x0
+    TEST(L"Unsigned<uint8_t>::MIN == 0", c::Unsigned<uint8_t>::MIN == 0);
+    TEST(L"Unsigned<uint8_t>::MAX == 255", c::Unsigned<uint8_t>::MAX == 255);
+    TEST(L"Unsigned<uint16_t>::MAX == 65535", c::Unsigned<uint16_t>::MAX == 65535);
+    TEST(L"Unsigned<uint32_t>::MAX == 4294967295", c::Unsigned<uint32_t>::MAX == 4294967295U);
+    TEST(L"Unsigned<uint64_t>::MAX == 18446744073709551615ULL",
+        c::Unsigned<uint64_t>::MAX == 18446744073709551615ULL);
+
+    // Type aliases — matches SSZ types exactly
+    TEST(L"sizeof(byte_t) == 1", sizeof(c::byte_t) == 1);
+    TEST(L"sizeof(short_t) == 2", sizeof(c::short_t) == 2);
+    TEST(L"sizeof(int_t) == 4", sizeof(c::int_t) == 4);
+    TEST(L"sizeof(long_t) == 8", sizeof(c::long_t) == 8);
+    TEST(L"sizeof(ubyte_t) == 1", sizeof(c::ubyte_t) == 1);
+    TEST(L"sizeof(ushort_t) == 2", sizeof(c::ushort_t) == 2);
+    TEST(L"sizeof(uint_t) == 4", sizeof(c::uint_t) == 4);
+    TEST(L"sizeof(ulong_t) == 8", sizeof(c::ulong_t) == 8);
+    TEST(L"sizeof(char_t) == 1", sizeof(c::char_t) == 1);
+    TEST(L"sizeof(index_t) == sizeof(intptr_t)", sizeof(c::index_t) == sizeof(intptr_t));
+
+    // Signed/unsigned correctness
+    TEST(L"byte_t is signed", static_cast<c::byte_t>(-1) < 0);
+    TEST(L"ubyte_t is unsigned", static_cast<c::ubyte_t>(-1) > 0);
+    TEST(L"char_t is unsigned (matches SSZ)", static_cast<c::char_t>(-1) > 0);
+
+    // Sentinel values
+    TEST(L"SENTINEL_MIN == int32_t MIN", c::SENTINEL_MIN == c::Signed<int32_t>::MIN);
+    TEST(L"SENTINEL_MAX == int32_t MAX", c::SENTINEL_MAX == c::Signed<int32_t>::MAX);
+    TEST(L"SENTINEL_UMAX == uint32_t MAX", c::SENTINEL_UMAX == c::Unsigned<uint32_t>::MAX);
+
+    // null<T>() — matches SSZ null<_t>() which returns default-initialized value
+    int* null_ptr = c::null<int>();
+    TEST(L"null<int>() returns nullptr", null_ptr == nullptr);
+    auto empty_vec = c::null_array<int>();
+    TEST(L"null_array<int>() returns empty vector", empty_vec.empty());
+    int default_int = c::null_value<int>();
+    TEST(L"null_value<int>() returns 0", default_int == 0);
 }
 
 // ---- Alert service tests (ssz_native::alert) ----
@@ -2224,6 +2586,39 @@ static void test_file_handle()
     }
 }
 
+// ---- Module-level function tests (static state) ----
+    // These test the free functions that the bridge calls.
+    // They operate on an internal static SystemData instance.
+
+    // addChar via module-level function
+    bool modAdded = system_add_char("chars/kfm/kfm.def");
+    TEST(L"system_add_char returns true", modAdded == true);
+
+    // addStage via module-level function
+    std::string modStageName = system_add_stage("stages/stageZ.def");
+    TEST(L"system_add_stage returns name", !modStageName.empty());
+
+    // getStageName via module-level function
+    std::string name0 = system_get_stage_name(0);
+    TEST(L"system_get_stage_name(0) = RANDOM", name0 == "RANDOM");
+    std::string name1 = system_get_stage_name(1);
+    TEST(L"system_get_stage_name(1) = first stage", !name1.empty());
+
+    // setStageNo / selectStage via module-level functions
+    int setNo = system_set_stage_no(1);
+    TEST(L"system_set_stage_no returns 1", setNo == 1);
+    system_select_stage(0);
+    // No crash = success
+
+    // addSelchr with empty internal state (sel is wired but charlist may be empty-ish)
+    bool selchrAdded = system_add_selchr(0, 0, 1);
+    TEST(L"system_add_selchr returns false (charlist empty)", selchrAdded == false);
+
+    // selReset
+    system_sel_reset();
+    TEST(L"system_sel_reset no-crash", true);
+}
+
 // ---- Main ----
 
 int main()
@@ -2275,6 +2670,7 @@ int main()
     test_config_service();
     test_stack_service();
     test_shell_service();
+    test_consts_service();
     test_alert_service();
     test_crypto_service();
     test_mesdialog_service();

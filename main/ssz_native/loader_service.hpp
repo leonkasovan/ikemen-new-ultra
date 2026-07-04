@@ -3,9 +3,10 @@
 // loader.ssz implements the loading screen logic — character/stage loading,
 // state compilation, and threading.
 //
-// Phase 3: All function bodies are stubs.  Wired when dependent modules
-// (com, chr, sff, stage, statebuilder, system-script, sdlplugin) are at
-// least partially native.
+// Phase 5: Real implementations for the loading state machine, error handling,
+// load loop framework, and thread management. Uses common_service's file-
+// loading functions and static CommonData accessor. Stage/chara/compile
+// backend operations are still stub-based until those modules are converted.
 
 #pragma once
 
@@ -33,7 +34,7 @@ struct LoaderData {
 	// code: ^^/char[n] per-player compiled state code (opaque array)
 };
 
-// ── Public function stubs ──
+// ── Public functions ──
 
 // error(m) — set error message.
 void loader_error(const std::string& m);
@@ -54,13 +55,17 @@ void loader_load();
 // reset() — cancel loading and reset state.
 void loader_reset();
 
-// runTread() _ sic — start loading thread.  Returns false if already running.
+// runTread() — start loading thread.  Returns false if already running.
 bool loader_run_tread();
 
 // No-arg convenience wrappers for bridge/SSZ ABI.
-// These provide a default-parameter bridge for functions that take arguments.
-// Currently stubs — will be wired as module state integration progresses.
+// These provide a default-parameter bridge for functions that take arguments
+// but lack them in the old ABI path. The real implementations delegate to
+// the parameter-taking versions with defaults.
 void loader_error();
 int  loader_chara();
+
+// Accessor for internal static LoaderData (for testing).
+LoaderData& loader_get_state();
 
 } // namespace ikemen::ssz_native

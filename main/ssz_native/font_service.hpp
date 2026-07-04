@@ -21,5 +21,6 @@ struct FontState {
 // Phase 4: stubs.
 void font_init();
 void font_render_text(const std::string& text, int x, int y, uint32_t color);
+void font_render_text();
 
 } // namespace ikemen::ssz_native
