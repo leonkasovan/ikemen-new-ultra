@@ -2254,3 +2254,30 @@ extern "C" void SSZ_STDCALL VideoPlay(PluginUtil* pu)
 // and the video_static.hpp stubs provide no-op registration. The
 // SSZ video.ssz script is used instead.
 #endif
+
+// =========================================================================
+// SDL Event wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_SDLEVENT_LIB
+#include "ssz_native/sdlevent_service.hpp"
+
+extern "C" bool SSZ_STDCALL SdleventEventUpdate(PluginUtil* pu)
+{
+    //SSZ_TRACE("SdleventEventUpdate");
+    (void)pu;
+    return ikemen::ssz_native::sdlevent_event_update();
+}
+
+extern "C" bool SSZ_STDCALL SdleventEvent(PluginUtil* pu, int32_t fps)
+{
+    //SSZ_TRACE("SdleventEvent");
+    (void)pu;
+    return ikemen::ssz_native::sdlevent_event(static_cast<int>(fps));
+}
+
+#else
+// When IKEMEN_NATIVE_SDLEVENT_LIB=0, the bridge wrappers don't exist
+// and the sdlevent_static.hpp stubs provide no-op registration. The
+// SSZ sdlevent.ssz script is used instead.
+#endif

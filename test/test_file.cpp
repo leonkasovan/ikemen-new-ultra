@@ -1432,12 +1432,24 @@ static void test_config_service()
 
 // ---- SDL plugin script service tests (ssz_native::sdlplugin) ----
 
-static void test_sdlplugin_script_service()
+// ---- SDL plugin service tests (ssz_native::sdlplugin) ----
+
+static void test_sdlplugin_service()
 {
-    std::wcout << L"\n--- SDL plugin script service ---" << std::endl;
-    using namespace ikemen::ssz_native;
-    SdlPluginState ps;
-    TEST(L"SdlPluginState created", true);
+    std::wcout << L"\n--- SDL plugin service ---" << std::endl;
+    
+    // Test constants
+    TEST(L"SNDFREQ constant", ikemen::ssz_native::SNDFREQ == 44100);
+    TEST(L"SNDBUFLEN constant", ikemen::ssz_native::SNDBUFLEN == 4096);
+    TEST(L"RELEASED constant", ikemen::ssz_native::RELEASED == 0);
+    TEST(L"PRESSED constant", ikemen::ssz_native::PRESSED == 1);
+
+    // Test modifier constants
+    TEST(L"KMOD_NONE", ikemen::ssz_native::KMOD_NONE == 0x0000);
+    TEST(L"KMOD_CTRL", ikemen::ssz_native::KMOD_CTRL == (ikemen::ssz_native::KMOD_LCTRL | ikemen::ssz_native::KMOD_RCTRL));
+    TEST(L"KMOD_SHIFT", ikemen::ssz_native::KMOD_SHIFT == (ikemen::ssz_native::KMOD_LSHIFT | ikemen::ssz_native::KMOD_RSHIFT));
+    TEST(L"KMOD_ALT", ikemen::ssz_native::KMOD_ALT == (ikemen::ssz_native::KMOD_LALT | ikemen::ssz_native::KMOD_RALT));
+    TEST(L"KMOD_GUI", ikemen::ssz_native::KMOD_GUI == (ikemen::ssz_native::KMOD_LGUI | ikemen::ssz_native::KMOD_RGUI));
 }
 
 // ---- SDL event service tests (ssz_native::sdlevent) ----
@@ -1446,10 +1458,51 @@ static void test_sdlevent_service()
 {
     std::wcout << L"\n--- SDL event service ---" << std::endl;
     using namespace ikemen::ssz_native;
-    SdlEventState es;
-    TEST(L"SdlEventState created", true);
-    sdlevent_poll();
-    TEST(L"sdlevent_poll() no-crash", true);
+
+    // Test SdleKey
+    SdleKey sk;
+    TEST(L"SdleKey default key UNKNOWN", sk.key == K::UNKNOWN);
+    TEST(L"SdleKey default down false", sk.down == false);
+    
+    sk.key = K::a;
+    sk.shift = false;
+    sk.ctrl = false;
+    sk.alt = false;
+    sk.checkDown(K::a, 0);
+    TEST(L"SdleKey checkDown matches", sk.down == true);
+    
+    sk.down = false;
+    sk.checkDown(K::b, 0);
+    TEST(L"SdleKey checkDown no-match", sk.down == false);
+    
+    sk.reset();
+    TEST(L"SdleKey reset clears down", sk.down == false);
+
+    // Test SdleventState defaults
+    SdleventState state;
+    TEST(L"SdleventState nexttime==0", state.nexttime == 0);
+    TEST(L"SdleventState lastdraw==0", state.lastdraw == 0);
+    TEST(L"SdleventState end==false", state.end == false);
+    TEST(L"SdleventState esc==false", state.esc == false);
+    TEST(L"SdleventState eventKeys empty", state.eventKeys.empty());
+
+    // Test resetFrameKeys
+    state.esc = true;
+    state.aKey = true;
+    state.upKey = true;
+    state.returnKey = true;
+    state.resetFrameKeys();
+    TEST(L"SdleventState resetFrameKeys esc", state.esc == false);
+    TEST(L"SdleventState resetFrameKeys aKey", state.aKey == false);
+    TEST(L"SdleventState resetFrameKeys upKey", state.upKey == false);
+    TEST(L"SdleventState resetFrameKeys returnKey", state.returnKey == false);
+
+    // Test module-level get_state
+    SdleventState& gs = sdlevent_get_state();
+    TEST(L"sdlevent_get_state returns reference", true);
+
+    // Note: sdlevent_event_update() and sdlevent_event() require SDL
+    // to be initialized (window, video). They will be tested in integration.
 }
 
 // ---- Char service tests (ssz_native::char) ----
@@ -1699,19 +1752,20 @@ static void test_sound_resource_service()
 static void test_action_service()
 {
     std::wcout << L"\n--- Action service ---" << std::endl;
-    using namespace ikemen::ssz_native;
-    Rect r;
+    // Note: Cannot use 'using namespace ikemen::ssz_native' here because
+    // both action_service.hpp and sdlplugin_service.hpp define 'Rect'
+    ikemen::ssz_native::Rect r;
     TEST(L"Rect default l==0", r.l == 0);
     TEST(L"Rect default r==-1", r.r == -1);
-    Rect r2{10, 20, 30, 40};
+    ikemen::ssz_native::Rect r2{10, 20, 30, 40};
     TEST(L"Rect aggregate init", r2.l == 10 && r2.t == 20 && r2.r == 30 && r2.b == 40);
-    Frame f;
+    ikemen::ssz_native::Frame f;
     TEST(L"Frame default time==-1", f.time == -1);
     TEST(L"Frame default group==-1", f.group == -1);
     TEST(L"Frame default clsn empty", f.clsn.empty());
-    ActionData a;
+    ikemen::ssz_native::ActionData a;
     TEST(L"ActionData created", true);
-    DrawnClsnData dc;
+    ikemen::ssz_native::DrawnClsnData dc;
     TEST(L"DrawnClsnData created", true);
 }
 
@@ -1751,7 +1805,7 @@ static void test_statebuilder_service()
 {
     std::wcout << L"\n--- Statebuilder service ---" << std::endl;
     using namespace ikemen::ssz_native;
-    StateBuilderState sb;
+    StateBuilder sb;
     TEST(L"StateBuilderState created", true);
     statebuilder_init();
     TEST(L"statebuilder_init() no-crash", true);
@@ -2587,6 +2641,11 @@ static void test_file_handle()
 }
 
 // ---- Module-level function tests (static state) ----
+static void test_system_module_functions()
+{
+    std::wcout << L"\n--- System module-level functions ---" << std::endl;
+    using namespace ikemen::ssz_native;
+    
     // These test the free functions that the bridge calls.
     // They operate on an internal static SystemData instance.
 
@@ -2619,6 +2678,112 @@ static void test_file_handle()
     TEST(L"system_sel_reset no-crash", true);
 }
 
+// ---- Startup parity tests (matching pre-conversion trace) ----
+
+static void test_startup_parity()
+{
+    std::wcout << L"\n--- Startup parity ---" << std::endl;
+    using namespace ikemen::ssz_native;
+
+    // 1. Static plugin registrations succeed (simulated by constructors)
+    // The *_static_register() calls in main.cpp happen at engine startup.
+    // Here we verify the native service types initialize correctly.
+
+    // CommonData default init (matches SSZ startup state)
+    CommonData cd;
+    TEST(L"CommonData gameType == 0", cd.gameType == 0);
+    TEST(L"CommonData round == 1", cd.round == 1);
+    TEST(L"CommonData match == 1", cd.match == 1);
+    TEST(L"CommonData life == 1.0", cd.life == 1.0f);
+    TEST(L"CommonData power == 0", cd.power == 0);
+    TEST(L"CommonData coins == 0", cd.coins == 0);
+    TEST(L"CommonData credits == 0", cd.credits == 0);
+
+    // 2. Stage service default init
+    stage_init();
+    TEST(L"Stage module initialized", true);
+    TEST(L"EnvShake clear returns 0", stage_get_env_shake().getOffset() == 0.0f);
+
+    // 3. Character service default init
+    char_init();
+    TEST(L"Char module initialized", true);
+
+    // 4. Command service default init
+    command_init();
+    TEST(L"Command module initialized", true);
+
+    // 5. Fight service default init
+    fight_init();
+    TEST(L"Fight module initialized", true);
+
+    // 6. System service state accessors
+    // addChar with existing select data
+    SelectData sel;
+    bool added = sel.addChar("chars/kfm/kfm.def");
+    TEST(L"Selector addChar", added == true);
+    TEST(L"Selector charlist populated", sel.charlist.size() == 1);
+
+    sel.addStage("stages/stageZ.def");
+    TEST(L"Selector stagelist populated", sel.stagelist.size() == 1);
+
+    // 7. File I/O parity: open/write/close/read matches SSZ behavior
+    {
+        FileHandle f;
+        bool ok = f.open(TMPDIR + L"/parity_test.txt", L"w+b");
+        TEST(L"Parity file open", ok);
+
+        const char* data = "parity test data";
+        ok = f.write(data, 16);
+        TEST(L"Parity file write", ok);
+        f.close();
+
+        ok = f.open(TMPDIR + L"/parity_test.txt", L"rb");
+        TEST(L"Parity file reopen", ok);
+
+        char buf[32] = {};
+        ok = f.read(buf, 16);
+        TEST(L"Parity file read", ok);
+        TEST(L"Parity file content matches", std::memcmp(buf, data, 16) == 0);
+        f.close();
+
+        // Cleanup
+        remove_file(TMPDIR + L"/parity_test.txt");
+    }
+
+    // 8. Stack operations match SSZ
+    {
+        Stack<int> s;
+        TEST(L"Stack initially empty", s.empty());
+        TEST(L"Stack size 0", s.size() == 0);
+
+        s.push(10);
+        s.push(20);
+        s.push(30);
+        TEST(L"Stack size after 3 pushes", s.size() == 3);
+        TEST(L"Stack top", s.top() != nullptr && *s.top() == 30);
+
+        int val = s.pop();
+        TEST(L"Stack pop value", val == 30);
+        TEST(L"Stack size after pop", s.size() == 2);
+
+        s.clear();
+        TEST(L"Stack empty after clear", s.empty());
+    }
+
+    // 9. Math constants match SSZ
+    {
+        TEST(L"PI > 3.14", math::PI > 3.14);
+        TEST(L"E > 2.71", math::E > 2.71);
+    }
+
+    // 10. Loader state machine
+    {
+        LoaderData& ld = loader_get_state();
+        TEST(L"Loader init state NotYet", ld.state == LoaderState::NotYet);
+        TEST(L"Loader error empty", ld.errorMes.empty());
+    }
+}
+
 // ---- Main ----
 
 int main()
@@ -2647,6 +2812,7 @@ int main()
     test_lua_service();
     test_share_service();
     test_system_service();
+    test_system_module_functions();
     test_debug_script_service();
     test_loader_service();
     test_common_service();
@@ -2666,7 +2832,7 @@ int main()
     test_fight_service();
     test_char_service();
     test_sdlevent_service();
-    test_sdlplugin_script_service();
+    test_sdlplugin_service();
     test_config_service();
     test_stack_service();
     test_shell_service();

@@ -1,6 +1,6 @@
 ﻿# Native SSZ Manifest Comparison
 
-**Generated:** 2026-07-04
+**Generated:** 2026-07-05
 **Total symbols:** 2069
 **Scaffolded symbols:** 2069 (100%)
 

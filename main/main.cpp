@@ -10,6 +10,7 @@
 #include "mesdialog_static.hpp"
 #include "ogg_static.hpp"
 #include "sdlplugin_static.hpp"
+#include "sdlevent_static.hpp"
 #include "action_static.hpp"
 #include "alert_static.hpp"
 #include "bg_static.hpp"
@@ -392,6 +393,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!sdlplugin_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register SDL plugin functions");
+		return 1;
+	}
+	if (!sdlevent_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register SDL event functions");
 		return 1;
 	}
 	if (!action_static_register()) {
