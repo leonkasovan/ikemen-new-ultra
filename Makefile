@@ -253,7 +253,8 @@ MAIN_SRCS = \
   $(SSZ_NATIVE)/video_service.cpp \
   $(SSZ_NATIVE)/action_service.cpp \
   $(SSZ_NATIVE)/fighting_service.cpp \
-  $(SSZ_NATIVE)/config_service.cpp
+  $(SSZ_NATIVE)/config_service.cpp \
+  $(SSZ_NATIVE)/system_service.cpp
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 

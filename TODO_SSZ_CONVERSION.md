@@ -95,6 +95,11 @@ These are the current script/plugin boundary declarations to preserve during the
 - `thread_static.hpp`: IKEMEN_NATIVE_THREAD_LIB
 - `time_static.hpp`: IKEMEN_NATIVE_TIME_LIB
 - `share_static.hpp`: IKEMEN_NATIVE_SHARE_LIB
+- `common_static.hpp`: IKEMEN_NATIVE_COMMON_LIB
+- `loader_static.hpp`: IKEMEN_NATIVE_LOADER_LIB
+- `system_static.hpp`: IKEMEN_NATIVE_SYSTEM_LIB
+- `debug_script_static.hpp`: IKEMEN_NATIVE_DEBUG_SCRIPT_LIB
+- `script_static.hpp`: IKEMEN_NATIVE_SCRIPT_LIB
 
 ### Script-service runtime integration gap
 
@@ -332,6 +337,11 @@ The first vertical slice is complete:
 5. ✅ `string_service` `&Format` object implemented (printf-style formatter with %d/%i/%u/%o/%x/%X/%c/%s/%f/%F/%e/%E/%g/%G, flags, width, precision).
 6. ✅ `share_service` real copy/push with CommonData integration (~110+ field mappings), internal snapshot state, and module integration helpers.
 7. ✅ `share_static.hpp` — native share plugin registration guarded by `IKEMEN_NATIVE_SHARE_LIB`, wired into `main.cpp` bootstrap, with rollback verified.
+8. ✅ `common_static.hpp` — native common plugin registration guarded by `IKEMEN_NATIVE_COMMON_LIB` (12 bridge functions: FlagInit, ResetRemapInput, SetSize, TickFrame, TickNextFrame, TickInterpola, AddFrameTime, ResetFrameTime, MatchOver, Atoi, Atof, LoadText), wired into `main.cpp` bootstrap.
+9. ✅ `loader_static.hpp` — native loader plugin registration guarded by `IKEMEN_NATIVE_LOADER_LIB` (7 bridge functions: Error, Stage, Chara, StateCompile, Load, Reset, RunTread), wired into `main.cpp` bootstrap.
+10. ✅ `system_static.hpp` — native system plugin registration guarded by `IKEMEN_NATIVE_SYSTEM_LIB` (7 bridge functions: AddChar, AddStage, GetStageName, SetStageNo, SelectStage, AddSelchr, SelReset), wired into `main.cpp` bootstrap.
+11. ✅ `debug_script_static.hpp` — native debug_script plugin registration guarded by `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` (2 bridge functions: DebugLoadFile, DebugRunFile), wired into `main.cpp` bootstrap.
+12. ✅ `script_static.hpp` — native script plugin registration guarded by `IKEMEN_NATIVE_SCRIPT_LIB` (1 bridge function: ScriptInit), wired into `main.cpp` bootstrap.
 
 ## Immediate Next Step
 
@@ -341,3 +351,8 @@ The first vertical slice is complete:
 4. ✅ Implement `string_service` `&Format` object (printf-style formatter, ~300 lines of SSZ).
 5. ✅ Begin P3: `share_service` real `copy()`/`push()` state transfer.
 6. ✅ Wire `IKEMEN_NATIVE_SHARE_LIB` to an actual script-layer replacement route (share static registration, bridge wrappers, main.cpp bootstrap).
+7. ✅ Wire `IKEMEN_NATIVE_COMMON_LIB` to an actual script-layer replacement route (common static registration, bridge wrappers, main.cpp bootstrap).
+8. ✅ Wire `IKEMEN_NATIVE_LOADER_LIB` to an actual script-layer replacement route (loader static registration, bridge wrappers, main.cpp bootstrap).
+9. ✅ Wire `IKEMEN_NATIVE_SYSTEM_LIB` to an actual script-layer replacement route (system static registration, bridge wrappers, main.cpp bootstrap).
+10. ✅ Wire `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` to an actual script-layer replacement route (debug_script static registration, bridge wrappers, main.cpp bootstrap).
+11. ✅ Wire `IKEMEN_NATIVE_SCRIPT_LIB` to an actual script-layer replacement route (script static registration, bridge wrappers, main.cpp bootstrap).

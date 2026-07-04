@@ -230,4 +230,17 @@ std::string common_read_file_name(const std::string& f, bool unicode);
 std::string common_load_file(const std::string& deffile, std::string& file,
 	void* load_callback = nullptr);
 
+// No-arg convenience wrappers for bridge/SSZ ABI.
+// These operate on an internal static CommonData instance.
+// Stubs for now — will be wired as module state integration progresses.
+void common_flag_init();
+void common_reset_remap_input();
+void common_set_size(int w, int h);
+bool common_tick_frame();
+bool common_tick_next_frame();
+float common_tick_interpola();
+bool common_add_frame_time(float t);
+void common_reset_frame_time();
+bool common_match_over();
+
 } // namespace ikemen::ssz_native

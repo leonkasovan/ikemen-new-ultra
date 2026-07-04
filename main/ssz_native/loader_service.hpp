@@ -57,4 +57,10 @@ void loader_reset();
 // runTread() _ sic — start loading thread.  Returns false if already running.
 bool loader_run_tread();
 
+// No-arg convenience wrappers for bridge/SSZ ABI.
+// These provide a default-parameter bridge for functions that take arguments.
+// Currently stubs — will be wired as module state integration progresses.
+void loader_error();
+int  loader_chara();
+
 } // namespace ikemen::ssz_native

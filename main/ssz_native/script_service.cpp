@@ -11,4 +11,8 @@ void script_init(lua_State*) {
 	// Phase 3: register all 250+ script callbacks here
 }
 
+void script_init() {
+	script_init(nullptr);
+}
+
 } // namespace ikemen::ssz_native

@@ -73,4 +73,10 @@ void debug_clear(lua_State* L, int& re);
 std::string debug_load_file(const std::string& file);
 std::string debug_run_file(const std::string& file);
 
+// No-arg convenience wrappers for bridge/SSZ ABI.
+// These provide parameter-free entry points for the bridge wrappers.
+// Currently stubs returning empty string (success).
+std::string debug_load_file();
+std::string debug_run_file();
+
 } // namespace ikemen::ssz_native

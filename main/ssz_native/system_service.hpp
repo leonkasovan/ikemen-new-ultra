@@ -131,6 +131,16 @@ struct SystemData {
 
 // ── Free-function API ──
 
+// No-arg convenience functions for bridge/SSZ ABI.
+// These operate on an internal static SystemData instance.
+// Currently stubs — will be wired as module state integration progresses.
+void system_add_char();
+void system_add_stage();
+int  system_set_stage_no(int i);
+void system_select_stage(int no);
+bool system_add_selchr(int pn, int cn, int pl);
+void system_sel_reset();
+
 // select_* — methods on SelectData
 inline int SelectData::getCharNo(int i) const {
 	int n = static_cast<int>(charlist.size());

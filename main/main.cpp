@@ -11,6 +11,11 @@
 #include "ogg_static.hpp"
 #include "sdlplugin_static.hpp"
 #include "alert_static.hpp"
+#include "common_static.hpp"
+#include "debug_script_static.hpp"
+#include "loader_static.hpp"
+#include "system_static.hpp"
+#include "script_static.hpp"
 #include "file_static.hpp"
 #include "share_static.hpp"
 #include "math_static.hpp"
@@ -380,6 +385,26 @@ int main(int argc, char *argv[]) {
 	}
 	if (!file_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register File functions");
+		return 1;
+	}
+	if (!common_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Common functions");
+		return 1;
+	}
+	if (!debug_script_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Debug Script functions");
+		return 1;
+	}
+	if (!loader_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Loader functions");
+		return 1;
+	}
+	if (!system_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register System functions");
+		return 1;
+	}
+	if (!script_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Script functions");
 		return 1;
 	}
 	if (!share_static_register()) {

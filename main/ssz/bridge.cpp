@@ -1557,6 +1557,296 @@ extern "C" bool SSZ_STDCALL UnbindGlContext(PluginUtil* pu)
 }
 
 // =========================================================================
+// Debug Script wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_DEBUG_SCRIPT_LIB
+#include "ssz_native/debug_script_service.hpp"
+
+extern "C" void SSZ_STDCALL DebugLoadFile(PluginUtil* pu, Reference file, Reference* out)
+{
+    //SSZ_TRACE("DebugLoadFile");
+    pu->setSSZFunc();
+    (void)file;
+    std::string result = ikemen::ssz_native::debug_load_file();
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->astrToRef(CP_UTF8, *out, result);
+}
+
+extern "C" void SSZ_STDCALL DebugRunFile(PluginUtil* pu, Reference file, Reference* out)
+{
+    //SSZ_TRACE("DebugRunFile");
+    pu->setSSZFunc();
+    (void)file;
+    std::string result = ikemen::ssz_native::debug_run_file();
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->astrToRef(CP_UTF8, *out, result);
+}
+
+#else
+// When IKEMEN_NATIVE_DEBUG_SCRIPT_LIB=0, the bridge wrappers don't exist and the
+// debug_script_static.hpp stubs provide no-op registration. The SSZ debug-script.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
+// Script wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_SCRIPT_LIB
+#include "ssz_native/script_service.hpp"
+
+extern "C" void SSZ_STDCALL ScriptInit(PluginUtil* pu)
+{
+    //SSZ_TRACE("ScriptInit");
+    (void)pu;
+    ikemen::ssz_native::script_init();
+}
+
+#else
+// When IKEMEN_NATIVE_SCRIPT_LIB=0, the bridge wrappers don't exist and the
+// script_static.hpp stubs provide no-op registration. The SSZ script.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
+// System wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_SYSTEM_LIB
+#include "ssz_native/system_service.hpp"
+
+extern "C" bool SSZ_STDCALL SystemAddChar(PluginUtil* pu, Reference def)
+{
+    //SSZ_TRACE("SystemAddChar");
+    (void)pu;
+    (void)def;
+    ikemen::ssz_native::system_add_char();
+    return false;
+}
+
+extern "C" void SSZ_STDCALL SystemAddStage(PluginUtil* pu, Reference def, Reference* out)
+{
+    //SSZ_TRACE("SystemAddStage");
+    (void)pu;
+    (void)def;
+    (void)out;
+    ikemen::ssz_native::system_add_stage();
+}
+
+extern "C" void SSZ_STDCALL SystemGetStageName(PluginUtil* pu, int32_t i, Reference* out)
+{
+    //SSZ_TRACE("SystemGetStageName");
+    pu->setSSZFunc();
+    std::string name = "RANDOM";
+    // Also needs stage list access; for now returns "RANDOM" always
+    // (correct for index 0 when stage list is empty).
+    (void)i;
+    if (name.empty()) return;
+    pu->astrToRef(CP_UTF8, *out, name);
+}
+
+extern "C" int SSZ_STDCALL SystemSetStageNo(PluginUtil* pu, int32_t i)
+{
+    //SSZ_TRACE("SystemSetStageNo");
+    (void)pu;
+    return ikemen::ssz_native::system_set_stage_no(i);
+}
+
+extern "C" void SSZ_STDCALL SystemSelectStage(PluginUtil* pu, int32_t no)
+{
+    //SSZ_TRACE("SystemSelectStage");
+    (void)pu;
+    ikemen::ssz_native::system_select_stage(no);
+}
+
+extern "C" bool SSZ_STDCALL SystemAddSelchr(PluginUtil* pu, int32_t pn, int32_t cn, int32_t pl)
+{
+    //SSZ_TRACE("SystemAddSelchr");
+    (void)pu;
+    return ikemen::ssz_native::system_add_selchr(pn, cn, pl);
+}
+
+extern "C" void SSZ_STDCALL SystemSelReset(PluginUtil* pu)
+{
+    //SSZ_TRACE("SystemSelReset");
+    (void)pu;
+    ikemen::ssz_native::system_sel_reset();
+}
+
+#else
+// When IKEMEN_NATIVE_SYSTEM_LIB=0, the bridge wrappers don't exist and the
+// system_static.hpp stubs provide no-op registration. The SSZ system.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
+// Loader wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_LOADER_LIB
+#include "ssz_native/loader_service.hpp"
+
+extern "C" void SSZ_STDCALL LoaderError(PluginUtil* pu, Reference msg)
+{
+    //SSZ_TRACE("LoaderError");
+    (void)pu;
+    (void)msg;
+    ikemen::ssz_native::loader_error();
+}
+
+extern "C" bool SSZ_STDCALL LoaderStage(PluginUtil* pu)
+{
+    //SSZ_TRACE("LoaderStage");
+    (void)pu;
+    return ikemen::ssz_native::loader_stage();
+}
+
+extern "C" int SSZ_STDCALL LoaderChara(PluginUtil* pu, int32_t pn)
+{
+    //SSZ_TRACE("LoaderChara");
+    (void)pu;
+    (void)pn;
+    return ikemen::ssz_native::loader_chara();
+}
+
+extern "C" bool SSZ_STDCALL LoaderStateCompile(PluginUtil* pu)
+{
+    //SSZ_TRACE("LoaderStateCompile");
+    (void)pu;
+    return ikemen::ssz_native::loader_state_compile();
+}
+
+extern "C" void SSZ_STDCALL LoaderLoad(PluginUtil* pu)
+{
+    //SSZ_TRACE("LoaderLoad");
+    (void)pu;
+    ikemen::ssz_native::loader_load();
+}
+
+extern "C" void SSZ_STDCALL LoaderReset(PluginUtil* pu)
+{
+    //SSZ_TRACE("LoaderReset");
+    (void)pu;
+    ikemen::ssz_native::loader_reset();
+}
+
+extern "C" bool SSZ_STDCALL LoaderRunTread(PluginUtil* pu)
+{
+    //SSZ_TRACE("LoaderRunTread");
+    (void)pu;
+    return ikemen::ssz_native::loader_run_tread();
+}
+
+#else
+// When IKEMEN_NATIVE_LOADER_LIB=0, the bridge wrappers don't exist and the
+// loader_static.hpp stubs provide no-op registration. The SSZ loader.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
+// Common wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_COMMON_LIB
+#include "ssz_native/common_service.hpp"
+
+extern "C" void SSZ_STDCALL CommonFlagInit(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonFlagInit");
+    (void)pu;
+    ikemen::ssz_native::common_flag_init();
+}
+
+extern "C" void SSZ_STDCALL CommonResetRemapInput(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonResetRemapInput");
+    (void)pu;
+    ikemen::ssz_native::common_reset_remap_input();
+}
+
+extern "C" void SSZ_STDCALL CommonSetSize(PluginUtil* pu, int32_t w, int32_t h)
+{
+    //SSZ_TRACE("CommonSetSize");
+    (void)pu;
+    ikemen::ssz_native::common_set_size(w, h);
+}
+
+extern "C" bool SSZ_STDCALL CommonTickFrame(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonTickFrame");
+    (void)pu;
+    return ikemen::ssz_native::common_tick_frame();
+}
+
+extern "C" bool SSZ_STDCALL CommonTickNextFrame(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonTickNextFrame");
+    (void)pu;
+    return ikemen::ssz_native::common_tick_next_frame();
+}
+
+extern "C" float SSZ_STDCALL CommonTickInterpola(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonTickInterpola");
+    (void)pu;
+    return ikemen::ssz_native::common_tick_interpola();
+}
+
+extern "C" bool SSZ_STDCALL CommonAddFrameTime(PluginUtil* pu, float t)
+{
+    //SSZ_TRACE("CommonAddFrameTime");
+    (void)pu;
+    return ikemen::ssz_native::common_add_frame_time(t);
+}
+
+extern "C" void SSZ_STDCALL CommonResetFrameTime(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonResetFrameTime");
+    (void)pu;
+    ikemen::ssz_native::common_reset_frame_time();
+}
+
+extern "C" bool SSZ_STDCALL CommonMatchOver(PluginUtil* pu)
+{
+    //SSZ_TRACE("CommonMatchOver");
+    (void)pu;
+    return ikemen::ssz_native::common_match_over();
+}
+
+extern "C" int SSZ_STDCALL CommonAtoi(PluginUtil* pu, Reference str)
+{
+    //SSZ_TRACE("CommonAtoi");
+    return ikemen::ssz_native::common_atoi(
+        ikemen::ssz_bridge::refToNarrowUtf8(pu, str));
+}
+
+extern "C" double SSZ_STDCALL CommonAtof(PluginUtil* pu, Reference str)
+{
+    //SSZ_TRACE("CommonAtof");
+    return ikemen::ssz_native::common_atof(
+        ikemen::ssz_bridge::refToNarrowUtf8(pu, str));
+}
+
+extern "C" void SSZ_STDCALL CommonLoadText(PluginUtil* pu, Reference* out, Reference filename, bool unicode)
+{
+    //SSZ_TRACE("CommonLoadText");
+    pu->setSSZFunc();
+    std::string result = ikemen::ssz_native::common_load_text(
+        ikemen::ssz_bridge::refToNarrowUtf8(pu, filename), unicode);
+    if (result.empty()) return;
+    pu->astrToRef(CP_UTF8, *out, result);
+}
+
+#else
+// When IKEMEN_NATIVE_COMMON_LIB=0, the bridge wrappers don't exist and the
+// common_static.hpp stubs provide no-op registration. The SSZ common.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
 // Share wrappers — old ABI -> native C++
 // =========================================================================
 
