@@ -1592,6 +1592,66 @@ extern "C" void SSZ_STDCALL DebugRunFile(PluginUtil* pu, Reference file, Referen
 #endif
 
 // =========================================================================
+// Char wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_CHAR_LIB
+#include "ssz_native/char_service.hpp"
+
+extern "C" void SSZ_STDCALL CharInit(PluginUtil* pu)
+{
+    //SSZ_TRACE("CharInit");
+    (void)pu;
+    ikemen::ssz_native::char_init();
+}
+
+#else
+// When IKEMEN_NATIVE_CHAR_LIB=0, the bridge wrappers don't exist and the
+// char_static.hpp stubs provide no-op registration. The SSZ char.ssz
+// script is used instead.
+#endif
+
+// =========================================================================
+// System Script wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB
+#include "ssz_native/system_script_service.hpp"
+
+extern "C" void SSZ_STDCALL SystemScriptInit(PluginUtil* pu)
+{
+    //SSZ_TRACE("SystemScriptInit");
+    (void)pu;
+    ikemen::ssz_native::system_script_init();
+}
+
+#else
+// When IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB=0, the bridge wrappers don't exist
+// and the system_script_static.hpp stubs provide no-op registration. The
+// SSZ system-script.ssz script is used instead.
+#endif
+
+// =========================================================================
+// Trigger Script wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB
+#include "ssz_native/trigger_script_service.hpp"
+
+extern "C" void SSZ_STDCALL TriggerScriptRegisterFunction(PluginUtil* pu)
+{
+    //SSZ_TRACE("TriggerScriptRegisterFunction");
+    (void)pu;
+    ikemen::ssz_native::register_function();
+}
+
+#else
+// When IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB=0, the bridge wrappers don't exist
+// and the trigger_script_static.hpp stubs provide no-op registration. The
+// SSZ trigger-script.ssz script is used instead.
+#endif
+
+// =========================================================================
 // Script wrappers — old ABI -> native C++
 // =========================================================================
 

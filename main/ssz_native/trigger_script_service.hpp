@@ -29,6 +29,10 @@ struct TriggerScriptState {
 // Phase 3: stub.
 void register_function(lua_State* L);
 
+// No-arg convenience wrapper for the SSZ bridge — calls
+// register_function(nullptr) as a stub placeholder for future wiring.
+void register_function();
+
 // ── Core trigger callbacks (170+ functions) ──
 // All follow: void func(lua_State* L, int& re);
 //

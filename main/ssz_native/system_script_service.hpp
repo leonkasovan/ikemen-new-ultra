@@ -24,4 +24,8 @@ struct SystemScriptState {
 // Phase 3: stub.
 void system_script_init(lua_State* L);
 
+// No-arg convenience wrapper for the SSZ bridge — calls
+// system_script_init(nullptr) as a stub placeholder for future wiring.
+void system_script_init();
+
 } // namespace ikemen::ssz_native

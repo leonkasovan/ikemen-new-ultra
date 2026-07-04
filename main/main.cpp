@@ -11,10 +11,13 @@
 #include "ogg_static.hpp"
 #include "sdlplugin_static.hpp"
 #include "alert_static.hpp"
+#include "char_static.hpp"
 #include "common_static.hpp"
 #include "debug_script_static.hpp"
 #include "loader_static.hpp"
 #include "system_static.hpp"
+#include "system_script_static.hpp"
+#include "trigger_script_static.hpp"
 #include "script_static.hpp"
 #include "file_static.hpp"
 #include "share_static.hpp"
@@ -383,6 +386,10 @@ int main(int argc, char *argv[]) {
 		LOG_INFO("Ikemen", "Failed to register Alert functions");
 		return 1;
 	}
+	if (!char_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Char functions");
+		return 1;
+	}
 	if (!file_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register File functions");
 		return 1;
@@ -401,6 +408,14 @@ int main(int argc, char *argv[]) {
 	}
 	if (!system_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register System functions");
+		return 1;
+	}
+	if (!system_script_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register System Script functions");
+		return 1;
+	}
+	if (!trigger_script_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register Trigger Script functions");
 		return 1;
 	}
 	if (!script_static_register()) {
@@ -466,7 +481,7 @@ int main(int argc, char *argv[]) {
 		LOG_DEBUG("SSZ", "Run() FAILED");
 		return 1;
 	}
-	LOG_DEBUG("SSZ", "Run() completed successfully");
+	LOG_DEBUG("SSZ", "Run() completed successfully.");
 
 	return 0;
 }

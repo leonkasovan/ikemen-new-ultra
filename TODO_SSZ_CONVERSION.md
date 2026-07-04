@@ -100,6 +100,9 @@ These are the current script/plugin boundary declarations to preserve during the
 - `system_static.hpp`: IKEMEN_NATIVE_SYSTEM_LIB
 - `debug_script_static.hpp`: IKEMEN_NATIVE_DEBUG_SCRIPT_LIB
 - `script_static.hpp`: IKEMEN_NATIVE_SCRIPT_LIB
+- `trigger_script_static.hpp`: IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB
+- `system_script_static.hpp`: IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB
+- `char_static.hpp`: IKEMEN_NATIVE_CHAR_LIB
 
 ### Script-service runtime integration gap
 
@@ -342,6 +345,9 @@ The first vertical slice is complete:
 10. ✅ `system_static.hpp` — native system plugin registration guarded by `IKEMEN_NATIVE_SYSTEM_LIB` (7 bridge functions: AddChar, AddStage, GetStageName, SetStageNo, SelectStage, AddSelchr, SelReset), wired into `main.cpp` bootstrap.
 11. ✅ `debug_script_static.hpp` — native debug_script plugin registration guarded by `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` (2 bridge functions: DebugLoadFile, DebugRunFile), wired into `main.cpp` bootstrap.
 12. ✅ `script_static.hpp` — native script plugin registration guarded by `IKEMEN_NATIVE_SCRIPT_LIB` (1 bridge function: ScriptInit), wired into `main.cpp` bootstrap.
+13. ✅ `trigger_script_static.hpp` — native trigger_script plugin registration guarded by `IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB` (1 bridge function: TriggerScriptRegisterFunction), wired into `main.cpp` bootstrap.
+14. ✅ `system_script_static.hpp` — native system_script plugin registration guarded by `IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB` (1 bridge function: SystemScriptInit), wired into `main.cpp` bootstrap.
+15. ✅ `char_static.hpp` — native char plugin registration guarded by `IKEMEN_NATIVE_CHAR_LIB` (1 bridge function: CharInit), wired into `main.cpp` bootstrap.
 
 ## Immediate Next Step
 
@@ -356,3 +362,6 @@ The first vertical slice is complete:
 9. ✅ Wire `IKEMEN_NATIVE_SYSTEM_LIB` to an actual script-layer replacement route (system static registration, bridge wrappers, main.cpp bootstrap).
 10. ✅ Wire `IKEMEN_NATIVE_DEBUG_SCRIPT_LIB` to an actual script-layer replacement route (debug_script static registration, bridge wrappers, main.cpp bootstrap).
 11. ✅ Wire `IKEMEN_NATIVE_SCRIPT_LIB` to an actual script-layer replacement route (script static registration, bridge wrappers, main.cpp bootstrap).
+12. ✅ Wire `IKEMEN_NATIVE_TRIGGER_SCRIPT_LIB` to an actual script-layer replacement route (trigger_script static registration, bridge wrappers, main.cpp bootstrap).
+13. ✅ Wire `IKEMEN_NATIVE_SYSTEM_SCRIPT_LIB` to an actual script-layer replacement route (system_script static registration, bridge wrappers, main.cpp bootstrap).
+14. ✅ Wire `IKEMEN_NATIVE_CHAR_LIB` to an actual script-layer replacement route (char static registration, bridge wrappers, main.cpp bootstrap).

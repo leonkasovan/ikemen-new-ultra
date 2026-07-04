@@ -6,10 +6,20 @@
 
 #pragma once
 
+struct lua_State;
+
 namespace ikemen::ssz_native {
 
 struct CharState {
 	// Phase 4: placeholder — populated when char module is wired.
 };
+
+// init(L) — initializes the character engine with a Lua state.
+// Phase 4: stub.
+void char_init(lua_State* L);
+
+// No-arg convenience wrapper for the SSZ bridge — calls
+// char_init(nullptr) as a stub placeholder for future wiring.
+void char_init();
 
 } // namespace ikemen::ssz_native
