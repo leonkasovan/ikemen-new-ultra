@@ -9,8 +9,9 @@
 // If a future ssz_native module needs them, move the declarations here.
 // TODO: Remaining plugins not yet in this header:
 //   - regex, socket, sound, ogg (Phase 2 of TODO_SSZ_CONVERSION.md)
-//   - mesdialog, lua (Phase 2 — deferred until Lua boundary is understood)
-//   - shell (Phase 3 — simple, but bridge.cpp-only currently)
+//   - mesdialog (Phase 3 — migrated to plugin_native_api.hpp 2026-07-06)
+//   - lua (Phase 2 — deferred until Lua boundary is understood)
+//   - shell (Phase 3 — migrated to plugin_native_api.hpp 2026-07-06)
 //   - SSZCALLBACK typedef (lives in bridge.cpp; migrate here when lua declarations move)
 //
 // All functions here have C++ linkage (no extern "C") and use native types
@@ -141,3 +142,27 @@ void       SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x,
 uint32_t   SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl);
 uint32_t   SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w);
 void       SSZ_STDCALL DeleteGlTexture(uint32_t texid);
+
+// ---- Shell plugin (main/shell/shell.cpp) ----
+
+bool SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct,
+                           const std::wstring& param, const std::wstring& file);
+bool SSZ_STDCALL MoveTrash(const std::wstring& file);
+
+// ---- Mesdialog plugin (main/mesdialog/mesdialog.cpp) ----
+
+bool        SSZ_STDCALL YesNo(const std::wstring& r);
+void        SSZ_STDCALL VeryUnsafeCopy(intptr_t size, void* src, void* dst);
+std::wstring SSZ_STDCALL GetClipboardStr();
+intptr_t    SSZ_STDCALL TazyuuCheck(const std::wstring& name);
+void        SSZ_STDCALL CloseTazyuuHandle(intptr_t mutex);
+std::wstring SSZ_STDCALL GetInifileString(const std::wstring& def, const std::wstring& key, const std::wstring& app, const std::wstring& file);
+int32_t     SSZ_STDCALL GetInifileInt(int32_t def, const std::wstring& key, const std::wstring& app, const std::wstring& file);
+bool        SSZ_STDCALL WriteInifileString(const std::wstring& str, const std::wstring& key, const std::wstring& app, const std::wstring& file);
+bool        SSZ_STDCALL UnCompress(const void* data, intptr_t bytes, std::vector<uint8_t>& output);
+void        SSZ_STDCALL UbytesToStr(const void* data, intptr_t bytes, unsigned int cp, std::wstring& output);
+void        SSZ_STDCALL StrToUbytes(const void* data, intptr_t bytes, unsigned int cp, std::vector<uint8_t>& output);
+void        SSZ_STDCALL AsciiToLocal(const void* data, intptr_t bytes, std::wstring& output);
+void        SSZ_STDCALL SetSharedString(const std::wstring& str);
+std::wstring SSZ_STDCALL GetSharedString();
+std::wstring SSZ_STDCALL InputStr(const std::wstring& title);

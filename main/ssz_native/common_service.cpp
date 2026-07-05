@@ -11,6 +11,10 @@
 #include <cstdint>
 #include <cstring>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace ikemen::ssz_native {
 
 // ── flagInit ──
@@ -273,12 +277,32 @@ std::string common_load_text(const std::string& filename, bool unicode) {
 
 // ── readFileName ──
 // If unicode is true, returns the path as-is.
-// If unicode is false, converts via AsciiToLocal (stub — returns input).
+// If unicode is false, converts via AsciiToLocal.
 // SSZ: ret unicode ? f : mes.AsciiToLocal(f)
+// The native implementation converts from UTF-8 to the system ANSI code page
+// using Win32 APIs, matching the behavior of mesdialog's AsciiToLocal.
 std::string common_read_file_name(const std::string& f, bool unicode) {
 	if (unicode) return f;
-	// mes.AsciiToLocal would do ANSI-to-local conversion.
-	// For now, return the input as-is (the conversion is a no-op until mesdialog is wired).
+#ifdef _WIN32
+	// AsciiToLocal: convert from UTF-8 to system ANSI code page
+	// Step 1: UTF-8 (narrow) → UTF-16 (wide)
+	int wideLen = MultiByteToWideChar(CP_UTF8, 0, f.c_str(), -1, nullptr, 0);
+	if (wideLen > 0) {
+		std::wstring wide(static_cast<size_t>(wideLen), L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, f.c_str(), -1, &wide[0], wideLen);
+		// Step 2: UTF-16 (wide) → ANSI code page (narrow)
+		int ansiLen = WideCharToMultiByte(CP_ACP, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		if (ansiLen > 0) {
+			std::string ansi(static_cast<size_t>(ansiLen), '\0');
+			WideCharToMultiByte(CP_ACP, 0, wide.c_str(), -1, &ansi[0], ansiLen, nullptr, nullptr);
+			// Remove null terminator included by WideCharToMultiByte
+			if (!ansi.empty() && ansi.back() == '\0')
+				ansi.pop_back();
+			return ansi;
+		}
+	}
+#endif
+	// Fallback: return input unchanged (non-Windows platforms or conversion failure)
 	return f;
 }
 

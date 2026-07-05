@@ -5,37 +5,11 @@
 // Statically registers every function exported by ogg.cpp
 // so that the SSZ runtime resolves them without loading ogg.dll.
 //
-// HOW TO USE
-// ----------
-// 1.  #include this header in the translation unit that owns main()
-//     (or wherever the SSZ compiler is initialised).
-//
-// 2.  Call  ogg_static_register()  BEFORE the SSZ compiler runs.
-//
-//     #include "ogg_static.hpp"
-//
-//     int main() {
-//         if (!ogg_static_register()) {
-//             printf("Failed to register ogg functions.\n");
-//             return 1;
-//         }
-//         // ... start SSZ compiler / runtime ...
-//     }
-//
-// 3.  The SSZ scripts continue to use:
-//         plugin void Close(:index:) = "dll/ogg.dll";
-//     but NO ogg.dll file is needed — the function pointer is
-//     resolved from the static registry.
-//
-// PREREQUISITES
-// -------------
-//   - Link ogg.cpp (and its dependencies) into the same executable.
-//   - #include "static_plugin_registry.hpp" (pulled in automatically).
-//
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_OGG_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
@@ -87,6 +61,4 @@ inline bool ogg_static_register()
 		sizeof(ogg_mapping) / sizeof(ogg_mapping[0]));
 }
 
-#else
-inline bool ogg_static_register() { return true; }
-#endif
+

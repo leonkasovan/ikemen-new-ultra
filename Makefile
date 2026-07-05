@@ -8,6 +8,19 @@
 #
 # Requires: w64devkit x86 (https://github.com/skeeto/w64devkit/releases/download/v2.8.0/w64devkit-x86-2.8.0.7z.exe)
 
+# Test cases for tracing native SSZ plugin calls. Run these commands in a clean build directory to generate trace logs for comparison:
+# touch main/ssz/bridge.cpp
+# touch main/main.cpp
+# make IKEMEN_ENABLE_PLUGIN_TRACE=1 IKEMEN_TRACE_MASK=254 IKEMEN_USE_NATIVE_SSZ=0 CONFIG=Debug -j8 install
+# cd install; ./ikemen-debug.exe > trace_method1_baseline.log 2>&1 ; cd ..
+
+# touch main/ssz/bridge.cpp
+# touch main/main.cpp
+# make IKEMEN_ENABLE_PLUGIN_TRACE=1 IKEMEN_TRACE_MASK=254 IKEMEN_USE_NATIVE_SSZ=1 CONFIG=Debug -j8 install
+# cd install; ./ikemen-debug.exe > trace_method1_native.log 2>&1 ; cd ..
+
+# Compare the two logs to verify that the native SSZ plugin calls match the baseline.
+
 CONFIG ?= Release
 ARCH   ?= x86_64
 
@@ -87,7 +100,6 @@ IKEMEN_NATIVE_TIME_LIB      ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SHELL_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_LUA_LIB       ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SDLPLUGIN_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
-IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SDLEVENT_LIB  ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_CONFIG_LIB    ?= $(IKEMEN_USE_NATIVE_SSZ)
 IKEMEN_NATIVE_SHARE_LIB     ?= $(IKEMEN_USE_NATIVE_SSZ)
@@ -125,7 +137,6 @@ CXXFLAGS += -DIKEMEN_NATIVE_TIME_LIB=$(IKEMEN_NATIVE_TIME_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SHELL_LIB=$(IKEMEN_NATIVE_SHELL_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_LUA_LIB=$(IKEMEN_NATIVE_LUA_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SDLPLUGIN_LIB=$(IKEMEN_NATIVE_SDLPLUGIN_LIB)
-CXXFLAGS += -DIKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB=$(IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SDLEVENT_LIB=$(IKEMEN_NATIVE_SDLEVENT_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_CONFIG_LIB=$(IKEMEN_NATIVE_CONFIG_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_SHARE_LIB=$(IKEMEN_NATIVE_SHARE_LIB)
@@ -149,13 +160,17 @@ CXXFLAGS += -DIKEMEN_NATIVE_COMMAND_LIB=$(IKEMEN_NATIVE_COMMAND_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_FIGHT_LIB=$(IKEMEN_NATIVE_FIGHT_LIB)
 CXXFLAGS += -DIKEMEN_NATIVE_CHAR_LIB=$(IKEMEN_NATIVE_CHAR_LIB)
 CXXFLAGS += -DIKEMEN_ENABLE_PLUGIN_TRACE=$(IKEMEN_ENABLE_PLUGIN_TRACE)
+CXXFLAGS += -DIKEMEN_TRACE_MASK=$(IKEMEN_TRACE_MASK)
 
 # Phase 3: module flags defined in the main flags block above.
-# Add new Phase 3 flags here when scaffolding additional core engine modules.
 # Add new Phase 3 flags here when scaffolding additional core engine modules.
 
 # Trace mode (off by default): logs every SSZ plugin call at runtime
 IKEMEN_ENABLE_PLUGIN_TRACE ?= 0
+# Bitmask of trace categories (default = all). Common values:
+#   1=FILE, 2=NET, 4=LUA, 8=OGG, 16=UTIL, 32=MATH, 64=SDL, 128=SYS
+#   E.g. IKEMEN_TRACE_MASK=64 to trace only SDL operations
+IKEMEN_TRACE_MASK ?= 255
 
 # ---- Global include paths ----
 GLOBAL_INC  = -I $(MAIN) -I $(SSZ)
@@ -754,6 +769,15 @@ $(BLD)/main/ssz_native/%.o: $(MAIN)/ssz_native/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+# ---- ssz_trace.hpp dependency ----
+# Force recompilation of bridge.cpp and ssz.cpp when the trace header changes
+# (e.g. new categories added, default IKEMEN_TRACE_MASK value changed).
+# Note: this only catches header modifications. Changing IKEMEN_TRACE_MASK
+# on the command line without touching the header still won't trigger a
+# rebuild — run `make clean` first for flag-only changes.
+$(BLD)/main/ssz/ssz.o: $(SSZ_NATIVE)/ssz_trace.hpp
+$(BLD)/main/ssz/bridge.o: $(SSZ_NATIVE)/ssz_trace.hpp
+
 
 # ---- SDL2 (C) ----
 $(BLD)/sdl2/%.o: $(SDL2_DIR)/src/%.c
@@ -858,7 +882,7 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 # Depends on the main build having compiled file.o first.
 # string_service.o must be linked because test_string_service() calls non-inline
 # functions (equ, trim, find, split, join, Unicode, percent, hex/octal).
-TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/time/time.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/shell/shell.o $(BLD)/main/lua/lua.o $(BLD)/main/ssz/ssz.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o $(BLD)/main/ssz_native/thread_service.o $(BLD)/main/ssz_native/time_service.o $(BLD)/main/ssz_native/shell_service.o $(BLD)/main/ssz_native/lua_service.o \
+TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o $(BLD)/main/math/math.o $(BLD)/main/thread/thread.o $(BLD)/main/time/time.o $(BLD)/main/socket/socket.o $(BLD)/main/sound/sound.o $(BLD)/main/ogg/ogg.o $(BLD)/main/mesdialog/mesdialog.o $(BLD)/main/alert/alert.o $(BLD)/main/shell/shell.o $(BLD)/main/lua/lua.o $(BLD)/main/ssz/ssz.o $(BLD)/main/sdlplugin/sdlplugin.o $(BLD)/main/ssz_native/file_service.o $(BLD)/main/ssz_native/math_service.o $(BLD)/main/ssz_native/regex_service.o $(BLD)/main/ssz_native/socket_service.o $(BLD)/main/ssz_native/sound_service.o $(BLD)/main/ssz_native/ogg_service.o $(BLD)/main/ssz_native/mesdialog_service.o $(BLD)/main/ssz_native/string_service.o $(BLD)/main/ssz_native/crypto_service.o $(BLD)/main/ssz_native/alert_service.o $(BLD)/main/ssz_native/thread_service.o $(BLD)/main/ssz_native/time_service.o $(BLD)/main/ssz_native/shell_service.o $(BLD)/main/ssz_native/lua_service.o \
 $(BLD)/main/ssz_native/share_service.o \
 $(BLD)/main/ssz_native/debug_script_service.o \
 $(BLD)/main/ssz_native/loader_service.o \
@@ -876,7 +900,14 @@ $(BLD)/main/ssz_native/fighting_service.o \
 $(BLD)/main/ssz_native/config_service.o \
 $(BLD)/main/ssz_native/sound_resource_service.o \
 $(BLD)/main/ssz_native/stack_service.o \
-$(BLD)/main/ssz_native/ssz_service.o
+$(BLD)/main/ssz_native/ssz_service.o \
+$(BLD)/main/ssz_native/system_service.o \
+$(BLD)/main/ssz_native/stage_service.o \
+$(BLD)/main/ssz_native/bg_service.o \
+$(BLD)/main/ssz_native/sff_service.o \
+$(BLD)/main/ssz_native/command_service.o \
+$(BLD)/main/ssz_native/char_service.o \
+$(BLD)/main/ssz_native/fight_service.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
@@ -884,10 +915,18 @@ $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
 	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
 
 $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FILE_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FILE_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
 
 test: $(TEST_FILE_BIN)
 	$(TEST_FILE_BIN)
+
+# Run the test binary from the install/ runtime environment.
+# First kills any stale test process, then copies the binary to install/.
+# Uses the real chars, stages, and .snd files from install/.
+test_install: $(TEST_FILE_BIN)
+	taskkill /f /im test_file.exe 2>nul || true
+	cp -f $(TEST_FILE_BIN) install/
+	cd install && ./test_file.exe > test_result_install.log 2>&1 && grep -c "FAIL" test_result_install.log | xargs -I{} echo "FAIL={}" && grep -c "PASS" test_result_install.log | xargs -I{} echo "PASS={}"
 
 # ---- Native SSZ manifest target ----
 # Prints which native modules are currently active at compile time.
@@ -909,7 +948,6 @@ native_manifest:
 	@echo "IKEMEN_NATIVE_SHELL_LIB     = $(IKEMEN_NATIVE_SHELL_LIB)"
 	@echo "IKEMEN_NATIVE_LUA_LIB       = $(IKEMEN_NATIVE_LUA_LIB)"
 	@echo "IKEMEN_NATIVE_SDLPLUGIN_LIB = $(IKEMEN_NATIVE_SDLPLUGIN_LIB)"
-	@echo "IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB = $(IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB)"
 	@echo "IKEMEN_NATIVE_SDLEVENT_LIB  = $(IKEMEN_NATIVE_SDLEVENT_LIB)"
 	@echo "IKEMEN_NATIVE_CONFIG_LIB    = $(IKEMEN_NATIVE_CONFIG_LIB)"
 	@echo "IKEMEN_NATIVE_SHARE_LIB     = $(IKEMEN_NATIVE_SHARE_LIB)"

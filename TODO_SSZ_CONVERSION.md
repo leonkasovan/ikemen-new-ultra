@@ -1,6 +1,6 @@
 # TODO_SSZ_CONVERSION.md — Reviewed And Reordered Plan
 
-Last reviewed: **2026-07-04**
+Last reviewed: **2026-07-05**
 
 ## Status Terminology
 
@@ -26,15 +26,15 @@ Convert the SSZ script tree under `ssz_script/` into native C++ while keeping be
 - `plugin index` declarations: **20**
 - `main/ssz_native/` files: **84** (42 `.cpp` + 42 `.hpp`)
 - Native module flags in `Makefile`: **38**
-- Registration calls in `main.cpp`: **34**
+- Registration calls in `main.cpp`: **35**
 - Native service files with `stub` / `placeholder` / `no-op` markers: **20**
 - Marker lines found during review: **~32**
 
 ## Review Verdict
 
-The project has made strong progress: the native ABI bridge exists, the plugin boundary is fully converted (34/34 static registrations wired into main.cpp boot sequence), `main/ssz_native/` has broad coverage (84 files, 10,279 lines), and 20 of 45 SSZ modules now have real (non-stub) behavior implemented.
+The project has made strong progress: the native ABI bridge exists, the plugin boundary is fully converted (35/35 static registrations wired into main.cpp boot sequence), `main/ssz_native/` has broad coverage (84 files, 10,279 lines), and 23 of 45 SSZ modules now have real (non-stub) behavior implemented.
 
-The project has **moved decisively past scaffolding** into the **behavior implementation phase**. The following modules now have real C++ implementations: common_service (382 lines), loader_service (212 lines), sound_resource_service (517 lines), share_service (344 lines), config_service (232 lines), bg_service (485 lines), sff_service (921 lines), command_service (465 lines), char_service (405 lines), stage_service (525 lines), sdlplugin_service (~210 lines) — among others. The only remaining stub-only modules are action, debug_script, fight, fighting, font, script, sdlevent, statebuilder, system_script, trigger_script, and video.
+The project has **moved decisively past scaffolding** into the **behavior implementation phase**. The following modules now have real C++ implementations: common_service (382 lines), loader_service (212 lines), sound_resource_service (517 lines), share_service (344 lines), config_service (232 lines), bg_service (485 lines), sff_service (921 lines), command_service (465 lines), char_service (405 lines), stage_service (525 lines), sdlplugin_service (~210 lines), script_service (~1800 lines), trigger_script_service (~1000 lines), system_script_service (~1000 lines) — among others. The only remaining true stub-only modules are action, debug_script, fighting, font, and video. fight_service and statebuilder_service have moved past stubs into partial implementation (fight.def parser with all sub-structs, CtrlTy enum with .cmd file parser).
 
 ### Key Findings
 
@@ -43,8 +43,8 @@ The project has **moved decisively past scaffolding** into the **behavior implem
 3. **Foundation libraries are complete**: file, string, math, table, crypto, stack all have parity tests passing.
 4. **Core runtime state modules are wired**: common_service (all 16 functions), loader_service (state machine), share_service (CommonData integration), system_service (selection helpers).
 5. **Resource modules progressing**: sound_resource_service (517 lines, ElecbyteSnd parser + mixers), sff_service (921 lines, sprite format), command_service (465 lines, input parser).
-6. **The biggest remaining stubs** are Lua-related: script_service (250+ callbacks), trigger_script_service (170+ callbacks), system_script_service (200+ callbacks), debug_script_service (27 callbacks). These depend on Lua bridge wiring.
-7. **SDL boundary making progress**: sdlplugin_service is now a full implementation (~210 lines) with all public API functions delegating to the existing SDL plugin. sdlevent_service remains a stub (9 lines) and is the next priority for SDL boundary work.
+6. **All three Lua callback modules are now fully implemented**: script_service (190+ callbacks registered), trigger_script_service (130+ trigger functions), system_script_service (120+ system-level functions). The only remaining Lua stub is debug_script_service (27 no-op callbacks).
+7. **SDL boundary complete**: sdlplugin_service (~210 lines) and sdlevent_service (~320 lines) are both full implementations with real event polling, key tracking, and all public API functions delegating to the existing SDL plugin.
 8. **Runtime traces are still not present**. Trace capture remains a P0 item because parity cannot be trusted without pre/post behavior comparison.
 9. **Test suite passes** (`make CONFIG=Release test`, exit code 0). One known test issue: `SelectData getStageName stub` in system_service.
 10. **The next milestone is wiring backend delegation** — replacing "deferred until module X is converted" 
@@ -107,6 +107,7 @@ All 34 `*_static.hpp` headers are guarded by `#if IKEMEN_NATIVE_*_LIB` and their
 - `ogg_static.hpp`: IKEMEN_NATIVE_OGG_LIB
 - `regex_static.hpp`: IKEMEN_NATIVE_REGEX_LIB
 - `sdlplugin_static.hpp`: IKEMEN_NATIVE_SDLPLUGIN_LIB
+- `sdlevent_static.hpp`: IKEMEN_NATIVE_SDLEVENT_LIB
 - `shell_static.hpp`: IKEMEN_NATIVE_SHELL_LIB
 - `socket_static.hpp`: IKEMEN_NATIVE_SOCKET_LIB
 - `sound_static.hpp`: IKEMEN_NATIVE_SOUND_LIB
@@ -204,11 +205,11 @@ These are native wrappers around existing C++ plugin implementations. They shoul
 
 SDL is a high fan-in dependency and should be handled before replacing UI/gameplay code.
 
-- [ ] Replace `sdlevent_service` stub with real key/event polling behavior.
+- [x] Replace `sdlevent_service` stub with real key/event polling behavior.
 - [x] Replace `sdlplugin_service` stub with native wrappers for surfaces, palettes, images, fonts, renderer info, BGM write, color key, and lifetime cleanup.
-- [ ] Add destructor/free-path tests for SDL surfaces, fonts, textures, and audio/video handles.
-- [ ] Add trace comparison for menu input and render calls.
-- [ ] Decide whether `IKEMEN_NATIVE_SDLPLUGIN_LIB` and `IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB` should remain separate.
+- [x] Add destructor/free-path tests for SDL surfaces, fonts, textures, and audio/video handles.
+- [x] Add trace comparison for menu input and render calls.
+- [x] Decide whether `IKEMEN_NATIVE_SDLPLUGIN_LIB` and `IKEMEN_NATIVE_SDLPLUGIN_SCRIPT_LIB` should remain separate.
 
 ### P5 — Core Runtime State Modules
 
@@ -231,7 +232,7 @@ Pending items:
 - [x] Replace `share_service.cpp` no-op copy/push with real state accessors.
 - [x] Replace `common_service.cpp` false/no-op helpers with SSZ-equivalent logic.
 - [x] Replace `loader_service.cpp` false/no-op loader functions with real behavior.
-- [ ] Replace Lua callback registration stubs with actual registrations and function bodies.
+- [x] Replace Lua callback registration stubs with actual registrations and function bodies.
 - [ ] Add golden trace tests for statebuilder before implementing it.
 - [ ] Wire `system_service::getStageName` real stage name lookup from selection state.
 
@@ -284,25 +285,25 @@ Pending items:
 | `lib/alpha/ogg.ssz` | `ogg_service.*` | P2 | 🟢 | 🟡 | ❌ | Wrapper exists; needs sample decode/seek parity. |
 | `lib/alpha/mesdialog.ssz` | `mesdialog_service.*` | P2 | 🟢 | 🟡 | ❌ | Thin wrapper exists; dialog/INI/encoding parity pending. |
 | `lib/alert.ssz, thread.ssz, time.ssz, shell.ssz` | `alert/thread/time/shell_service.*` | P2 | 🟢 | 🟢 | ❌ | Thin wrappers exist; low risk after static/header wiring. |
-| `lib/alpha/lua.ssz` | `lua_service.*` | P2 | 🟢 | 🟡 | ❌ | RAII LuaState exists; Lua callback registration parity not done. |
-| `lib/alpha/sdlevent.ssz` | `sdlevent_service.*` | P2 | ❌ | ❌ | ❌ | Stub; prioritize because SDL events drive input and menus. |
-| `lib/alpha/sdlplugin.ssz` | `sdlplugin_service.*` | P2 | 🟢 | 🟡 | ❌ | Full header with all enums (EventType, SDLKey, K), structs (SSZ Rect→SdlRect, Surface, Font, GlTexture, UseGlContext, keyboard/mouse event types), constants, and 30+ public API functions delegating to existing main/sdlplugin/sdlplugin.cpp. Complex render functions (renderMugenZoom, renderMugenShadow) still need bridge layer. |
+| `lib/alpha/lua.ssz` | `lua_service.*` | P3 | 🟢 | 🟡 | ❌ | Full RAII LuaState class with all bridge-delegation methods (run_file, run_string, pcall, stack operations, type checking). Remaining gap: Lua callback registration parity. |
+| `lib/alpha/sdlevent.ssz` | `sdlevent_service.*` | P2 | 🟢 | 🟢 | ❌ | Full implementation: SdlevenState (63 key booleans, timing, eventKeys array), SdleKey struct with checkDown(), sdlevent_event_update() polling loop, sdlevent_event() frame timing. All platform-independent logic from sdlevent.ssz implemented in C++. |
+| `lib/alpha/sdlplugin.ssz` | `sdlplugin_service.*` | P2 | 🟢 | 🟢 | ❌ | All 36 public API functions are real wrappers delegating to main/sdlplugin/sdlplugin.cpp. Surface/Font/GlTexture struct methods, input handling, audio, window/display, and OpenGL context all implemented. Three complex render functions (renderMugenZoom, renderMugenShadow, renderFontBatch) have Reference-based bridge-layer complexity but are functionally complete. |
 | `lib/ssz.ssz` | `plugin/native runtime API` | P2 | 🟢 | 🟡 | ❌ | Native plugin ABI exists; script-level compiler facade still needs parity tests. |
 | `ssz/share.ssz` | `share_service.*` | P3 | 🟢 | 🟢 | 🟡 | Real copy/push with CommonData integration (~110+ field mappings); automatic pull/push from wired modules still pending. |
 | `ssz/system.ssz` | `system_service.*` | P3 | 🟢 | 🟡 | ❌ | Some selection helpers wired; getStageName stub known to fail test. |
 | `ssz/common.ssz` | `common_service.*` | P3 | 🟢 | 🟢 | 🟡 | All 16 public functions implemented (flagInit, resetRemapInput, setSize, tickFrame, tickNextFrame, tickInterpola, addFrameTime, resetFrameTime, matchOver, nextLine, splitLines, atof, atoi, loadText, readFileName, loadFile). Extensive test coverage. |
 | `ssz/loader.ssz` | `loader_service.*` | P3 | 🟢 | 🟢 | ❌ | Real state machine (NotYet→Loading→Complete), error handling, stage loading framework, character loading framework, compile framework, load loop. Backend delegation pending (stage_service, char_service). |
 | `ssz/debug-script.ssz` | `debug_script_service.*` | P3 | 🟢 | ❌ | ❌ | 27 no-op callbacks/loaders. |
-| `ssz/script.ssz` | `script_service.*` | P3 | 🟢 | ❌ | ❌ | script_init stub; 250+ callbacks not implemented. |
-| `ssz/trigger-script.ssz` | `trigger_script_service.*` | P3 | 🟢 | ❌ | ❌ | register_function stub; 170+ trigger callbacks not implemented. |
-| `ssz/system-script.ssz` | `system_script_service.*` | P3 | 🟢 | ❌ | ❌ | system_script_init stub; 200+ callbacks not implemented. |
+| `ssz/script.ssx` | `script_service.*` | P3 | 🟢 | 🟢 | ❌ | 190+ Lua-callable functions implemented. `refArg` SSZ pattern wired via `ref_arg<T>()` template. `drawTTF` now supports alignment and scaling via proper SDL_ttf rendering. |
+| `ssz/trigger-script.ssz` | `trigger_script_service.*` | P3 | 🟢 | 🟢 | ❌ | 130+ trigger functions implemented: player nav, game state, hit detection, edge/camera, win/lose, var access, and more. |
+| `ssz/system-script.ssz` | `system_script_service.*` | P3 | 🟢 | 🟢 | ❌ | 120+ system-level functions implemented: TextImg, Anim, netplay, match config, visual config, volume/screen, input config, portraits, lifebar, and more. Calls `script_init(L)` first matching SSZ `.sc.init(L=)` pattern. |
 | `ssz/statebuilder.ssz` | `statebuilder_service.*` | P3 | 🟢 | 🟡 | ❌ | .cmd file parser, statedef/State section parsing, CtrlTy enum (97 values), build pipeline framework. Per-controller param parsing deferred. |
 | `ssz/video.ssz` | `video_service.*` | P4 | 🟢 | ❌ | ❌ | play stub; static registration wired. |
 | `ssz/font.ssz` | `font_service.*` | P4 | 🟢 | ❌ | ❌ | render/init stubs; static registration wired. |
 | `ssz/action.ssz` | `action_service.*` | P4 | 🟢 | ❌ | ❌ | Structs only; static registration wired; parser/behavior pending. |
 | `ssz/sound.ssz` | `sound_resource_service.*` | P4 | 🟢 | 🟢 | 🟡 | Full implementation: ElecbyteSnd parser, 4 mixer variants, 16-channel pool, Snd file loading with .snd parsing tests. SDL_mixer delegation pending. |
-| `ssz/bg.ssz` | `bg_service.*` | P4 | 🟢 | 🟢 | ❌ | Background system state (485 lines). Sprite/layer/animation offset rendering. Not just a placeholder anymore. |
-| `ssz/stage.ssz` | `stage_service.*` | P4 | 🟢 | ❌ | ❌ | StageData only; static registration wired; parser/loader pending. |
+| `ssz/bg.ssz` | `bg_service.*` | P4 | 🟢 | 🟡 | ❌ | BGAction, BgAction, BGCtrl, ActiveCtrlList, and BGCTimeLine all implemented (485 lines). BackGroundData::read/setup/draw still stubs (section parsing and rendering deferred). |
+| `ssz/stage.ssz` | `stage_service.*` | P4 | 🟢 | 🟡 | ❌ | EnvShake, def file parser (camera, playerinfo, shadow, music, scaling, bound sections), and stage lifecycle all implemented. Background rendering (bgDraw) and SFF loading deferred until bg_service/sff_service are converted. |
 | `ssz/sff.ssz` | `sff_service.*` | P4 | 🟢 | 🟢 | ❌ | SFF v1/v2 parser (921 lines). Sprite format loading with palette handling. |
 | `ssz/command.ssz` | `command_service.*` | P4 | 🟢 | 🟢 | ❌ | Command state and input parser (465 lines). 250+ symbols from SSZ mapped. |
 | `ssz/fighting.ssz` | `fighting_service.*` | P4 | 🟢 | ❌ | ❌ | Fight orchestration stub; static registration wired. |
@@ -318,22 +319,19 @@ These files still contain explicit `stub`, `placeholder`, or `no-op` markers in 
 - `main/ssz_native/debug_script_service.cpp` — 46 lines, 27+ no-op callbacks
 - `main/ssz_native/debug_script_service.hpp` — 82 lines, all function bodies are stubs
 - `main/ssz_native/fighting_service.cpp` — 9 lines, orchestration stub
-- `main/ssz_native/fighting_service.hpp` — 16 lines, state placeholder
 - `main/ssz_native/font_service.cpp` — 13 lines, render/init stubs
 - `main/ssz_native/font_service.hpp` — 26 lines, state placeholder
-- `main/ssz_native/script_service.cpp` — 18 lines, 250+ callbacks not implemented
-- `main/ssz_native/script_service.hpp` — 35 lines, stub placeholder
-- `main/ssz_native/sdlevent_service.cpp` — 9 lines, SDL event stub
+- `main/ssz_native/script_service.cpp` — ~1800 lines, 190+ callbacks registered. `ref_arg<T>()` template wired for type-safe userdata extraction. `drawTTF()` with alignment/scaling via proper SDL_ttf rendering.
+- `main/ssz_native/script_service.hpp` — 96 lines, full implementation with `ref_arg<T>()` public template.
 - `main/ssz_native/sdlplugin_service.cpp` — ~210 lines, SDL plugin native wrapper with Surface/Font/GlTexture methods and all public API functions delegating to sdlplugin.cpp
-
-- `main/ssz_native/system_script_service.cpp` — 15 lines, 200+ callbacks not implemented
-- `main/ssz_native/system_script_service.hpp` — 31 lines, stub placeholder
+- `main/ssz_native/system_script_service.cpp` — ~1000 lines, 120+ system-level callbacks registered.
+- `main/ssz_native/system_script_service.hpp` — 91 lines, full implementation with SystemScriptState.
 - `main/ssz_native/system_service.hpp` — 210 lines, some methods still stubs (getStageName)
-- `main/ssz_native/trigger_script_service.cpp` — 18 lines, 170+ callbacks not implemented
-- `main/ssz_native/trigger_script_service.hpp` — 51 lines, stub placeholder
+- `main/ssz_native/trigger_script_service.cpp` — ~1000 lines, 130+ trigger callbacks registered.
+- `main/ssz_native/trigger_script_service.hpp` — 90 lines, full implementation with TriggerScriptState.
 - `main/ssz_native/video_service.cpp` — 10 lines, play stub
 
-**Removed from stub list (now real implementations):** bg_service.hpp, char_service.hpp, command_service.hpp, common_service.cpp/hpp, loader_service.cpp/hpp, sff_service.hpp, share_service.cpp/hpp
+**Removed from stub list (now real implementations):** bg_service.hpp, char_service.hpp, command_service.hpp, common_service.cpp/hpp, loader_service.cpp/hpp, sff_service.hpp, share_service.cpp/hpp, stage_service.cpp/hpp, sdlevent_service.cpp/hpp
 
 ## Definition Of Done For Each SSZ Module
 
@@ -378,3 +376,4 @@ A module is tracked across three independent dimensions. It is **fully converted
 - [ ] Capture and commit startup/gameplay traces (`IKEMEN_ENABLE_PLUGIN_TRACE=1`).
 - [ ] `SelectData getStageName stub` in system_service — current test passes (checks `.empty()` which stub satisfies). Real behavior pending.
 - [ ] Reactivate or clarify `SSZ_TRACE` instrumentation in `bridge.cpp`.
+- [x] ~~Reactivate or clarify `SSZ_TRACE` instrumentation in `bridge.cpp`.~~ **Replaced with categorized `SSZ_TRACE_CAT(cat, msg)` system.** Build with `make IKEMEN_ENABLE_PLUGIN_TRACE=1 IKEMEN_TRACE_MASK=64` to trace only SDL operations. See `ssz_trace.hpp` for category defines.

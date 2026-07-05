@@ -5,6 +5,7 @@
 
 #include "sdlevent_service.hpp"
 #include "ssz_native/plugin_native_api.hpp"
+#include "ssz_trace.hpp"
 
 #include <SDL.h>       // for SDL_PollEvent, SDL_GetKeyboardState
 #include <algorithm>
@@ -56,6 +57,7 @@ void SdleventState::resetFrameKeys() {
 // =========================================================================
 
 bool sdlevent_event_update() {
+    SSZ_TRACE_CAT(TRACE_SDL, "sdlevent_event_update");
     // Reset all event keys
     for (auto& ek : g_state.eventKeys) {
         ek.reset();
@@ -191,6 +193,7 @@ bool sdlevent_event_update() {
 }
 
 bool sdlevent_event(int fps) {
+    SSZ_TRACE_CAT(TRACE_SDL, "sdlevent_event");
     uint32_t uWait = 1000 / static_cast<uint32_t>(fps);
 
     // Inner helper: advance nexttime by one frame

@@ -24,6 +24,13 @@ SSZCALLBACK g_callback = nullptr;
 intptr_t g_refDestroy = 0, g_refCopy = 0;
 void* g_handle = nullptr;
 
+// Main Lua state — used by script_init() to register native Lua callbacks.
+// Captured on first call to NewState().
+static lua_State* s_main_lua_state = nullptr;
+
+lua_State* get_main_lua_state() { return s_main_lua_state; }
+void set_main_lua_state(lua_State* L) { s_main_lua_state = L; }
+
 static int g_luaCallbackDepth = 0;
 static void LuaProcessDeferredClose();
 
@@ -69,6 +76,9 @@ lua_State* SSZ_STDCALL NewState()
 {
 	lua_State* L = luaL_newstate();
 	if (!L) return nullptr;
+
+	// Capture the first (main) Lua state so native modules can register callbacks.
+	if (!s_main_lua_state) s_main_lua_state = L;
 	
 	luaL_requiref(L, "_G", luaopen_base, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_LOADLIBNAME, luaopen_package, 1); lua_pop(L, 1);

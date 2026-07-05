@@ -5,10 +5,11 @@
 // Statically register every function exported by alert.cpp
 // so that the SSZ runtime resolves them without loading alert.dll.
 //
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_ALERT_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 struct PluginUtil;
 struct Reference;
@@ -31,6 +32,4 @@ inline bool alert_static_register()
 		sizeof(alert_mapping) / sizeof(alert_mapping[0]));
 }
 
-#else
-inline bool alert_static_register() { return true; }
-#endif
+

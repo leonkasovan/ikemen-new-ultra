@@ -5,6 +5,7 @@
 
 #include "fight_service.hpp"
 #include "common_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -358,6 +359,7 @@ void DisplayTextData::reset() { *this = DisplayTextData{}; }
 // =========================================================================
 
 void FightData::load(const std::string& defPath) {
+	SSZ_TRACE_CAT(TRACE_SYS, "FightData::load");
 	def = defPath;
 
 	// Read fight.def
@@ -420,6 +422,7 @@ void FightData::load(const std::string& defPath) {
 }
 
 void FightData::step(int& tm, LifePowerData& life0, LifePowerData& life1, bool& hit, int& combo) {
+	SSZ_TRACE_CAT(TRACE_SYS, "FightData::step");
 	// Update per-player life/power from external state
 	lifePower[0] = life0;
 	lifePower[1] = life1;
@@ -443,11 +446,13 @@ void FightData::step(int& tm, LifePowerData& life0, LifePowerData& life1, bool& 
 }
 
 void FightData::draw(int layerno) {
+	SSZ_TRACE_CAT(TRACE_SYS, "FightData::draw");
 	// Rendering deferred — needs sdlplugin/sff/font
 	(void)layerno;
 }
 
 void FightData::clear() {
+	SSZ_TRACE_CAT(TRACE_SYS, "FightData::clear");
 	def.clear();
 	for (auto& lp : lifePower) { lp.l = 1.0f; lp.p = 0.0f; lp.lv = 0; }
 	lifebar[0].reset(); lifebar[1].reset();
@@ -461,6 +466,7 @@ void FightData::clear() {
 }
 
 void FightData::reset() {
+	SSZ_TRACE_CAT(TRACE_SYS, "FightData::reset");
 	for (auto& lp : lifePower) { lp.l = 1.0f; lp.p = 0.0f; }
 	lifebar[0].reset(); lifebar[1].reset();
 	powerbar[0].reset(); powerbar[1].reset();
@@ -477,14 +483,30 @@ void FightData::reset() {
 // =========================================================================
 
 void fight_init() {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_init");
 	g_fight_state = FightState{};
 	g_fight_state.initialized = true;
 }
 
-void fight_laydraw(int ln) { (void)ln; }
-void fight_laytext(int ln) { (void)ln; }
-void fight_layspr(int ln) { (void)ln; }
-void fight_read_spr(AnimData& a, const std::string& data) { (void)a; (void)data; }
-void fight_read_anim(AnimData& a, const std::string& data) { (void)a; (void)data; }
+void fight_laydraw(int ln) {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_laydraw");
+	(void)ln;
+}
+void fight_laytext(int ln) {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_laytext");
+	(void)ln;
+}
+void fight_layspr(int ln) {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_layspr");
+	(void)ln;
+}
+void fight_read_spr(AnimData& a, const std::string& data) {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_read_spr");
+	(void)a; (void)data;
+}
+void fight_read_anim(AnimData& a, const std::string& data) {
+	SSZ_TRACE_CAT(TRACE_SYS, "fight_read_anim");
+	(void)a; (void)data;
+}
 
 } // namespace ikemen::ssz_native

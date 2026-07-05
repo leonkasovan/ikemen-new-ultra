@@ -1,4 +1,5 @@
 #include "lua_service.hpp"
+#include "ssz_trace.hpp"
 
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
@@ -34,14 +35,17 @@ void       SSZ_STDCALL ToString(int32_t idx, lua_State* L, std::string& output);
 namespace ikemen::ssz_native::lua {
 
 LuaState::LuaState() {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::LuaState");
     L_ = NewState();
 }
 
 LuaState::~LuaState() {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::~LuaState");
     destroy();
 }
 
 void LuaState::destroy() {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::destroy");
     if (L_) {
         Close(L_);
         L_ = nullptr;
@@ -49,10 +53,12 @@ void LuaState::destroy() {
 }
 
 bool LuaState::run_file(const std::string& filename) {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::run_file");
     return L_ ? RunFile(filename, L_) : false;
 }
 
 bool LuaState::run_string(const std::string& str) {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::run_string");
     return L_ ? RunString(str, L_) : false;
 }
 
@@ -65,6 +71,7 @@ void LuaState::get_global(const std::string& var) {
 }
 
 bool LuaState::pcall(int32_t nargs, int32_t nresults) {
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaState::pcall");
     return L_ ? Pcall(nresults, nargs, L_) : false;
 }
 

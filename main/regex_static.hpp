@@ -5,10 +5,11 @@
 // Statically register every function exported by regex.cpp
 // so that the SSZ runtime resolves them without loading regex.dll.
 //
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_REGEX_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 #ifdef _WIN32
 #include <regex>
@@ -43,6 +44,4 @@ inline bool regex_static_register()
 		sizeof(regex_mapping) / sizeof(regex_mapping[0]));
 }
 
-#else
-inline bool regex_static_register() { return true; }
-#endif
+

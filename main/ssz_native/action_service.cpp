@@ -3,10 +3,12 @@
 // Frames store collision boxes (clsn), sprite references, and timing.
 
 #include "action_service.hpp"
+#include "ssz_trace.hpp"
 
 namespace ikemen::ssz_native {
 
 void action_init() {
+	SSZ_TRACE_CAT(TRACE_SYS, "action_init");
 	// Action module initialization.
 	// The data structures (Rect, Frame, ActionData) are plain structs
 	// used by other native modules (char, sff, bg) — no runtime state

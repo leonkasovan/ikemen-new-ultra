@@ -10,6 +10,7 @@
 
 #include "statebuilder_service.hpp"
 #include "common_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -207,6 +208,7 @@ void StateBuilder::StateNo::set(int no_, bool i, const std::string& proc) {
 bool StateBuilder::statedef(const std::string& sec, const std::string& name,
 	const std::string& data)
 {
+	SSZ_TRACE_CAT(TRACE_SYS, "StateBuilder::statedef");
 	// Parse a [statedef] section from a character definition file.
 	// sec = "[statedef]"
 	// name = state number (e.g., "200")
@@ -242,6 +244,7 @@ bool StateBuilder::statedef(const std::string& sec, const std::string& name,
 bool StateBuilder::state(const std::string& sec, const std::string& name,
 	const std::string& data)
 {
+	SSZ_TRACE_CAT(TRACE_SYS, "StateBuilder::state");
 	// Parse a [State XXXXX] controller section.
 	// sec = "[State XXXXX]"
 	// name = "XXXXX, \"optional name\""
@@ -280,6 +283,7 @@ bool StateBuilder::state(const std::string& sec, const std::string& name,
 }
 
 std::string StateBuilder::build(int no, const std::string& def, std::string& code) {
+	SSZ_TRACE_CAT(TRACE_SYS, "StateBuilder::build");
 	// SSZ: build state code for character slot `no` from .def file `def`.
 	// Appends compiled state code to `code` string.
 	//
@@ -428,6 +432,7 @@ std::string StateBuilder::build(int no, const std::string& def, std::string& cod
 // =========================================================================
 
 void statebuilder_init() {
+	SSZ_TRACE_CAT(TRACE_SYS, "statebuilder_init");
 	g_state_builder = StateBuilder{};
 }
 

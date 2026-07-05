@@ -6,6 +6,7 @@
 
 #include "stage_service.hpp"
 #include "common_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -462,6 +463,8 @@ void StageData::bgDraw(bool t, float x, float y, float scl) {
 }
 
 void StageData::clear() {
+	SSZ_TRACE_CAT(TRACE_SYS, "StageData::clear");
+	def.clear();
 	spr.clear();
 	bgmusic.clear();
 	name.clear();
@@ -471,15 +474,18 @@ void StageData::clear() {
 	displaynameLow.clear();
 	authorLow.clear();
 	// bg.new(0), actionList.new(0), actionTable.clear(), bgctrlList.new(0)
-	// deferred until those types are defined
+	// deferred until bg_service defines BackGround[], Action[], BGCtrl[] types.
+	// StageBgCtrlDef (bgcdef) keeps its defaults — re-parsed on next load().
 }
 
 void StageData::reset() {
-	// bga.clear() deferred
-	// bg: [void(i=){i.reset();}] deferred
-	// bgctrlList: [void(i=){i.currenttime = 0;}] deferred
-	// bgctl.clear(), then bgctl.add(bgctrlList[i]) for each in reverse
-	// deferred
+	SSZ_TRACE_CAT(TRACE_SYS, "StageData::reset");
+	// EnvShake is reset between rounds by the caller (stage_reset()),
+	// which triggers g_env_shake.clear().
+	// bga.clear() deferred — bg_service types not yet defined.
+	// bg: [void(i=){i.reset();}] deferred.
+	// bgctrlList: [void(i=){i.currenttime = 0;}] deferred.
+	// bgctl.clear(), then bgctl.add(bgctrlList[i]) for each in reverse — deferred.
 }
 
 // =========================================================================

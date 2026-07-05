@@ -943,6 +943,21 @@ make native_manifest CONFIG=Debug
 
 # Clean
 make clean CONFIG=Debug
+
+# Capture a runtime trace (categorized, SDL only)
+make IKEMEN_ENABLE_PLUGIN_TRACE=1 IKEMEN_TRACE_MASK=64 CONFIG=Debug -j8
+.\build\Debug\ikemen-debug.exe 2>&1 | findstr "[TRACE]" > trace_sdl.log
+
+# Trace categories (set IKEMEN_TRACE_MASK to a bitwise OR):
+#   1=FILE     File I/O (Read, Write, Seek…)
+#   2=NET      Socket (Connect, Send, Recv…)
+#   4=LUA      Lua bridge (NewState, Pcall, ToString…)
+#   8=OGG      OGG Vorbis audio
+#  16=UTIL     Regex, shell, alert, clipboard, INI…
+#  32=MATH     Math functions (Sin, Cos, Sqrt…)
+#  64=SDL      SDL operations (DrawTTF, Fill, Flip, PollEvent…)
+# 128=SYS      Game state (Common, System, Loader…)
+# 255=ALL      Trace everything (default)
 ```
 
 ### Adding New Source Files

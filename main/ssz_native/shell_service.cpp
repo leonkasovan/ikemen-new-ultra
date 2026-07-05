@@ -1,15 +1,12 @@
 #include "shell_service.hpp"
+#include "plugin_native_api.hpp"
 
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
 
-// Native shell plugin functions (defined in main/shell/shell.cpp).
-// These declarations are provided by plugin_native_api.hpp (which is the
-// single source of truth for shared declarations). Tracked in M4 TODO.
-bool SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct,
-                           const std::wstring& param, const std::wstring& file);
-bool SSZ_STDCALL MoveTrash(const std::wstring& file);
+// Shell plugin functions are declared in plugin_native_api.hpp (single source of truth).
+// Duplicate declarations removed 2026-07-06.
 
 namespace ikemen::ssz_native::shell {
 

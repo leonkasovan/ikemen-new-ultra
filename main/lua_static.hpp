@@ -2,40 +2,23 @@
 //
 // lua_static.hpp
 //
-// Example: statically register every function exported by lua.cpp
+// Statically register every function exported by lua.cpp
 // so that the SSZ runtime resolves them without loading lua.dll.
+//
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 //
 // HOW TO USE
 // ----------
-// 1.  #include this header in the translation unit that owns main()
-//     (or wherever the SSZ compiler is initialised).
-//
+// 1.  #include this header in the translation unit that owns main().
 // 2.  Call  lua_static_register()  BEFORE the SSZ compiler runs.
-//
-//     #include "lua_static.hpp"
-//
-//     int main() {
-//         if (!lua_static_register()) {
-//             printf("Failed to register lua functions.\n");
-//             return 1;
-//         }
-//         // ... start SSZ compiler / runtime ...
-//     }
-//
-// 3.  The SSZ scripts (e.g. lib/alpha/lua.ssz) continue to use:
+// 3.  The SSZ scripts continue to use:
 //         plugin void Close(:index:) = "dll/lua.dll";
 //     but NO lua.dll file is needed — the function pointer is
 //     resolved from the static registry.
-//
-// PREREQUISITES
-// -------------
-//   - Link lua.cpp (and its dependencies) into the same executable.
-//   - #include "static_plugin_registry.hpp" (pulled in automatically).
-//
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_LUA_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
@@ -47,6 +30,11 @@ struct PluginUtil;   // forward
 struct lua_State;    // forward (from Lua headers)
 struct Reference;    // forward (from arrayandref.hpp)
 struct DynamicRef;   // forward (from arrayandref.hpp)
+
+// Main Lua state accessor — used by native modules (script_service, etc.)
+// to register Lua-callable callbacks. Set on first call to NewState().
+lua_State* get_main_lua_state();
+void set_main_lua_state(lua_State* L);
 
 extern "C"
 {
@@ -112,6 +100,4 @@ inline bool lua_static_register()
 		sizeof(lua_mapping) / sizeof(lua_mapping[0]));
 }
 
-#else
-inline bool lua_static_register() { return true; }
-#endif
+

@@ -5,10 +5,11 @@
 // Statically register every function exported by sound.cpp
 // so that the SSZ runtime resolves them without loading sound.dll.
 //
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_SOUND_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 struct PluginUtil;
 struct Reference;
@@ -44,6 +45,4 @@ inline bool sound_static_register()
 		sizeof(sound_mapping) / sizeof(sound_mapping[0]));
 }
 
-#else
-inline bool sound_static_register() { return true; }
-#endif
+

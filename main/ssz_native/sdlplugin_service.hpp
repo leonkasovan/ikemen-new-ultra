@@ -518,6 +518,11 @@ int32_t pollInputBitmask(
     int q2, int w2, int e2, int s2,
     int sec);
 
+// Font rendering with alignment and scaling
+void draw_ttf(const std::string& fontPath, int align, const std::string& text,
+              int x, int y, float scaleX, float scaleY,
+              int r, int g, int b, int alpha);
+
 // Audio
 bool setSndBuf(const std::vector<int>& buf);
 int playVideo(int audiotrack, int volume, const std::string& captures, const std::string& fn);

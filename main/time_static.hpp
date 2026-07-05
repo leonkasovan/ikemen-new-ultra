@@ -5,10 +5,11 @@
 // Statically register every function exported by time.cpp
 // so that the SSZ runtime resolves them without loading time.dll.
 //
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_TIME_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 struct PluginUtil;
 
@@ -32,6 +33,4 @@ inline bool time_static_register()
 		sizeof(time_mapping) / sizeof(time_mapping[0]));
 }
 
-#else
-inline bool time_static_register() { return true; }
-#endif
+

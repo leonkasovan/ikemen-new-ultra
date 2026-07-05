@@ -64,6 +64,10 @@ class OggVorbis;
 struct lua_State;
 struct DynamicRef;
 
+// Forward declaration for main Lua state access (defined in main/lua/lua.cpp)
+struct lua_State;
+lua_State* get_main_lua_state();
+
 RNS::wregex* SSZ_STDCALL NewRegex(bool i, const std::wstring& ptn, std::wstring* error);
 void         SSZ_STDCALL DeleteRegex(RNS::wregex* re);
 std::vector<ikemen::ssz_bridge::RegexMatchInfo> SSZ_STDCALL RegexSearch(const std::wstring& str, RNS::wregex* re);
@@ -158,7 +162,7 @@ static void vectorToRefList(
 
 extern "C" intptr_t SSZ_STDCALL Open(PluginUtil* pu, Reference md, Reference fn)
 {
-    //SSZ_TRACE("Open");
+    SSZ_TRACE_CAT(TRACE_FILE, "Open");
     (void)pu;
     return Open(
 ikemen::ssz_bridge::refToWstring(pu, md), ikemen::ssz_bridge::refToWstring(pu, fn));
@@ -166,49 +170,49 @@ ikemen::ssz_bridge::refToWstring(pu, md), ikemen::ssz_bridge::refToWstring(pu, f
 
 extern "C" void SSZ_STDCALL FileClose(PluginUtil* pu, FILE *pFile)
 {
-    //SSZ_TRACE("FileClose");
+    SSZ_TRACE_CAT(TRACE_FILE, "FileClose");
     (void)pu;
     FileClose(pFile);
 }
 
 extern "C" bool SSZ_STDCALL Read(PluginUtil* pu, intptr_t size, void *p, FILE *pFile)
 {
-    //SSZ_TRACE("Read");
+    SSZ_TRACE_CAT(TRACE_FILE, "Read");
     (void)pu;
     return Read(size, p, pFile);
 }
 
 extern "C" intptr_t SSZ_STDCALL ReadAry(PluginUtil* pu, intptr_t size, Reference ary, FILE *pFile)
 {
-    //SSZ_TRACE("ReadAry");
+    SSZ_TRACE_CAT(TRACE_FILE, "ReadAry");
     (void)pu;
     return ReadAry(size, ary.atpos(), ary.len(), pFile);
 }
 
 extern "C" bool SSZ_STDCALL Write(PluginUtil* pu, intptr_t size, void *p, FILE *pFile)
 {
-    //SSZ_TRACE("Write");
+    SSZ_TRACE_CAT(TRACE_FILE, "Write");
     (void)pu;
     return Write(size, p, pFile);
 }
 
 extern "C" intptr_t SSZ_STDCALL WriteAry(PluginUtil* pu, intptr_t size, Reference ary, FILE *pFile)
 {
-    //SSZ_TRACE("WriteAry");
+    SSZ_TRACE_CAT(TRACE_FILE, "WriteAry");
     (void)pu;
     return WriteAry(size, ary.atpos(), ary.len(), pFile);
 }
 
 extern "C" bool SSZ_STDCALL Seek(PluginUtil* pu, int32_t origin, int64_t offset, FILE *pFile)
 {
-    //SSZ_TRACE("Seek");
+    SSZ_TRACE_CAT(TRACE_FILE, "Seek");
     (void)pu;
     return Seek(origin, offset, pFile);
 }
 
 extern "C" void SSZ_STDCALL LoadAsciiText(PluginUtil* pu, Reference *pr, Reference r)
 {
-    //SSZ_TRACE("LoadAsciiText");
+    SSZ_TRACE_CAT(TRACE_FILE, "LoadAsciiText");
     pu->setSSZFunc();
     std::wstring text = LoadAsciiText(
 ikemen::ssz_bridge::refToWstring(pu, r));
@@ -219,7 +223,7 @@ ikemen::ssz_bridge::refToWstring(pu, r));
 
 extern "C" bool SSZ_STDCALL SaveAsciiText(PluginUtil* pu, Reference txt, Reference r)
 {
-    //SSZ_TRACE("SaveAsciiText");
+    SSZ_TRACE_CAT(TRACE_FILE, "SaveAsciiText");
     return SaveAsciiText(
         ikemen::ssz_bridge::refToWstring(pu, txt),
         ikemen::ssz_bridge::refToWstring(pu, r));
@@ -227,13 +231,13 @@ extern "C" bool SSZ_STDCALL SaveAsciiText(PluginUtil* pu, Reference txt, Referen
 
 extern "C" bool SSZ_STDCALL Delete(PluginUtil* pu, Reference file)
 {
-    //SSZ_TRACE("Delete");
+    SSZ_TRACE_CAT(TRACE_FILE, "Delete");
     return Delete(ikemen::ssz_bridge::refToWstring(pu, file));
 }
 
 extern "C" bool SSZ_STDCALL Move(PluginUtil* pu, Reference newn, Reference oldn)
 {
-    //SSZ_TRACE("Move");
+    SSZ_TRACE_CAT(TRACE_FILE, "Move");
     return Move(
         ikemen::ssz_bridge::refToWstring(pu, newn),
         ikemen::ssz_bridge::refToWstring(pu, oldn));
@@ -241,7 +245,7 @@ extern "C" bool SSZ_STDCALL Move(PluginUtil* pu, Reference newn, Reference oldn)
 
 extern "C" bool SSZ_STDCALL Copy(PluginUtil* pu, bool overwrite, Reference dist, Reference source)
 {
-    //SSZ_TRACE("Copy");
+    SSZ_TRACE_CAT(TRACE_FILE, "Copy");
     return Copy(
         overwrite,
         ikemen::ssz_bridge::refToWstring(pu, dist),
@@ -250,39 +254,39 @@ extern "C" bool SSZ_STDCALL Copy(PluginUtil* pu, bool overwrite, Reference dist,
 
 extern "C" void SSZ_STDCALL Find(PluginUtil* pu, Reference *fls, Reference fn)
 {
-    //SSZ_TRACE("Find");
+    SSZ_TRACE_CAT(TRACE_FILE, "Find");
     std::vector<std::wstring> files = Find(ikemen::ssz_bridge::refToWstring(pu, fn));
     ikemen::ssz_bridge::vectorToRefList(pu, fls, files);
 }
 
 extern "C" void SSZ_STDCALL FindDir(PluginUtil* pu, Reference *fls, Reference fn)
 {
-    //SSZ_TRACE("FindDir");
+    SSZ_TRACE_CAT(TRACE_FILE, "FindDir");
     std::vector<std::wstring> dirs = FindDir(ikemen::ssz_bridge::refToWstring(pu, fn));
     ikemen::ssz_bridge::vectorToRefList(pu, fls, dirs);
 }
 
 extern "C" bool SSZ_STDCALL CreateDir(PluginUtil* pu, Reference dir)
 {
-    //SSZ_TRACE("CreateDir");
+    SSZ_TRACE_CAT(TRACE_FILE, "CreateDir");
     return CreateDir(ikemen::ssz_bridge::refToWstring(pu, dir));
 }
 
 extern "C" bool SSZ_STDCALL RemoveDir(PluginUtil* pu, Reference dir)
 {
-    //SSZ_TRACE("RemoveDir");
+    SSZ_TRACE_CAT(TRACE_FILE, "RemoveDir");
     return RemoveDir(ikemen::ssz_bridge::refToWstring(pu, dir));
 }
 
 extern "C" bool SSZ_STDCALL SetCurrentDir(PluginUtil* pu, Reference dir)
 {
-    //SSZ_TRACE("SetCurrentDir");
+    SSZ_TRACE_CAT(TRACE_FILE, "SetCurrentDir");
     return SetCurrentDir(ikemen::ssz_bridge::refToWstring(pu, dir));
 }
 
 extern "C" void SSZ_STDCALL GetCurrentDir(PluginUtil* pu, Reference* dir)
 {
-    //SSZ_TRACE("GetCurrentDir");
+    SSZ_TRACE_CAT(TRACE_FILE, "GetCurrentDir");
     pu->setSSZFunc();
     std::wstring curdir = GetCurrentDir();
     dir->releaseanddelete();
@@ -296,7 +300,7 @@ extern "C" void SSZ_STDCALL GetCurrentDir(PluginUtil* pu, Reference* dir)
 
 extern "C" void SSZ_STDCALL SocketClose(PluginUtil* pu, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketClose");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketClose");
     (void)pu;
     SocketClose(psoc);
 }
@@ -304,7 +308,7 @@ extern "C" void SSZ_STDCALL SocketClose(PluginUtil* pu, SOCKET *psoc)
 extern "C" bool SSZ_STDCALL SocketConnect(PluginUtil* pu, bool nodelay, int32_t timeout,
     Reference port, Reference host, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketConnect");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketConnect");
     return SocketConnect(
         nodelay, timeout,
         ikemen::ssz_bridge::refToNarrowUtf8(pu, port),
@@ -315,7 +319,7 @@ extern "C" bool SSZ_STDCALL SocketConnect(PluginUtil* pu, bool nodelay, int32_t 
 extern "C" bool SSZ_STDCALL SocketListen(PluginUtil* pu, bool ipv4, int32_t backlog,
     Reference port, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketListen");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketListen");
     return SocketListen(
         ipv4, backlog,
         ikemen::ssz_bridge::refToNarrowUtf8(pu, port),
@@ -324,35 +328,35 @@ extern "C" bool SSZ_STDCALL SocketListen(PluginUtil* pu, bool ipv4, int32_t back
 
 extern "C" SOCKET SSZ_STDCALL SocketAccept(PluginUtil* pu, bool nodelay, int32_t timeout, SOCKET soc)
 {
-    //SSZ_TRACE("SocketAccept");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketAccept");
     (void)pu;
     return SocketAccept(nodelay, timeout, soc);
 }
 
 extern "C" bool SSZ_STDCALL SocketSend(PluginUtil* pu, intptr_t size, char *p, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketSend");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketSend");
     (void)pu;
     return SocketSend(size, p, psoc);
 }
 
 extern "C" intptr_t SSZ_STDCALL SocketSendAry(PluginUtil* pu, intptr_t size, Reference ary, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketSendAry");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketSendAry");
     (void)pu;
     return SocketSendAry(size, ary.atpos(), ary.len(), psoc);
 }
 
 extern "C" bool SSZ_STDCALL SocketRecv(PluginUtil* pu, intptr_t size, char *p, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketRecv");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketRecv");
     (void)pu;
     return SocketRecv(size, p, psoc);
 }
 
 extern "C" intptr_t SSZ_STDCALL SocketRecvAry(PluginUtil* pu, intptr_t size, Reference ary, SOCKET *psoc)
 {
-    //SSZ_TRACE("SocketRecvAry");
+    SSZ_TRACE_CAT(TRACE_NET, "SocketRecvAry");
     (void)pu;
     return SocketRecvAry(size, ary.atpos(), ary.len(), psoc);
 }
@@ -363,127 +367,127 @@ extern "C" intptr_t SSZ_STDCALL SocketRecvAry(PluginUtil* pu, intptr_t size, Ref
 
 extern "C" void SSZ_STDCALL LuaInit(PluginUtil* pu, intptr_t refcopy, intptr_t refdest)
 {
-    //SSZ_TRACE("LuaInit");
+    SSZ_TRACE_CAT(TRACE_LUA, "LuaInit");
     LuaInit(refcopy, refdest, pu->psf->callback, pu->handle);
 }
 
 extern "C" lua_State* SSZ_STDCALL NewState(PluginUtil* pu)
 {
-    //SSZ_TRACE("NewState");
+    SSZ_TRACE_CAT(TRACE_LUA, "NewState");
     (void)pu;
     return NewState();
 }
 
 extern "C" void SSZ_STDCALL Close(PluginUtil* pu, lua_State* L)
 {
-    //SSZ_TRACE("Close");
+    SSZ_TRACE_CAT(TRACE_LUA, "Close");
     (void)pu;
     Close(L);
 }
 
 extern "C" bool SSZ_STDCALL RunFile(PluginUtil* pu, Reference filename, lua_State* L)
 {
-    //SSZ_TRACE("RunFile");
+    SSZ_TRACE_CAT(TRACE_LUA, "RunFile");
     return RunFile(ikemen::ssz_bridge::refToNarrowUtf8(pu, filename), L);
 }
 
 extern "C" bool SSZ_STDCALL RunString(PluginUtil* pu, Reference s, lua_State* L)
 {
-    //SSZ_TRACE("RunString");
+    SSZ_TRACE_CAT(TRACE_LUA, "RunString");
     return RunString(ikemen::ssz_bridge::refToNarrowUtf8(pu, s), L);
 }
 
 extern "C" int32_t SSZ_STDCALL GetTop(PluginUtil* pu, lua_State* L)
 {
-    //SSZ_TRACE("GetTop");
+    SSZ_TRACE_CAT(TRACE_LUA, "GetTop");
     (void)pu;
     return GetTop(L);
 }
 
 extern "C" void SSZ_STDCALL GetGlobal(PluginUtil* pu, Reference var, lua_State* L)
 {
-    //SSZ_TRACE("GetGlobal");
+    SSZ_TRACE_CAT(TRACE_LUA, "GetGlobal");
     GetGlobal(ikemen::ssz_bridge::refToNarrowUtf8(pu, var), L);
 }
 
 extern "C" void SSZ_STDCALL Register(PluginUtil* pu, intptr_t func, Reference var, lua_State* L)
 {
-    //SSZ_TRACE("Register");
+    SSZ_TRACE_CAT(TRACE_LUA, "Register");
     Register(func, ikemen::ssz_bridge::refToNarrowUtf8(pu, var), L);
 }
 
 extern "C" bool SSZ_STDCALL Pcall(PluginUtil* pu, int32_t nresults, int32_t nargs, lua_State* L)
 {
-    //SSZ_TRACE("Pcall");
+    SSZ_TRACE_CAT(TRACE_LUA, "Pcall");
     (void)pu;
     return Pcall(nresults, nargs, L);
 }
 
 extern "C" void SSZ_STDCALL Pop(PluginUtil* pu, int32_t n, lua_State* L)
 {
-    //SSZ_TRACE("Pop");
+    SSZ_TRACE_CAT(TRACE_LUA, "Pop");
     (void)pu;
     Pop(n, L);
 }
 
 extern "C" void SSZ_STDCALL PushNumber(PluginUtil* pu, double n, lua_State* L)
 {
-    //SSZ_TRACE("PushNumber");
+    SSZ_TRACE_CAT(TRACE_LUA, "PushNumber");
     (void)pu;
     PushNumber(n, L);
 }
 
 extern "C" bool SSZ_STDCALL IsNumber(PluginUtil* pu, int32_t idx, lua_State* L)
 {
-    //SSZ_TRACE("IsNumber");
+    SSZ_TRACE_CAT(TRACE_LUA, "IsNumber");
     (void)pu;
     return IsNumber(idx, L);
 }
 
 extern "C" double SSZ_STDCALL ToNumber(PluginUtil* pu, int32_t idx, lua_State* L)
 {
-    //SSZ_TRACE("ToNumber");
+    SSZ_TRACE_CAT(TRACE_LUA, "ToNumber");
     (void)pu;
     return ToNumber(idx, L);
 }
 
 extern "C" void SSZ_STDCALL PushBoolean(PluginUtil* pu, bool b, lua_State* L)
 {
-    //SSZ_TRACE("PushBoolean");
+    SSZ_TRACE_CAT(TRACE_LUA, "PushBoolean");
     (void)pu;
     PushBoolean(b, L);
 }
 
 extern "C" bool SSZ_STDCALL IsBoolean(PluginUtil* pu, int32_t idx, lua_State* L)
 {
-    //SSZ_TRACE("IsBoolean");
+    SSZ_TRACE_CAT(TRACE_LUA, "IsBoolean");
     (void)pu;
     return IsBoolean(idx, L);
 }
 
 extern "C" bool SSZ_STDCALL ToBoolean(PluginUtil* pu, int32_t idx, lua_State* L)
 {
-    //SSZ_TRACE("ToBoolean");
+    SSZ_TRACE_CAT(TRACE_LUA, "ToBoolean");
     (void)pu;
     return ToBoolean(idx, L);
 }
 
 extern "C" void SSZ_STDCALL PushString(PluginUtil* pu, Reference s, lua_State* L)
 {
-    //SSZ_TRACE("PushString");
+    SSZ_TRACE_CAT(TRACE_LUA, "PushString");
     PushString(ikemen::ssz_bridge::refToNarrowUtf8(pu, s), L);
 }
 
 extern "C" bool SSZ_STDCALL IsString(PluginUtil* pu, int32_t idx, lua_State* L)
 {
-    //SSZ_TRACE("IsString");
+    SSZ_TRACE_CAT(TRACE_LUA, "IsString");
     (void)pu;
     return IsString(idx, L);
 }
 
 extern "C" void SSZ_STDCALL ToString(PluginUtil* pu, int32_t idx, Reference* s, lua_State* L)
 {
-    //SSZ_TRACE("ToString");
+    SSZ_TRACE_CAT(TRACE_LUA, "ToString");
     pu->setSSZFunc();
     std::string output;
     ToString(idx, L, output);
@@ -493,14 +497,14 @@ extern "C" void SSZ_STDCALL ToString(PluginUtil* pu, int32_t idx, Reference* s, 
 
 extern "C" void SSZ_STDCALL PushRef(PluginUtil* pu, DynamicRef* userdata, lua_State* L)
 {
-    //SSZ_TRACE("PushRef");
+    SSZ_TRACE_CAT(TRACE_LUA, "PushRef");
     (void)pu;
     PushRef(userdata, L);
 }
 
 extern "C" void SSZ_STDCALL ToRef(PluginUtil* pu, int32_t idx, DynamicRef* userdata, lua_State* L)
 {
-    //SSZ_TRACE("ToRef");
+    SSZ_TRACE_CAT(TRACE_LUA, "ToRef");
     (void)pu;
     ToRef(idx, userdata, L);
 }
@@ -511,20 +515,20 @@ extern "C" void SSZ_STDCALL ToRef(PluginUtil* pu, int32_t idx, DynamicRef* userd
 
 extern "C" bool SSZ_STDCALL YesNo(PluginUtil* pu, Reference r)
 {
-    //SSZ_TRACE("YesNo");
+    SSZ_TRACE_CAT(TRACE_UTIL, "YesNo");
     return YesNo(ikemen::ssz_bridge::refToWstring(pu, r));
 }
 
 extern "C" void SSZ_STDCALL VeryUnsafeCopy(PluginUtil* pu, intptr_t size, void *src, void *dst)
 {
-    //SSZ_TRACE("VeryUnsafeCopy");
+    SSZ_TRACE_CAT(TRACE_UTIL, "VeryUnsafeCopy");
     (void)pu;
     VeryUnsafeCopy(size, src, dst);
 }
 
 extern "C" bool SSZ_STDCALL GetClipboardStr(PluginUtil* pu, Reference *r)
 {
-    //SSZ_TRACE("GetClipboardStr");
+    SSZ_TRACE_CAT(TRACE_UTIL, "GetClipboardStr");
     pu->setSSZFunc();
     std::wstring result = GetClipboardStr();
     if (result.empty()) return false;
@@ -534,13 +538,13 @@ extern "C" bool SSZ_STDCALL GetClipboardStr(PluginUtil* pu, Reference *r)
 
 extern "C" intptr_t SSZ_STDCALL TazyuuCheck(PluginUtil* pu, Reference name)
 {
-    //SSZ_TRACE("TazyuuCheck");
+    SSZ_TRACE_CAT(TRACE_UTIL, "TazyuuCheck");
     return TazyuuCheck(ikemen::ssz_bridge::refToWstring(pu, name));
 }
 
 extern "C" void SSZ_STDCALL CloseTazyuuHandle(PluginUtil* pu, intptr_t mutex)
 {
-    //SSZ_TRACE("CloseTazyuuHandle");
+    SSZ_TRACE_CAT(TRACE_UTIL, "CloseTazyuuHandle");
     (void)pu;
     CloseTazyuuHandle(mutex);
 }
@@ -548,7 +552,7 @@ extern "C" void SSZ_STDCALL CloseTazyuuHandle(PluginUtil* pu, intptr_t mutex)
 extern "C" void SSZ_STDCALL GetInifileString(PluginUtil* pu, Reference* pstr,
     Reference def, Reference key, Reference app, Reference file)
 {
-    //SSZ_TRACE("GetInifileString");
+    SSZ_TRACE_CAT(TRACE_UTIL, "GetInifileString");
     pu->setSSZFunc();
     std::wstring result = GetInifileString(
         ikemen::ssz_bridge::refToWstring(pu, def),
@@ -562,7 +566,7 @@ extern "C" void SSZ_STDCALL GetInifileString(PluginUtil* pu, Reference* pstr,
 extern "C" int32_t SSZ_STDCALL GetInifileInt(PluginUtil* pu, int32_t def,
     Reference key, Reference app, Reference file)
 {
-    //SSZ_TRACE("GetInifileInt");
+    SSZ_TRACE_CAT(TRACE_UTIL, "GetInifileInt");
     return GetInifileInt(
         def,
         ikemen::ssz_bridge::refToWstring(pu, key),
@@ -573,7 +577,7 @@ extern "C" int32_t SSZ_STDCALL GetInifileInt(PluginUtil* pu, int32_t def,
 extern "C" bool SSZ_STDCALL WriteInifileString(PluginUtil* pu,
     Reference str, Reference key, Reference app, Reference file)
 {
-    //SSZ_TRACE("WriteInifileString");
+    SSZ_TRACE_CAT(TRACE_UTIL, "WriteInifileString");
     return WriteInifileString(
         ikemen::ssz_bridge::refToWstring(pu, str),
         ikemen::ssz_bridge::refToWstring(pu, key),
@@ -583,7 +587,7 @@ extern "C" bool SSZ_STDCALL WriteInifileString(PluginUtil* pu,
 
 extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference *dst)
 {
-    //SSZ_TRACE("UnCompress");
+    SSZ_TRACE_CAT(TRACE_UTIL, "UnCompress");
     pu->setSSZFunc();
     std::vector<uint8_t> output;
     bool ok = UnCompress(src.atpos(), src.len(), output);
@@ -595,7 +599,7 @@ extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference 
 
 extern "C" void SSZ_STDCALL UbytesToStr(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
 {
-    //SSZ_TRACE("UbytesToStr");
+    SSZ_TRACE_CAT(TRACE_UTIL, "UbytesToStr");
     pu->setSSZFunc();
     dst->releaseanddelete();
     std::wstring output;
@@ -606,7 +610,7 @@ extern "C" void SSZ_STDCALL UbytesToStr(PluginUtil* pu, Reference src, Reference
 
 extern "C" void SSZ_STDCALL StrToUbytes(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
 {
-    //SSZ_TRACE("StrToUbytes");
+    SSZ_TRACE_CAT(TRACE_UTIL, "StrToUbytes");
     pu->setSSZFunc();
     dst->releaseanddelete();
     std::vector<uint8_t> output;
@@ -617,7 +621,7 @@ extern "C" void SSZ_STDCALL StrToUbytes(PluginUtil* pu, Reference src, Reference
 
 extern "C" void SSZ_STDCALL AsciiToLocal(PluginUtil* pu, Reference src, Reference *dst)
 {
-    //SSZ_TRACE("AsciiToLocal");
+    SSZ_TRACE_CAT(TRACE_UTIL, "AsciiToLocal");
     pu->setSSZFunc();
     dst->releaseanddelete();
     std::wstring output;
@@ -628,13 +632,13 @@ extern "C" void SSZ_STDCALL AsciiToLocal(PluginUtil* pu, Reference src, Referenc
 
 extern "C" void SSZ_STDCALL SetSharedString(PluginUtil* pu, Reference str)
 {
-    //SSZ_TRACE("SetSharedString");
+    SSZ_TRACE_CAT(TRACE_UTIL, "SetSharedString");
     SetSharedString(ikemen::ssz_bridge::refToWstring(pu, str));
 }
 
 extern "C" void SSZ_STDCALL GetSharedString(PluginUtil* pu, Reference *str)
 {
-    //SSZ_TRACE("GetSharedString");
+    SSZ_TRACE_CAT(TRACE_UTIL, "GetSharedString");
     pu->setSSZFunc();
     std::wstring result = GetSharedString();
     str->releaseanddelete();
@@ -643,7 +647,7 @@ extern "C" void SSZ_STDCALL GetSharedString(PluginUtil* pu, Reference *str)
 
 extern "C" void SSZ_STDCALL InputStr(PluginUtil* pu, Reference *pr, Reference title)
 {
-    //SSZ_TRACE("InputStr");
+    SSZ_TRACE_CAT(TRACE_UTIL, "InputStr");
     pu->setSSZFunc();
     std::wstring result = InputStr(ikemen::ssz_bridge::refToWstring(pu, title));
     pr->releaseanddelete();
@@ -657,42 +661,42 @@ extern "C" void SSZ_STDCALL InputStr(PluginUtil* pu, Reference *pr, Reference ti
 
 extern "C" Client* SSZ_STDCALL NewClient(PluginUtil* pu)
 {
-    //SSZ_TRACE("NewClient");
+    SSZ_TRACE_CAT(TRACE_UTIL, "NewClient");
     (void)pu;
     return NewClient();
 }
 
 extern "C" void SSZ_STDCALL DeleteClient(PluginUtil* pu, Client* client)
 {
-    //SSZ_TRACE("DeleteClient");
+    SSZ_TRACE_CAT(TRACE_UTIL, "DeleteClient");
     (void)pu;
     DeleteClient(client);
 }
 
 extern "C" bool SSZ_STDCALL ClientStart(PluginUtil* pu, Client* client)
 {
-    //SSZ_TRACE("ClientStart");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ClientStart");
     (void)pu;
     return ClientStart(client);
 }
 
 extern "C" bool SSZ_STDCALL ClientStop(PluginUtil* pu, Client* client)
 {
-    //SSZ_TRACE("ClientStop");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ClientStop");
     (void)pu;
     return ClientStop(client);
 }
 
 extern "C" bool SSZ_STDCALL ClientBufferReady(PluginUtil* pu, Client* client)
 {
-    //SSZ_TRACE("ClientBufferReady");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ClientBufferReady");
     (void)pu;
     return ClientBufferReady(client);
 }
 
 extern "C" bool SSZ_STDCALL ClientSetBuffer(PluginUtil* pu, Reference src, Client* client)
 {
-    //SSZ_TRACE("ClientSetBuffer");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ClientSetBuffer");
     return ClientSetBuffer(
         (const float*)src.atpos(),
         src.len() / (intptr_t)sizeof(float),
@@ -705,62 +709,62 @@ extern "C" bool SSZ_STDCALL ClientSetBuffer(PluginUtil* pu, Reference src, Clien
 
 extern "C" OggVorbis* SSZ_STDCALL NewOggVorbis(PluginUtil* pu)
 {
-    //SSZ_TRACE("NewOggVorbis");
+    SSZ_TRACE_CAT(TRACE_OGG, "NewOggVorbis");
     (void)pu;
     return NewOggVorbis();
 }
 
 extern "C" void SSZ_STDCALL DeleteOggVorbis(PluginUtil* pu, OggVorbis* ov)
 {
-    //SSZ_TRACE("DeleteOggVorbis");
+    SSZ_TRACE_CAT(TRACE_OGG, "DeleteOggVorbis");
     (void)pu;
     DeleteOggVorbis(ov);
 }
 
 extern "C" bool SSZ_STDCALL OggVorbisOpen(PluginUtil* pu, Reference file, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisOpen");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisOpen");
     return OggVorbisOpen(ikemen::ssz_bridge::refToWstring(pu, file), ov);
 }
 
 extern "C" void SSZ_STDCALL OggVorbisClear(PluginUtil* pu, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisClear");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisClear");
     (void)pu;
     OggVorbisClear(ov);
 }
 
 extern "C" int64_t SSZ_STDCALL OggVorbisPcmTotal(PluginUtil* pu, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisPcmTotal");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisPcmTotal");
     (void)pu;
     return OggVorbisPcmTotal(ov);
 }
 
 extern "C" int32_t SSZ_STDCALL OggVorbisChannels(PluginUtil* pu, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisChannels");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisChannels");
     (void)pu;
     return OggVorbisChannels(ov);
 }
 
 extern "C" int32_t SSZ_STDCALL OggVorbisRate(PluginUtil* pu, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisRate");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisRate");
     (void)pu;
     return OggVorbisRate(ov);
 }
 
 extern "C" intptr_t SSZ_STDCALL OggVorbisRead(PluginUtil* pu, Reference buffer, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisRead");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisRead");
     (void)pu;
     return OggVorbisRead((int16_t*)buffer.atpos(), (intptr_t)(buffer.len() / sizeof(int16_t)), ov);
 }
 
 extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVorbis* ov)
 {
-    //SSZ_TRACE("OggVorbisSeek");
+    SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisSeek");
     (void)pu;
     return OggVorbisSeek(time, ov);
 }
@@ -771,7 +775,7 @@ extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVor
 
 extern "C" RNS::wregex* SSZ_STDCALL NewRegex(PluginUtil* pu, Reference* error, bool i, Reference ptn)
 {
-    //SSZ_TRACE("NewRegex");
+    SSZ_TRACE_CAT(TRACE_UTIL, "NewRegex");
     pu->setSSZFunc();
     error->releaseanddelete();
     std::wstring errorStr;
@@ -787,14 +791,14 @@ extern "C" RNS::wregex* SSZ_STDCALL NewRegex(PluginUtil* pu, Reference* error, b
 
 extern "C" void SSZ_STDCALL DeleteRegex(PluginUtil* pu, RNS::wregex* re)
 {
-    //SSZ_TRACE("DeleteRegex");
+    SSZ_TRACE_CAT(TRACE_UTIL, "DeleteRegex");
     (void)pu;
     DeleteRegex(re);
 }
 
 extern "C" void SSZ_STDCALL RegexSearch(PluginUtil* pu, Reference* matches, Reference str, RNS::wregex* re)
 {
-    //SSZ_TRACE("RegexSearch");
+    SSZ_TRACE_CAT(TRACE_UTIL, "RegexSearch");
     pu->setSSZFunc();
     matches->releaseanddelete();
     if(!re) return;
@@ -828,7 +832,7 @@ extern "C" void SSZ_STDCALL RegexSearch(PluginUtil* pu, Reference* matches, Refe
 
 extern "C" bool SSZ_STDCALL ShellOpen(PluginUtil* pu, bool act, bool wait, Reference direct, Reference param, Reference file)
 {
-    //SSZ_TRACE("ShellOpen");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ShellOpen");
     return ShellOpen(
         act, wait,
         ikemen::ssz_bridge::refToWstring(pu, direct),
@@ -838,7 +842,7 @@ extern "C" bool SSZ_STDCALL ShellOpen(PluginUtil* pu, bool act, bool wait, Refer
 
 extern "C" bool SSZ_STDCALL MoveTrash(PluginUtil* pu, Reference file)
 {
-    //SSZ_TRACE("MoveTrash");
+    SSZ_TRACE_CAT(TRACE_UTIL, "MoveTrash");
     return MoveTrash(ikemen::ssz_bridge::refToWstring(pu, file));
 }
 
@@ -848,7 +852,7 @@ extern "C" bool SSZ_STDCALL MoveTrash(PluginUtil* pu, Reference file)
 
 extern "C" void SSZ_STDCALL ThreadDelay(PluginUtil* pu, uint32_t ui)
 {
-    //SSZ_TRACE("ThreadDelay");
+    SSZ_TRACE_CAT(TRACE_UTIL, "ThreadDelay");
     (void)pu;
     ThreadDelay(ui);
 }
@@ -859,7 +863,7 @@ extern "C" void SSZ_STDCALL ThreadDelay(PluginUtil* pu, uint32_t ui)
 
 extern "C" void SSZ_STDCALL Alert(PluginUtil* pu, Reference title, Reference mes)
 {
-    //SSZ_TRACE("Alert");
+    SSZ_TRACE_CAT(TRACE_UTIL, "Alert");
     Alert(
         ikemen::ssz_bridge::refToWstring(pu, title),
         ikemen::ssz_bridge::refToWstring(pu, mes));
@@ -871,14 +875,14 @@ extern "C" void SSZ_STDCALL Alert(PluginUtil* pu, Reference title, Reference mes
 
 extern "C" uint32_t SSZ_STDCALL TickCount(PluginUtil* pu)
 {
-    //SSZ_TRACE("TickCount");
+    SSZ_TRACE_CAT(TRACE_MATH, "TickCount");
     (void)pu;
     return TickCount();
 }
 
 extern "C" int64_t SSZ_STDCALL UnixTime(PluginUtil* pu)
 {
-    //SSZ_TRACE("UnixTime");
+    SSZ_TRACE_CAT(TRACE_MATH, "UnixTime");
     (void)pu;
     return UnixTime();
 }
@@ -889,105 +893,105 @@ extern "C" int64_t SSZ_STDCALL UnixTime(PluginUtil* pu)
 
 extern "C" double SSZ_STDCALL Sin(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Sin");
+    SSZ_TRACE_CAT(TRACE_MATH, "Sin");
     (void)pu;
     return Sin(x);
 }
 
 extern "C" double SSZ_STDCALL Cos(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Cos");
+    SSZ_TRACE_CAT(TRACE_MATH, "Cos");
     (void)pu;
     return Cos(x);
 }
 
 extern "C" double SSZ_STDCALL Tan(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Tan");
+    SSZ_TRACE_CAT(TRACE_MATH, "Tan");
     (void)pu;
     return Tan(x);
 }
 
 extern "C" double SSZ_STDCALL ASin(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("ASin");
+    SSZ_TRACE_CAT(TRACE_MATH, "ASin");
     (void)pu;
     return ASin(x);
 }
 
 extern "C" double SSZ_STDCALL ACos(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("ACos");
+    SSZ_TRACE_CAT(TRACE_MATH, "ACos");
     (void)pu;
     return ACos(x);
 }
 
 extern "C" double SSZ_STDCALL ATan(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("ATan");
+    SSZ_TRACE_CAT(TRACE_MATH, "ATan");
     (void)pu;
     return ATan(x);
 }
 
 extern "C" double SSZ_STDCALL Log(PluginUtil* pu, double y, double x)
 {
-    //SSZ_TRACE("Log");
+    SSZ_TRACE_CAT(TRACE_MATH, "Log");
     (void)pu;
     return Log(y, x);
 }
 
 extern "C" double SSZ_STDCALL Ln(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Ln");
+    SSZ_TRACE_CAT(TRACE_MATH, "Ln");
     (void)pu;
     return Ln(x);
 }
 
 extern "C" double SSZ_STDCALL Exp(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Exp");
+    SSZ_TRACE_CAT(TRACE_MATH, "Exp");
     (void)pu;
     return Exp(x);
 }
 
 extern "C" double SSZ_STDCALL Sqrt(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Sqrt");
+    SSZ_TRACE_CAT(TRACE_MATH, "Sqrt");
     (void)pu;
     return Sqrt(x);
 }
 
 extern "C" double SSZ_STDCALL Ceil(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Ceil");
+    SSZ_TRACE_CAT(TRACE_MATH, "Ceil");
     (void)pu;
     return Ceil(x);
 }
 
 extern "C" double SSZ_STDCALL Floor(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("Floor");
+    SSZ_TRACE_CAT(TRACE_MATH, "Floor");
     (void)pu;
     return Floor(x);
 }
 
 extern "C" bool SSZ_STDCALL IsFinite(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("IsFinite");
+    SSZ_TRACE_CAT(TRACE_MATH, "IsFinite");
     (void)pu;
     return IsFinite(x);
 }
 
 extern "C" bool SSZ_STDCALL IsInf(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("IsInf");
+    SSZ_TRACE_CAT(TRACE_MATH, "IsInf");
     (void)pu;
     return IsInf(x);
 }
 
 extern "C" bool SSZ_STDCALL IsNaN(PluginUtil* pu, double x)
 {
-    //SSZ_TRACE("IsNaN");
+    SSZ_TRACE_CAT(TRACE_MATH, "IsNaN");
     (void)pu;
     return IsNaN(x);
 }
@@ -1062,7 +1066,7 @@ bool       SSZ_STDCALL UnbindGlContext();
 
 extern "C" void SSZ_STDCALL DrawTTF(PluginUtil* pu, int32_t alpha, int32_t b, int32_t g, int32_t r, float scaleY, float scaleX, int32_t y, int32_t x, Reference text, int32_t align, Reference fontPath)
 {
-    //SSZ_TRACE("DrawTTF");
+    SSZ_TRACE_CAT(TRACE_SDL, "DrawTTF");
     DrawTTF(
         alpha, b, g, r, scaleY, scaleX, y, x,
         ikemen::ssz_bridge::refToWstring(pu, text),
@@ -1072,19 +1076,19 @@ extern "C" void SSZ_STDCALL DrawTTF(PluginUtil* pu, int32_t alpha, int32_t b, in
 
 extern "C" bool SSZ_STDCALL Init(PluginUtil* pu, bool mugen, int32_t h, int32_t w, Reference cap)
 {
-    //SSZ_TRACE("Init");
+    SSZ_TRACE_CAT(TRACE_SDL, "Init");
     return Init(mugen, h, w, ikemen::ssz_bridge::refToWstring(pu, cap));
 }
 
 extern "C" bool SSZ_STDCALL GlInit(PluginUtil* pu, int32_t h, int32_t w, Reference cap)
 {
-    //SSZ_TRACE("GlInit");
+    SSZ_TRACE_CAT(TRACE_SDL, "GlInit");
     return GlInit(h, w, ikemen::ssz_bridge::refToWstring(pu, cap));
 }
 
 extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName, int32_t h, int32_t w, Reference cap)
 {
-    //SSZ_TRACE("RendererInit");
+    SSZ_TRACE_CAT(TRACE_SDL, "RendererInit");
     return RendererInit(
         ikemen::ssz_bridge::refToWstring(pu, rendererName),
         h, w,
@@ -1093,7 +1097,7 @@ extern "C" bool SSZ_STDCALL RendererInit(PluginUtil* pu, Reference rendererName,
 
 extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
 {
-    //SSZ_TRACE("GetRendererInfo");
+    SSZ_TRACE_CAT(TRACE_SDL, "GetRendererInfo");
     (void)pu;
     (void)outInfo;
     GetRendererInfo();
@@ -1104,90 +1108,90 @@ extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
 
 extern "C" void SSZ_STDCALL EnablePerfMonitor(PluginUtil* pu, bool enable)
 {
-    //SSZ_TRACE("EnablePerfMonitor");
+    SSZ_TRACE_CAT(TRACE_SDL, "EnablePerfMonitor");
     (void)pu;
     EnablePerfMonitor(enable);
 }
 
 extern "C" void SSZ_STDCALL End(PluginUtil* pu)
 {
-    //SSZ_TRACE("End");
+    SSZ_TRACE_CAT(TRACE_SDL, "End");
     (void)pu;
     End();
 }
 
 extern "C" void SSZ_STDCALL FullScreenExclusive(PluginUtil* pu, bool fsr)
 {
-    //SSZ_TRACE("FullScreenExclusive");
+    SSZ_TRACE_CAT(TRACE_SDL, "FullScreenExclusive");
     (void)pu;
     FullScreenExclusive(fsr);
 }
 
 extern "C" bool SSZ_STDCALL FullScreen(PluginUtil* pu, bool fs)
 {
-    //SSZ_TRACE("FullScreen");
+    SSZ_TRACE_CAT(TRACE_SDL, "FullScreen");
     (void)pu;
     return FullScreen(fs);
 }
 
 extern "C" void SSZ_STDCALL WindowType(PluginUtil* pu, int state)
 {
-    //SSZ_TRACE("WindowType");
+    SSZ_TRACE_CAT(TRACE_SDL, "WindowType");
     (void)pu;
     WindowType(state);
 }
 
 extern "C" int SSZ_STDCALL GetWidth(PluginUtil* pu)
 {
-    //SSZ_TRACE("GetWidth");
+    SSZ_TRACE_CAT(TRACE_SDL, "GetWidth");
     (void)pu;
     return GetWidth();
 }
 
 extern "C" int SSZ_STDCALL GetHeight(PluginUtil* pu)
 {
-    //SSZ_TRACE("GetHeight");
+    SSZ_TRACE_CAT(TRACE_SDL, "GetHeight");
     (void)pu;
     return GetHeight();
 }
 
 extern "C" void SSZ_STDCALL WindowSize(PluginUtil* pu, int height, int width)
 {
-    //SSZ_TRACE("WindowSize");
+    SSZ_TRACE_CAT(TRACE_SDL, "WindowSize");
     (void)pu;
     WindowSize(height, width);
 }
 
 extern "C" void SSZ_STDCALL AspectRatio(PluginUtil* pu, bool aspect)
 {
-    //SSZ_TRACE("AspectRatio");
+    SSZ_TRACE_CAT(TRACE_SDL, "AspectRatio");
     (void)pu;
     AspectRatio(aspect);
 }
 
 extern "C" void SSZ_STDCALL SetOpacity(PluginUtil* pu, float wo)
 {
-    //SSZ_TRACE("SetOpacity");
+    SSZ_TRACE_CAT(TRACE_SDL, "SetOpacity");
     (void)pu;
     SetOpacity(wo);
 }
 
 extern "C" void SSZ_STDCALL TakeScreenShot(PluginUtil* pu, Reference dir)
 {
-    //SSZ_TRACE("TakeScreenShot");
+    SSZ_TRACE_CAT(TRACE_SDL, "TakeScreenShot");
     TakeScreenShot(ikemen::ssz_bridge::refToWstring(pu, dir));
 }
 
 extern "C" bool SSZ_STDCALL UpdateGLViewport(PluginUtil* pu, const SDL_Event& event)
 {
-    //SSZ_TRACE("UpdateGLViewport");
+    SSZ_TRACE_CAT(TRACE_SDL, "UpdateGLViewport");
     (void)pu;
     return UpdateGLViewport(event);
 }
 
 extern "C" int SSZ_STDCALL PlayVideo(PluginUtil* pu, Reference fn, Reference screenshotPath, int volume, int audioTrack)
 {
-    //SSZ_TRACE("PlayVideo");
+    SSZ_TRACE_CAT(TRACE_SDL, "PlayVideo");
     return PlayVideo(
         ikemen::ssz_bridge::refToWstring(pu, fn),
         ikemen::ssz_bridge::refToWstring(pu, screenshotPath),
@@ -1196,28 +1200,28 @@ extern "C" int SSZ_STDCALL PlayVideo(PluginUtil* pu, Reference fn, Reference scr
 
 extern "C" bool SSZ_STDCALL PollEvent(PluginUtil* pu, int8_t* pb)
 {
-    //SSZ_TRACE("PollEvent");
+    SSZ_TRACE_CAT(TRACE_SDL, "PollEvent");
     (void)pu;
     return PollEvent(pb);
 }
 
 extern "C" char16_t SSZ_STDCALL GetLastChar(PluginUtil* pu)
 {
-    //SSZ_TRACE("GetLastChar");
+    SSZ_TRACE_CAT(TRACE_SDL, "GetLastChar");
     (void)pu;
     return GetLastChar();
 }
 
 extern "C" bool SSZ_STDCALL KeyState(PluginUtil* pu, int32_t key)
 {
-    //SSZ_TRACE("KeyState");
+    SSZ_TRACE_CAT(TRACE_SDL, "KeyState");
     (void)pu;
     return KeyState(key);
 }
 
 extern "C" bool SSZ_STDCALL JoystickButtonState(PluginUtil* pu, int32_t btn, int32_t joy)
 {
-    //SSZ_TRACE("JoystickButtonState");
+    SSZ_TRACE_CAT(TRACE_SDL, "JoystickButtonState");
     (void)pu;
     return JoystickButtonState(btn, joy);
 }
@@ -1235,7 +1239,7 @@ extern "C" int32_t SSZ_STDCALL PollInputBitmask(PluginUtil* pu,
     int32_t q2, int32_t w2, int32_t e2, int32_t s2,
     int32_t sec)
 {
-    //SSZ_TRACE("PollInputBitmask");
+    SSZ_TRACE_CAT(TRACE_SDL, "PollInputBitmask");
     (void)pu;
     return PollInputBitmask(
         jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s,
@@ -1245,27 +1249,27 @@ extern "C" int32_t SSZ_STDCALL PollInputBitmask(PluginUtil* pu,
 
 extern "C" void SSZ_STDCALL SoftFill(PluginUtil* pu, uint32_t color, SDL_Rect* prect)
 {
-    //SSZ_TRACE("SoftFill");
+    SSZ_TRACE_CAT(TRACE_SDL, "SoftFill");
     (void)pu;
     SoftFill(color, prect);
 }
 
 extern "C" void SSZ_STDCALL Fill(PluginUtil* pu, uint32_t color, SDL_Rect* prect)
 {
-    //SSZ_TRACE("Fill");
+    SSZ_TRACE_CAT(TRACE_SDL, "Fill");
     (void)pu;
     Fill(color, prect);
 }
 
 extern "C" intptr_t SSZ_STDCALL IMGLoad(PluginUtil* pu, Reference fn)
 {
-    //SSZ_TRACE("IMGLoad");
+    SSZ_TRACE_CAT(TRACE_SDL, "IMGLoad");
     return IMGLoad(ikemen::ssz_bridge::refToWstring(pu, fn));
 }
 
 extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w, Reference* out)
 {
-    //SSZ_TRACE("DecodePNG8");
+    SSZ_TRACE_CAT(TRACE_SDL, "DecodePNG8");
     pu->setSSZFunc();
     std::vector<uint8_t> decoded;
     DecodePNG8(fp, h, w, decoded);
@@ -1274,96 +1278,96 @@ extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int
 
 extern "C" void SSZ_STDCALL BlitSurface(PluginUtil* pu, SDL_Rect* prect, SDL_Surface* psrcs)
 {
-    //SSZ_TRACE("BlitSurface");
+    SSZ_TRACE_CAT(TRACE_SDL, "BlitSurface");
     (void)pu;
     BlitSurface(prect, psrcs);
 }
 
 extern "C" intptr_t SSZ_STDCALL CreatePaletteSurface(PluginUtil* pu, int32_t h, int32_t w, SDL_Color* ppl, uint8_t* ppx)
 {
-    //SSZ_TRACE("CreatePaletteSurface");
+    SSZ_TRACE_CAT(TRACE_SDL, "CreatePaletteSurface");
     (void)pu;
     return CreatePaletteSurface(h, w, ppl, ppx);
 }
 
 extern "C" void SSZ_STDCALL SetColorKey(PluginUtil* pu, uint32_t key, SDL_Surface* psur)
 {
-    //SSZ_TRACE("SetColorKey");
+    SSZ_TRACE_CAT(TRACE_SDL, "SetColorKey");
     (void)pu;
     SetColorKey(key, psur);
 }
 
 extern "C" void SSZ_STDCALL Flip(PluginUtil* pu)
 {
-    //SSZ_TRACE("Flip");
+    SSZ_TRACE_CAT(TRACE_SDL, "Flip");
     (void)pu;
     Flip();
 }
 
 extern "C" intptr_t SSZ_STDCALL AllocSurface(PluginUtil* pu, int32_t h, int32_t w)
 {
-    //SSZ_TRACE("AllocSurface");
+    SSZ_TRACE_CAT(TRACE_SDL, "AllocSurface");
     (void)pu;
     return AllocSurface(h, w);
 }
 
 extern "C" void SSZ_STDCALL FreeSurface(PluginUtil* pu, SDL_Surface* ps)
 {
-    //SSZ_TRACE("FreeSurface");
+    SSZ_TRACE_CAT(TRACE_SDL, "FreeSurface");
     (void)pu;
     FreeSurface(ps);
 }
 
 extern "C" void SSZ_STDCALL Delay(PluginUtil* pu, uint32_t ms)
 {
-    //SSZ_TRACE("Delay");
+    SSZ_TRACE_CAT(TRACE_SDL, "Delay");
     (void)pu;
     Delay(ms);
 }
 
 extern "C" uint32_t SSZ_STDCALL GetTicks(PluginUtil* pu)
 {
-    //SSZ_TRACE("GetTicks");
+    SSZ_TRACE_CAT(TRACE_SDL, "GetTicks");
     (void)pu;
     return GetTicks();
 }
 
 extern "C" void SSZ_STDCALL CursorShow(PluginUtil* pu, bool show)
 {
-    //SSZ_TRACE("CursorShow");
+    SSZ_TRACE_CAT(TRACE_SDL, "CursorShow");
     (void)pu;
     CursorShow(show);
 }
 
 extern "C" intptr_t SSZ_STDCALL OpenFont(PluginUtil* pu, int32_t size, Reference font)
 {
-    //SSZ_TRACE("OpenFont");
+    SSZ_TRACE_CAT(TRACE_SDL, "OpenFont");
     return OpenFont(size, ikemen::ssz_bridge::refToWstring(pu, font));
 }
 
 extern "C" void SSZ_STDCALL CloseFont(PluginUtil* pu, TTF_Font* pf)
 {
-    //SSZ_TRACE("CloseFont");
+    SSZ_TRACE_CAT(TRACE_SDL, "CloseFont");
     (void)pu;
     CloseFont(pf);
 }
 
 extern "C" void SSZ_STDCALL RenderFont(PluginUtil* pu, Reference str, int32_t y, int32_t x, SDL_Color c, TTF_Font* pf)
 {
-    //SSZ_TRACE("RenderFont");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderFont");
     RenderFont(ikemen::ssz_bridge::refToWstring(pu, str), y, x, c, pf);
 }
 
 extern "C" bool SSZ_STDCALL SetSndBuf(PluginUtil* pu, int32_t* buf)
 {
-    //SSZ_TRACE("SetSndBuf");
+    SSZ_TRACE_CAT(TRACE_SDL, "SetSndBuf");
     (void)pu;
     return SetSndBuf(buf);
 }
 
 extern "C" bool SSZ_STDCALL PlayBGM(PluginUtil* pu, Reference fn, Reference pldir)
 {
-    //SSZ_TRACE("PlayBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "PlayBGM");
     return PlayBGM(
         ikemen::ssz_bridge::refToWstring(pu, fn),
         ikemen::ssz_bridge::refToWstring(pu, pldir));
@@ -1371,28 +1375,28 @@ extern "C" bool SSZ_STDCALL PlayBGM(PluginUtil* pu, Reference fn, Reference pldi
 
 extern "C" void SSZ_STDCALL PauseBGM(PluginUtil* pu, bool pause)
 {
-    //SSZ_TRACE("PauseBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "PauseBGM");
     (void)pu;
     PauseBGM(pause);
 }
 
 extern "C" bool SSZ_STDCALL SendOpenBGM(PluginUtil* pu, int32_t channels, int32_t rate)
 {
-    //SSZ_TRACE("SendOpenBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "SendOpenBGM");
     (void)pu;
     return SendOpenBGM(channels, rate);
 }
 
 extern "C" void SSZ_STDCALL SendCloseBGM(PluginUtil* pu)
 {
-    //SSZ_TRACE("SendCloseBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "SendCloseBGM");
     (void)pu;
     SendCloseBGM();
 }
 
 extern "C" intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil* pu, Reference fn)
 {
-    //SSZ_TRACE("SendWriteBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "SendWriteBGM");
     (void)pu;
     (void)fn;  // fn was historically unused in the old implementation too;
                // preserved as a parameter for ABI compatibility only.
@@ -1401,21 +1405,21 @@ extern "C" intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil* pu, Reference fn)
 
 extern "C" void SSZ_STDCALL SetVolume(PluginUtil* pu, float bv, float wv, float gv)
 {
-    //SSZ_TRACE("SetVolume");
+    SSZ_TRACE_CAT(TRACE_SDL, "SetVolume");
     (void)pu;
     SetVolume(bv, wv, gv);
 }
 
 extern "C" void SSZ_STDCALL FadeInBGM(PluginUtil* pu, int time)
 {
-    //SSZ_TRACE("FadeInBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "FadeInBGM");
     (void)pu;
     FadeInBGM(time);
 }
 
 extern "C" void SSZ_STDCALL FadeOutBGM(PluginUtil* pu, int time)
 {
-    //SSZ_TRACE("FadeOutBGM");
+    SSZ_TRACE_CAT(TRACE_SDL, "FadeOutBGM");
     (void)pu;
     FadeOutBGM(time);
 }
@@ -1426,7 +1430,7 @@ extern "C" bool SSZ_STDCALL RenderMugenZoom(PluginUtil* pu, Reference* pluginbuf
     SDL_Rect* tile, float ty, float cx, SDL_Rect* psrcr,
     uint16_t ckey, uint32_t* ppal, Reference img)
 {
-    //SSZ_TRACE("RenderMugenZoom");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderMugenZoom");
     (void)pu;
     return RenderMugenZoom(pluginbuf, rle, rcy, rcx, pdstr, alpha,
         roto, rasterxadd, yscl, xbotscl, xtopscl,
@@ -1447,7 +1451,7 @@ extern "C" bool SSZ_STDCALL RenderFontBatch(PluginUtil* pu, int32_t count,
     float baseX,
     uint8_t* atlasPixels)
 {
-    //SSZ_TRACE("RenderFontBatch");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderFontBatch");
     (void)pu;
     return RenderFontBatch(count, glyphData, spacing, yscl, xscl, window,
         alpha, glyphH, atlasStride, ppal, baseY, baseX, atlasPixels);
@@ -1458,42 +1462,42 @@ extern "C" bool SSZ_STDCALL RenderMugenShadow(PluginUtil* pu, Reference* pluginb
     uint32_t roto, float vscl, float yscl, float xscl,
     float ty, float cx, SDL_Rect* psrcr, uint32_t color, Reference img)
 {
-    //SSZ_TRACE("RenderMugenShadow");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderMugenShadow");
     return RenderMugenShadow(pluginbuf, rle, rcy, rcx, pdstr, alpha,
         roto, vscl, yscl, xscl, ty, cx, psrcr, color, img);
 }
 
 extern "C" uint32_t SSZ_STDCALL Load8bitTexture(PluginUtil* pu, int32_t h, int32_t w, uint8_t* ppxl)
 {
-    //SSZ_TRACE("Load8bitTexture");
+    SSZ_TRACE_CAT(TRACE_SDL, "Load8bitTexture");
     (void)pu;
     return Load8bitTexture(h, w, ppxl);
 }
 
 extern "C" uint32_t SSZ_STDCALL LoadPngTexture(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w)
 {
-    //SSZ_TRACE("LoadPngTexture");
+    SSZ_TRACE_CAT(TRACE_SDL, "LoadPngTexture");
     (void)pu;
     return LoadPngTexture(fp, h, w);
 }
 
 extern "C" void SSZ_STDCALL DeleteGlTexture(PluginUtil* pu, uint32_t texid)
 {
-    //SSZ_TRACE("DeleteGlTexture");
+    SSZ_TRACE_CAT(TRACE_SDL, "DeleteGlTexture");
     (void)pu;
     DeleteGlTexture(texid);
 }
 
 extern "C" void SSZ_STDCALL GlSwapBuffers(PluginUtil* pu)
 {
-    //SSZ_TRACE("GlSwapBuffers");
+    SSZ_TRACE_CAT(TRACE_SDL, "GlSwapBuffers");
     (void)pu;
     GlSwapBuffers();
 }
 
 extern "C" bool SSZ_STDCALL InitMugenGl(PluginUtil* pu)
 {
-    //SSZ_TRACE("InitMugenGl");
+    SSZ_TRACE_CAT(TRACE_SDL, "InitMugenGl");
     (void)pu;
     return InitMugenGl();
 }
@@ -1503,7 +1507,7 @@ extern "C" bool SSZ_STDCALL RenderMugenGl(PluginUtil* pu, float rcy, float rcx, 
     float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
     SDL_Rect* rect, int mask, uint8_t* ppal, uint32_t texid)
 {
-    //SSZ_TRACE("RenderMugenGl");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderMugenGl");
     (void)pu;
     return RenderMugenGl(rcy, rcx, dstr, alpha, angle, rasterxadd, vscl, yscl,
         xbotscl, xtopscl, tile, y, x, rect, mask, ppal, texid);
@@ -1516,7 +1520,7 @@ extern "C" bool SSZ_STDCALL RenderMugenGlFc(PluginUtil* pu, float mulb, float mu
     float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
     SDL_Rect* rect, uint32_t texid)
 {
-    //SSZ_TRACE("RenderMugenGlFc");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderMugenGlFc");
     (void)pu;
     return RenderMugenGlFc(mulb, mulg, mulr, addb, addg, addr, color, neg,
         rcy, rcx, dstr, alpha, angle, rasterxadd, vscl, yscl,
@@ -1529,7 +1533,7 @@ extern "C" bool SSZ_STDCALL RenderMugenGlFcS(PluginUtil* pu, uint32_t color,
     float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
     SDL_Rect* rect, uint32_t texid)
 {
-    //SSZ_TRACE("RenderMugenGlFcS");
+    SSZ_TRACE_CAT(TRACE_SDL, "RenderMugenGlFcS");
     (void)pu;
     return RenderMugenGlFcS(color, rcy, rcx, dstr, alpha, angle, rasterxadd,
         vscl, yscl, xbotscl, xtopscl, tile, y, x, rect, texid);
@@ -1537,21 +1541,21 @@ extern "C" bool SSZ_STDCALL RenderMugenGlFcS(PluginUtil* pu, uint32_t color,
 
 extern "C" void SSZ_STDCALL MugenFillGl(PluginUtil* pu, int32_t alpha, uint32_t color, SDL_Rect rect)
 {
-    //SSZ_TRACE("MugenFillGl");
+    SSZ_TRACE_CAT(TRACE_SDL, "MugenFillGl");
     (void)pu;
     MugenFillGl(alpha, color, rect);
 }
 
 extern "C" bool SSZ_STDCALL BindGlContext(PluginUtil* pu)
 {
-    //SSZ_TRACE("BindGlContext");
+    SSZ_TRACE_CAT(TRACE_SDL, "BindGlContext");
     (void)pu;
     return BindGlContext();
 }
 
 extern "C" bool SSZ_STDCALL UnbindGlContext(PluginUtil* pu)
 {
-    //SSZ_TRACE("UnbindGlContext");
+    SSZ_TRACE_CAT(TRACE_SDL, "UnbindGlContext");
     (void)pu;
     return UnbindGlContext();
 }
@@ -1565,7 +1569,6 @@ extern "C" bool SSZ_STDCALL UnbindGlContext(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL ActionInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("ActionInit");
     (void)pu;
     ikemen::ssz_native::action_init();
 }
@@ -1585,14 +1588,12 @@ extern "C" void SSZ_STDCALL ActionInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL BgInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("BgInit");
     (void)pu;
     ikemen::ssz_native::bg_init();
 }
 
 extern "C" void SSZ_STDCALL BgSplitParams(PluginUtil* pu, Reference paramStr, Reference* out)
 {
-    //SSZ_TRACE("BgSplitParams");
     (void)pu;
     (void)paramStr;
     (void)out;
@@ -1614,7 +1615,6 @@ extern "C" void SSZ_STDCALL BgSplitParams(PluginUtil* pu, Reference paramStr, Re
 
 extern "C" void SSZ_STDCALL DebugLoadFile(PluginUtil* pu, Reference file, Reference* out)
 {
-    //SSZ_TRACE("DebugLoadFile");
     pu->setSSZFunc();
     (void)file;
     std::string result = ikemen::ssz_native::debug_load_file();
@@ -1625,7 +1625,6 @@ extern "C" void SSZ_STDCALL DebugLoadFile(PluginUtil* pu, Reference file, Refere
 
 extern "C" void SSZ_STDCALL DebugRunFile(PluginUtil* pu, Reference file, Reference* out)
 {
-    //SSZ_TRACE("DebugRunFile");
     pu->setSSZFunc();
     (void)file;
     std::string result = ikemen::ssz_native::debug_run_file();
@@ -1649,14 +1648,12 @@ extern "C" void SSZ_STDCALL DebugRunFile(PluginUtil* pu, Reference file, Referen
 
 extern "C" void SSZ_STDCALL FontInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("FontInit");
     (void)pu;
     ikemen::ssz_native::font_init();
 }
 
 extern "C" void SSZ_STDCALL FontRenderText(PluginUtil* pu)
 {
-    //SSZ_TRACE("FontRenderText");
     (void)pu;
     ikemen::ssz_native::font_render_text();
 }
@@ -1676,7 +1673,6 @@ extern "C" void SSZ_STDCALL FontRenderText(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL CharInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("CharInit");
     (void)pu;
     ikemen::ssz_native::char_init();
 }
@@ -1696,7 +1692,6 @@ extern "C" void SSZ_STDCALL CharInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL CommandInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommandInit");
     (void)pu;
     ikemen::ssz_native::command_init();
 }
@@ -1716,7 +1711,6 @@ extern "C" void SSZ_STDCALL CommandInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL FightInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("FightInit");
     (void)pu;
     ikemen::ssz_native::fight_init();
 }
@@ -1736,7 +1730,6 @@ extern "C" void SSZ_STDCALL FightInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL FightingInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("FightingInit");
     (void)pu;
     ikemen::ssz_native::fighting_init();
 }
@@ -1756,7 +1749,6 @@ extern "C" void SSZ_STDCALL FightingInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL SystemScriptInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("SystemScriptInit");
     (void)pu;
     ikemen::ssz_native::system_script_init();
 }
@@ -1776,7 +1768,6 @@ extern "C" void SSZ_STDCALL SystemScriptInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL TriggerScriptRegisterFunction(PluginUtil* pu)
 {
-    //SSZ_TRACE("TriggerScriptRegisterFunction");
     (void)pu;
     ikemen::ssz_native::register_function();
 }
@@ -1796,14 +1787,12 @@ extern "C" void SSZ_STDCALL TriggerScriptRegisterFunction(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL StageInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("StageInit");
     (void)pu;
     ikemen::ssz_native::stage_init();
 }
 
 extern "C" void SSZ_STDCALL StageLoad(PluginUtil* pu, Reference def, Reference* out)
 {
-    //SSZ_TRACE("StageLoad");
     pu->setSSZFunc();
     // Convert SSZ Reference to native path string
     std::wstring wdef = ikemen::ssz_bridge::refToWstring(pu, def);
@@ -1815,28 +1804,24 @@ extern "C" void SSZ_STDCALL StageLoad(PluginUtil* pu, Reference def, Reference* 
 
 extern "C" void SSZ_STDCALL StageAction(PluginUtil* pu)
 {
-    //SSZ_TRACE("StageAction");
     (void)pu;
     ikemen::ssz_native::stage_action();
 }
 
 extern "C" void SSZ_STDCALL StageBgDraw(PluginUtil* pu, int32_t t, float x, float y, float scl)
 {
-    //SSZ_TRACE("StageBgDraw");
     (void)pu;
     ikemen::ssz_native::stage_bg_draw(t != 0, x, y, scl);
 }
 
 extern "C" void SSZ_STDCALL StageClear(PluginUtil* pu)
 {
-    //SSZ_TRACE("StageClear");
     (void)pu;
     ikemen::ssz_native::stage_clear();
 }
 
 extern "C" void SSZ_STDCALL StageReset(PluginUtil* pu)
 {
-    //SSZ_TRACE("StageReset");
     (void)pu;
     ikemen::ssz_native::stage_reset();
 }
@@ -1856,9 +1841,13 @@ extern "C" void SSZ_STDCALL StageReset(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL ScriptInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("ScriptInit");
     (void)pu;
-    ikemen::ssz_native::script_init();
+    // Get the main Lua state captured during engine initialization.
+    // This allows native script_init() to register all 190+ Lua-callable
+    // functions (sffNew, sndPlay, key query functions, game state getters/setters)
+    // with the Lua state so they are callable from Lua scripts (main.lua, etc.).
+    lua_State* L = get_main_lua_state();
+    ikemen::ssz_native::script_init(L);
 }
 
 #else
@@ -1876,7 +1865,6 @@ extern "C" void SSZ_STDCALL ScriptInit(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL StateBuilderInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("StateBuilderInit");
     (void)pu;
     ikemen::ssz_native::statebuilder_init();
 }
@@ -1896,7 +1884,6 @@ extern "C" void SSZ_STDCALL StateBuilderInit(PluginUtil* pu)
 
 extern "C" bool SSZ_STDCALL SystemAddChar(PluginUtil* pu, Reference def)
 {
-    //SSZ_TRACE("SystemAddChar");
     pu->setSSZFunc();
     std::wstring wdef = ikemen::ssz_bridge::refToWstring(pu, def);
     std::string defStr(wdef.begin(), wdef.end());
@@ -1905,7 +1892,6 @@ extern "C" bool SSZ_STDCALL SystemAddChar(PluginUtil* pu, Reference def)
 
 extern "C" void SSZ_STDCALL SystemAddStage(PluginUtil* pu, Reference def, Reference* out)
 {
-    //SSZ_TRACE("SystemAddStage");
     pu->setSSZFunc();
     std::wstring wdef = ikemen::ssz_bridge::refToWstring(pu, def);
     std::string defStr(wdef.begin(), wdef.end());
@@ -1916,7 +1902,6 @@ extern "C" void SSZ_STDCALL SystemAddStage(PluginUtil* pu, Reference def, Refere
 
 extern "C" void SSZ_STDCALL SystemGetStageName(PluginUtil* pu, int32_t i, Reference* out)
 {
-    //SSZ_TRACE("SystemGetStageName");
     pu->setSSZFunc();
     std::string name = ikemen::ssz_native::system_get_stage_name(i);
     if (name.empty()) return;
@@ -1925,28 +1910,24 @@ extern "C" void SSZ_STDCALL SystemGetStageName(PluginUtil* pu, int32_t i, Refere
 
 extern "C" int SSZ_STDCALL SystemSetStageNo(PluginUtil* pu, int32_t i)
 {
-    //SSZ_TRACE("SystemSetStageNo");
     (void)pu;
     return ikemen::ssz_native::system_set_stage_no(i);
 }
 
 extern "C" void SSZ_STDCALL SystemSelectStage(PluginUtil* pu, int32_t no)
 {
-    //SSZ_TRACE("SystemSelectStage");
     (void)pu;
     ikemen::ssz_native::system_select_stage(no);
 }
 
 extern "C" bool SSZ_STDCALL SystemAddSelchr(PluginUtil* pu, int32_t pn, int32_t cn, int32_t pl)
 {
-    //SSZ_TRACE("SystemAddSelchr");
     (void)pu;
     return ikemen::ssz_native::system_add_selchr(pn, cn, pl);
 }
 
 extern "C" void SSZ_STDCALL SystemSelReset(PluginUtil* pu)
 {
-    //SSZ_TRACE("SystemSelReset");
     (void)pu;
     ikemen::ssz_native::system_sel_reset();
 }
@@ -1966,49 +1947,42 @@ extern "C" void SSZ_STDCALL SystemSelReset(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL LoaderError(PluginUtil* pu, Reference msg)
 {
-    //SSZ_TRACE("LoaderError");
     ikemen::ssz_native::loader_error(
         ikemen::ssz_bridge::refToNarrowUtf8(pu, msg));
 }
 
 extern "C" bool SSZ_STDCALL LoaderStage(PluginUtil* pu)
 {
-    //SSZ_TRACE("LoaderStage");
     (void)pu;
     return ikemen::ssz_native::loader_stage();
 }
 
 extern "C" int SSZ_STDCALL LoaderChara(PluginUtil* pu, int32_t pn)
 {
-    //SSZ_TRACE("LoaderChara");
     (void)pu;
     return ikemen::ssz_native::loader_chara(pn);
 }
 
 extern "C" bool SSZ_STDCALL LoaderStateCompile(PluginUtil* pu)
 {
-    //SSZ_TRACE("LoaderStateCompile");
     (void)pu;
     return ikemen::ssz_native::loader_state_compile();
 }
 
 extern "C" void SSZ_STDCALL LoaderLoad(PluginUtil* pu)
 {
-    //SSZ_TRACE("LoaderLoad");
     (void)pu;
     ikemen::ssz_native::loader_load();
 }
 
 extern "C" void SSZ_STDCALL LoaderReset(PluginUtil* pu)
 {
-    //SSZ_TRACE("LoaderReset");
     (void)pu;
     ikemen::ssz_native::loader_reset();
 }
 
 extern "C" bool SSZ_STDCALL LoaderRunTread(PluginUtil* pu)
 {
-    //SSZ_TRACE("LoaderRunTread");
     (void)pu;
     return ikemen::ssz_native::loader_run_tread();
 }
@@ -2028,84 +2002,72 @@ extern "C" bool SSZ_STDCALL LoaderRunTread(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL CommonFlagInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonFlagInit");
     (void)pu;
     ikemen::ssz_native::common_flag_init();
 }
 
 extern "C" void SSZ_STDCALL CommonResetRemapInput(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonResetRemapInput");
     (void)pu;
     ikemen::ssz_native::common_reset_remap_input();
 }
 
 extern "C" void SSZ_STDCALL CommonSetSize(PluginUtil* pu, int32_t w, int32_t h)
 {
-    //SSZ_TRACE("CommonSetSize");
     (void)pu;
     ikemen::ssz_native::common_set_size(w, h);
 }
 
 extern "C" bool SSZ_STDCALL CommonTickFrame(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonTickFrame");
     (void)pu;
     return ikemen::ssz_native::common_tick_frame();
 }
 
 extern "C" bool SSZ_STDCALL CommonTickNextFrame(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonTickNextFrame");
     (void)pu;
     return ikemen::ssz_native::common_tick_next_frame();
 }
 
 extern "C" float SSZ_STDCALL CommonTickInterpola(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonTickInterpola");
     (void)pu;
     return ikemen::ssz_native::common_tick_interpola();
 }
 
 extern "C" bool SSZ_STDCALL CommonAddFrameTime(PluginUtil* pu, float t)
 {
-    //SSZ_TRACE("CommonAddFrameTime");
     (void)pu;
     return ikemen::ssz_native::common_add_frame_time(t);
 }
 
 extern "C" void SSZ_STDCALL CommonResetFrameTime(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonResetFrameTime");
     (void)pu;
     ikemen::ssz_native::common_reset_frame_time();
 }
 
 extern "C" bool SSZ_STDCALL CommonMatchOver(PluginUtil* pu)
 {
-    //SSZ_TRACE("CommonMatchOver");
     (void)pu;
     return ikemen::ssz_native::common_match_over();
 }
 
 extern "C" int SSZ_STDCALL CommonAtoi(PluginUtil* pu, Reference str)
 {
-    //SSZ_TRACE("CommonAtoi");
     return ikemen::ssz_native::common_atoi(
         ikemen::ssz_bridge::refToNarrowUtf8(pu, str));
 }
 
 extern "C" double SSZ_STDCALL CommonAtof(PluginUtil* pu, Reference str)
 {
-    //SSZ_TRACE("CommonAtof");
     return ikemen::ssz_native::common_atof(
         ikemen::ssz_bridge::refToNarrowUtf8(pu, str));
 }
 
 extern "C" void SSZ_STDCALL CommonLoadText(PluginUtil* pu, Reference* out, Reference filename, bool unicode)
 {
-    //SSZ_TRACE("CommonLoadText");
     pu->setSSZFunc();
     std::string result = ikemen::ssz_native::common_load_text(
         ikemen::ssz_bridge::refToNarrowUtf8(pu, filename), unicode);
@@ -2128,14 +2090,12 @@ extern "C" void SSZ_STDCALL CommonLoadText(PluginUtil* pu, Reference* out, Refer
 
 extern "C" void SSZ_STDCALL SffInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("SffInit");
     (void)pu;
     ikemen::ssz_native::sff_init();
 }
 
 extern "C" void SSZ_STDCALL SffLoadFile(PluginUtil* pu, Reference filename, int32_t chr, Reference* out)
 {
-    //SSZ_TRACE("SffLoadFile");
     pu->setSSZFunc();
     std::wstring wfn = ikemen::ssz_bridge::refToWstring(pu, filename);
     std::string fn(wfn.begin(), wfn.end());
@@ -2146,7 +2106,6 @@ extern "C" void SSZ_STDCALL SffLoadFile(PluginUtil* pu, Reference filename, int3
 
 extern "C" void SSZ_STDCALL SffGetSprite(PluginUtil* pu, int32_t group, int32_t number, Reference* out)
 {
-    //SSZ_TRACE("SffGetSprite");
     (void)pu;
     (void)group;
     (void)number;
@@ -2169,14 +2128,12 @@ extern "C" void SSZ_STDCALL SffGetSprite(PluginUtil* pu, int32_t group, int32_t 
 
 extern "C" void SSZ_STDCALL ShareCopy(PluginUtil* pu)
 {
-    //SSZ_TRACE("ShareCopy");
     (void)pu;
     ikemen::ssz_native::share_copy();
 }
 
 extern "C" void SSZ_STDCALL SharePush(PluginUtil* pu)
 {
-    //SSZ_TRACE("SharePush");
     (void)pu;
     ikemen::ssz_native::share_push();
 }
@@ -2196,35 +2153,30 @@ extern "C" void SSZ_STDCALL SharePush(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL SoundResourceInit(PluginUtil* pu)
 {
-    //SSZ_TRACE("SoundResourceInit");
     (void)pu;
     ikemen::ssz_native::sound_resource_init();
 }
 
 extern "C" void SSZ_STDCALL SoundSndbufClear(PluginUtil* pu)
 {
-    //SSZ_TRACE("SoundSndbufClear");
     (void)pu;
     ikemen::ssz_native::sndbuf_clear();
 }
 
 extern "C" void SSZ_STDCALL SoundMixSounds(PluginUtil* pu)
 {
-    //SSZ_TRACE("SoundMixSounds");
     (void)pu;
     ikemen::ssz_native::mix_sounds();
 }
 
 extern "C" void SSZ_STDCALL SoundPlaySound(PluginUtil* pu)
 {
-    //SSZ_TRACE("SoundPlaySound");
     (void)pu;
     ikemen::ssz_native::play_sound();
 }
 
 extern "C" void SSZ_STDCALL SoundStopSound(PluginUtil* pu)
 {
-    //SSZ_TRACE("SoundStopSound");
     (void)pu;
     ikemen::ssz_native::stop_sound();
 }
@@ -2244,7 +2196,6 @@ extern "C" void SSZ_STDCALL SoundStopSound(PluginUtil* pu)
 
 extern "C" void SSZ_STDCALL VideoPlay(PluginUtil* pu)
 {
-    //SSZ_TRACE("VideoPlay");
     (void)pu;
     ikemen::ssz_native::video_play();
 }
@@ -2264,14 +2215,14 @@ extern "C" void SSZ_STDCALL VideoPlay(PluginUtil* pu)
 
 extern "C" bool SSZ_STDCALL SdleventEventUpdate(PluginUtil* pu)
 {
-    //SSZ_TRACE("SdleventEventUpdate");
+    SSZ_TRACE_CAT(TRACE_SDL, "SdleventEventUpdate");
     (void)pu;
     return ikemen::ssz_native::sdlevent_event_update();
 }
 
 extern "C" bool SSZ_STDCALL SdleventEvent(PluginUtil* pu, int32_t fps)
 {
-    //SSZ_TRACE("SdleventEvent");
+    SSZ_TRACE_CAT(TRACE_SDL, "SdleventEvent");
     (void)pu;
     return ikemen::ssz_native::sdlevent_event(static_cast<int>(fps));
 }

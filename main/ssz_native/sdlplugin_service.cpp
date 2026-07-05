@@ -14,6 +14,7 @@
 // SSZ VM types needed for Reference-based render functions
 #include "sszdef.h"
 #include "arrayandref.hpp"
+#include "ssz_trace.hpp"
 
 namespace ikemen::ssz_native {
 
@@ -166,15 +167,18 @@ bool GlTexture::loadPngTexture(int w, int h, FILE* fp) {
 // =========================================================================
 
 void flip() {
+    SSZ_TRACE_CAT(TRACE_SDL, "flip");
     Flip();
 }
 
 void fill(const SdlRect& r, uint32_t c) {
+    SSZ_TRACE_CAT(TRACE_SDL, "fill");
     SDL_Rect rect = { r.x, r.y, r.w, r.h };
     Fill(c, &rect);
 }
 
 void softFill(const SdlRect& r, uint32_t c) {
+    SSZ_TRACE_CAT(TRACE_SDL, "softFill");
     SDL_Rect rect = { r.x, r.y, r.w, r.h };
     SoftFill(c, &rect);
 }
@@ -187,6 +191,7 @@ bool renderMugenZoom(const SdlRect& dr, float rcx, float rcy,
                      float xtopscl, float xbotscl, float yscl,
                      float rasterxadd, uint32_t roto, int alpha,
                      int rle, std::vector<int8_t>& pluginbuf) {
+    SSZ_TRACE_CAT(TRACE_SDL, "renderMugenZoom");
     // Create temporary Reference from pixel data (img)
     Reference imgRef;
     vectorToRef(pxl, imgRef);
@@ -236,6 +241,7 @@ bool renderMugenShadow(const SdlRect& dr, float rcx, float rcy,
                        const SdlRect& sr, float cx, float ty,
                        float xscl, float yscl, float vscl, uint32_t roto,
                        int alpha, int rle, std::vector<int8_t>& pluginbuf) {
+    SSZ_TRACE_CAT(TRACE_SDL, "renderMugenShadow");
     // Create temporary Reference from pixel data (img)
     Reference imgRef;
     vectorToRef(pxl, imgRef);
@@ -272,6 +278,7 @@ bool renderFontBatch(const std::vector<uint8_t>& atlas, float baseX, float baseY
                      int glyphH, int alpha, const SdlRect& window,
                      float xscl, float yscl, float spacing,
                      const std::vector<int>& glyphData, int count) {
+    SSZ_TRACE_CAT(TRACE_SDL, "renderFontBatch");
     if (atlas.empty() || pal.empty() || glyphData.empty()) {
         return false;
     }
@@ -291,14 +298,69 @@ bool renderFontBatch(const std::vector<uint8_t>& atlas, float baseX, float baseY
 }
 
 // =========================================================================
+// Font rendering with alignment and scaling
+// =========================================================================
+
+void draw_ttf(const std::string& fontPath, int align, const std::string& text,
+              int x, int y, float scaleX, float scaleY,
+              int r, int g, int b, int alpha) {
+	SSZ_TRACE_CAT(TRACE_SDL, "draw_ttf");
+
+	// Use same default point size as sdlplugin.cpp's DrawTTF
+	constexpr int kDefaultTTFSize = 32;
+	TTF_Font* font = reinterpret_cast<TTF_Font*>(
+		OpenFont(kDefaultTTFSize, std::wstring(fontPath.begin(), fontPath.end())));
+	if (!font) return;
+
+	SDL_Color color = {
+		static_cast<uint8_t>(r & 0xFF),
+		static_cast<uint8_t>(g & 0xFF),
+		static_cast<uint8_t>(b & 0xFF),
+		static_cast<uint8_t>(alpha & 0xFF)
+	};
+
+	// Render text to surface
+	SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+	if (!surface) {
+		CloseFont(font);
+		return;
+	}
+
+	// Apply scaling to original dimensions
+	int drawW = static_cast<int>(surface->w * scaleX);
+	int drawH = static_cast<int>(surface->h * scaleY);
+	if (drawW < 1) drawW = 1;
+	if (drawH < 1) drawH = 1;
+
+	// Apply alignment to x position
+	int drawX = x;
+	if (align == 1) {
+		// Left-aligned
+		drawX = x - drawW / 2;
+	} else if (align == -1) {
+		// Right-aligned
+		drawX = x - drawW;
+	}
+	// align == 0 → center (default), x unchanged
+
+	SDL_Rect dest = { drawX, y, drawW, drawH };
+	BlitSurface(&dest, surface);
+
+	SDL_FreeSurface(surface);
+	CloseFont(font);
+}
+
+// =========================================================================
 // Module-level API - Input
 // =========================================================================
 
 char16_t getLastChar() {
+    SSZ_TRACE_CAT(TRACE_SDL, "getLastChar");
     return GetLastChar();
 }
 
 std::vector<uint8_t> decodePNG8(int w, int h, FILE* file) {
+    SSZ_TRACE_CAT(TRACE_SDL, "decodePNG8");
     std::vector<uint8_t> result;
     if (!file) return result;
     
@@ -307,10 +369,12 @@ std::vector<uint8_t> decodePNG8(int w, int h, FILE* file) {
 }
 
 bool keyState(SDLKey key) {
+    SSZ_TRACE_CAT(TRACE_SDL, "keyState");
     return KeyState(static_cast<int32_t>(key));
 }
 
 bool joystickButtonState(int32_t joy, int32_t btn) {
+    SSZ_TRACE_CAT(TRACE_SDL, "joystickButtonState");
     return JoystickButtonState(btn, joy);
 }
 
@@ -326,6 +390,7 @@ int32_t pollInputBitmask(
     int x2, int y2, int z2,
     int q2, int w2, int e2, int s2,
     int sec) {
+    SSZ_TRACE_CAT(TRACE_SDL, "pollInputBitmask");
     return PollInputBitmask(
         jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s,
         jn2, u2, d2, l2, r2, a2, b2, c2, x2, y2, z2, q2, w2, e2, s2,
@@ -338,6 +403,7 @@ int32_t pollInputBitmask(
 // =========================================================================
 
 bool setSndBuf(const std::vector<int>& buf) {
+    SSZ_TRACE_CAT(TRACE_SDL, "setSndBuf");
     if (static_cast<intptr_t>(buf.size()) != SNDBUFLEN) {
         return false;
     }
@@ -345,30 +411,36 @@ bool setSndBuf(const std::vector<int>& buf) {
 }
 
 int playVideo(int audiotrack, int volume, const std::string& captures, const std::string& fn) {
+    SSZ_TRACE_CAT(TRACE_SDL, "playVideo");
     std::wstring wcaptures(captures.begin(), captures.end());
     std::wstring wfn(fn.begin(), fn.end());
     return PlayVideo(wfn, wcaptures, volume, audiotrack);
 }
 
 bool playBGM(const std::string& pldir, const std::string& fn) {
+    SSZ_TRACE_CAT(TRACE_SDL, "playBGM");
     std::wstring wpldir(pldir.begin(), pldir.end());
     std::wstring wfn(fn.begin(), fn.end());
     return PlayBGM(wfn, wpldir);
 }
 
 void pauseBGM(bool pause) {
+    SSZ_TRACE_CAT(TRACE_SDL, "pauseBGM");
     PauseBGM(pause);
 }
 
 bool sendOpenBGM(int rate, int channels) {
+    SSZ_TRACE_CAT(TRACE_SDL, "sendOpenBGM");
     return SendOpenBGM(channels, rate);
 }
 
 void sendCloseBGM() {
+    SSZ_TRACE_CAT(TRACE_SDL, "sendCloseBGM");
     SendCloseBGM();
 }
 
 intptr_t sendWriteBGM(const std::vector<int16_t>& buffer) {
+    SSZ_TRACE_CAT(TRACE_SDL, "sendWriteBGM");
     // Deprecated: OGG streaming is now handled by PlayBGM via SDL_mixer.
     // The native SendWriteBGM() ignores its parameter — the buffer is discarded.
     // This wrapper exists for ABI compatibility only.
@@ -377,18 +449,22 @@ intptr_t sendWriteBGM(const std::vector<int16_t>& buffer) {
 }
 
 void fadeInBGM(int time) {
+    SSZ_TRACE_CAT(TRACE_SDL, "fadeInBGM");
     FadeInBGM(time);
 }
 
 void fadeOutBGM(int time) {
+    SSZ_TRACE_CAT(TRACE_SDL, "fadeOutBGM");
     FadeOutBGM(time);
 }
 
 void setVolume(float gvol, float wvol, float bvol) {
+    SSZ_TRACE_CAT(TRACE_SDL, "setVolume");
     SetVolume(bvol, wvol, gvol);
 }
 
 void setOpacity(float wo) {
+    SSZ_TRACE_CAT(TRACE_SDL, "setOpacity");
     SetOpacity(wo);
 }
 
@@ -397,6 +473,7 @@ void setOpacity(float wo) {
 // =========================================================================
 
 bool init(const std::string& t, int w, int h, int renderer, bool mugen) {
+    SSZ_TRACE_CAT(TRACE_SDL, "init");
     std::wstring wt(t.begin(), t.end());
     
     std::wstring rendererStr = L"SDL2";
@@ -408,39 +485,48 @@ bool init(const std::string& t, int w, int h, int renderer, bool mugen) {
 }
 
 int getWidth() {
+    SSZ_TRACE_CAT(TRACE_SDL, "getWidth");
     return GetWidth();
 }
 
 int getHeight() {
+    SSZ_TRACE_CAT(TRACE_SDL, "getHeight");
     return GetHeight();
 }
 
 void windowSize(int w, int h) {
+    SSZ_TRACE_CAT(TRACE_SDL, "windowSize");
     WindowSize(h, w);
 }
 
 void fullScreenMode(bool fullReal) {
+    SSZ_TRACE_CAT(TRACE_SDL, "fullScreenMode");
     FullScreenExclusive(fullReal);
 }
 
 bool fullScreen(bool full) {
+    SSZ_TRACE_CAT(TRACE_SDL, "fullScreen");
     return FullScreen(full);
 }
 
 void setWindowType(int state) {
+    SSZ_TRACE_CAT(TRACE_SDL, "setWindowType");
     WindowType(state);
 }
 
 void keepAspectRatio(bool aspect) {
+    SSZ_TRACE_CAT(TRACE_SDL, "keepAspectRatio");
     AspectRatio(aspect);
 }
 
 void takeScreenShot(const std::string& dir) {
+    SSZ_TRACE_CAT(TRACE_SDL, "takeScreenShot");
     std::wstring wdir(dir.begin(), dir.end());
     TakeScreenShot(wdir);
 }
 
 void showCursor(bool show) {
+    SSZ_TRACE_CAT(TRACE_SDL, "showCursor");
     CursorShow(show);
 }
 
@@ -449,18 +535,22 @@ void showCursor(bool show) {
 // =========================================================================
 
 bool bindGlContext() {
+    SSZ_TRACE_CAT(TRACE_SDL, "bindGlContext");
     return BindGlContext();
 }
 
 bool unbindGlContext() {
+    SSZ_TRACE_CAT(TRACE_SDL, "unbindGlContext");
     return UnbindGlContext();
 }
 
 void enablePerfMonitor(bool enable) {
+    SSZ_TRACE_CAT(TRACE_SDL, "enablePerfMonitor");
     EnablePerfMonitor(enable);
 }
 
 void getRendererInfo() {
+    SSZ_TRACE_CAT(TRACE_SDL, "getRendererInfo");
     GetRendererInfo();
 }
 

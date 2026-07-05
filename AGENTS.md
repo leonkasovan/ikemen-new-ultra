@@ -90,3 +90,69 @@ Get-Content -Path "install\ikemen-debug.log" | Select-String "PATTERN"  # grep
 - C++ changes require rebuild + `make install`
 - `2>&1` merges stderr into stdout so all output goes to the log file
 - `-Encoding ascii` ensures the em-dash in log messages doesn't corrupt the file
+
+---
+
+## Native SSZ Conversion
+
+The project is in the process of converting SSZ scripts into native C++ code (`main/ssz_native/`). See [docs/SSZ_CONVERSION_GUIDE.md](./docs/SSZ_CONVERSION_GUIDE.md) for the full methodology.
+
+### Feature flags
+
+Each converted module has a `make` flag to disable it and fall back to the original SSZ script:
+
+```bash
+make IKEMEN_NATIVE_FILE_LIB=0 IKEMEN_NATIVE_SDLPLUGIN_LIB=0 CONFIG=Debug
+```
+
+Run `make native_manifest CONFIG=Debug` to list all module states.
+
+### Trace system (categorized)
+
+Build with trace enabled to log every SSZ plugin ABI call. Categories filter out noise:
+
+```powershell
+# Trace only SDL operations (render, input, display, BGM)
+make IKEMEN_ENABLE_PLUGIN_TRACE=1 IKEMEN_TRACE_MASK=64 CONFIG=Debug -j8
+.\build\Debug\ikemen-debug.exe 2>&1 | findstr "[TRACE]" > trace_sdl.log
+```
+
+| Mask | Category | What it traces |
+|------|----------|----------------|
+| 1    | FILE     | File I/O (Read, Write, Seek…) |
+| 2    | NET      | Socket (Connect, Send, Recv…) |
+| 4    | LUA      | Lua bridge (NewState, Pcall…) |
+| 8    | OGG      | OGG Vorbis audio |
+| 16   | UTIL     | Regex, shell, alert, clipboard… |
+| 32   | MATH     | Math functions (Sin, Cos…) |
+| 64   | SDL      | **SDL operations** (DrawTTF, Fill, Flip, PollEvent…) |
+| 128  | SYS      | Game state (Common, System, Loader…) |
+| 255  | ALL      | Everything (default) |
+
+### Current conversion status
+
+| Metric | Value |
+|--------|-------|
+| SSZ modules | 45 |
+| Native service files | 84 (42 .hpp + 42 .cpp) |
+| Static registrations wired | 35/35 |
+| Stub-only modules remaining | 10 |
+| Symbols scaffolded | 2,069 (100%) |
+
+Full status: [TODO_SSZ_CONVERSION.md](./TODO_SSZ_CONVERSION.md) · [native_ssz_comparison.md](./docs/native_ssz_comparison.md) · [native_test_results.txt](./docs/native_test_results.txt)
+
+### Tests
+
+Run the native SSZ test suite from the project root:
+```bash
+make CONFIG=Debug test
+```
+
+To run from the real runtime environment (uses actual chars, stages, and .snd files in `install/`):
+```bash
+make CONFIG=Debug test_install
+```
+
+This kills any stale test_file.exe process, copies the binary to install/, runs the tests, and counts PASS assertions. No files are deleted from `install/`.
+
+The test suite covers 45+ SSZ modules with 379+ assertions across 55 test functions. All tests pass with 0 failures as of 2026-07-05.

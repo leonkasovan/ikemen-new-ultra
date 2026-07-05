@@ -5,37 +5,11 @@
 // Statically registers every function exported by mesdialog.cpp
 // so that the SSZ runtime resolves them without loading mesdialog.dll.
 //
-// HOW TO USE
-// ----------
-// 1.  #include this header in the translation unit that owns main()
-//     (or wherever the SSZ compiler is initialised).
-//
-// 2.  Call  mesdialog_static_register()  BEFORE the SSZ compiler runs.
-//
-//     #include "mesdialog_static.hpp"
-//
-//     int main() {
-//         if (!mesdialog_static_register()) {
-//             printf("Failed to register mesdialog functions.\n");
-//             return 1;
-//         }
-//         // ... start SSZ compiler / runtime ...
-//     }
-//
-// 3.  The SSZ scripts continue to use:
-//         plugin void Close(:index:) = "dll/mesdialog.dll";
-//     but NO mesdialog.dll file is needed — the function pointer is
-//     resolved from the static registry.
-//
-// PREREQUISITES
-// -------------
-//   - Link mesdialog.cpp (and its dependencies) into the same executable.
-//   - #include "static_plugin_registry.hpp" (pulled in automatically).
-//
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_MESDIALOG_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
@@ -98,6 +72,4 @@ inline bool mesdialog_static_register()
 		sizeof(mesdialog_mapping) / sizeof(mesdialog_mapping[0]));
 }
 
-#else
-inline bool mesdialog_static_register() { return true; }
-#endif
+

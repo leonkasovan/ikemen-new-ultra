@@ -5,22 +5,14 @@
 // Statically registers every function exported by sdlplugin.cpp
 // so that the SSZ runtime resolves them without loading sdlplugin.dll.
 //
+// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
+//
 // HOW TO USE
 // ----------
 // 1.  #include this header in the translation unit that owns main()
 //     (or wherever the SSZ compiler is initialised).
 //
 // 2.  Call  sdlplugin_static_register()  BEFORE the SSZ compiler runs.
-//
-//     #include "sdlplugin_static.hpp"
-//
-//     int main() {
-//         if (!sdlplugin_static_register()) {
-//             printf("Failed to register sdlplugin functions.\n");
-//             return 1;
-//         }
-//         // ... start SSZ compiler / runtime ...
-//     }
 //
 // 3.  The SSZ scripts continue to use:
 //         plugin void Flip() = "dll/sdlplugin.dll";
@@ -35,7 +27,7 @@
 
 #include "static_plugin_registry.hpp"
 
-#if IKEMEN_NATIVE_SDLPLUGIN_LIB
+// Always register — bridge functions are always compiled in bridge.cpp
 
 #include "SDL.h"
 #include "SDL_ttf.h"
@@ -242,6 +234,4 @@ inline bool sdlplugin_static_register()
 		sizeof(sdlplugin_mapping) / sizeof(sdlplugin_mapping[0]));
 }
 
-#else
-inline bool sdlplugin_static_register() { return true; }
-#endif
+

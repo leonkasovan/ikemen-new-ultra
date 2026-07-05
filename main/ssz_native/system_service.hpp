@@ -193,9 +193,10 @@ inline void SelectData::selectStage(int no) { selectedStageNo = no; }
 inline std::string SelectData::getStageName(int i) const {
 	int n = static_cast<int>(stagelist.size());
 	if (n == 0) return {};
-	i %= n + 1;
-	if (i < 0) i += n + 1;
 	if (i == 0) return "RANDOM";
+	// Wrap within real stages [1..n] for out-of-range indices
+	if (i < 0) i = -i;
+	if (i > n) i = ((i - 1) % n) + 1;
 	return stagelist[i - 1].name;
 }
 inline bool SelectData::addChar(const std::string& defPath) {

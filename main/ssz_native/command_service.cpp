@@ -4,6 +4,10 @@
 // CommandList management, and module-level state.
 
 #include "command_service.hpp"
+#include "common_service.hpp"
+#include "ssz_native/plugin_native_api.hpp"
+#include "sdlevent_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -379,9 +383,48 @@ void CommandListData::copyList(const CommandListData& other) {
 }
 
 void CommandListData::input(int inputBits, int facing) {
-	// Forward raw input bits to each command's buffer
-	// In SSZ this updates the global buffer via KeyInfo
-	(void)inputBits; (void)facing;
+	SSZ_TRACE_CAT(TRACE_SYS, "CommandListData::input");
+
+	// Decode the input bitmask into individual button states, filter
+	// each through command_mod_key_state(), and feed the result into
+	// the buffer. This matches the SSZ CommandList::input() pattern
+	// where each direction/button calls modKeyState.
+	//
+	// Bitmask format (matching pollInputBitmask output):
+	//   bits 0-3:  directions (U=0x1, D=0x2, L=0x4, R=0x8)
+	//   bits 4-13: buttons   (A=0x10, B=0x20, C=0x40, X=0x80, Y=0x100,
+	//                          Z=0x200, Q=0x400, W=0x800, E=0x1000, S=0x2000)
+
+	int filtered = inputBits;
+
+	// NOTE: The bit index is used as a proxy for the config scancode (key param).
+	// This means modKeyState can only block debug keys whose scancode happens
+	// to fall within the bitmask range (0-13). When the config system is wired,
+	// replace this with the actual cfg.in[*].{l,r,u,d,a,b,...} scancode values.
+
+	// Check each direction bit with modKeyState (using jn=-1 for keyboard)
+	for (int bit = 0; bit < 4; ++bit) {
+		int mask = 1 << bit;
+		if (inputBits & mask) {
+			// modKeyState returns true to BLOCK the key.
+			// Here we use the bit index as a proxy scancode since
+			// the pre-computed bitmask doesn't carry jn/key config.
+			if (command_mod_key_state(true, -1, bit))
+				filtered &= ~mask;
+		}
+	}
+
+	// Check each button bit with modKeyState
+	for (int bit = 4; bit < 14; ++bit) {
+		int mask = 1 << bit;
+		if (inputBits & mask) {
+			if (command_mod_key_state(true, -1, bit))
+				filtered &= ~mask;
+		}
+	}
+
+	// Feed filtered input into player 1's buffer
+	g_cmd_state.buf[0].inputStat(filtered, facing);
 }
 
 void CommandListData::step(int facing, bool ai, bool hitpause, int buftime) {
@@ -426,18 +469,130 @@ void command_init() {
 }
 
 bool command_mod_key_state(bool keyState, int jn, int key) {
-	// Deferred — depends on SDL event processing
-	(void)keyState; (void)jn; (void)key;
-	return false;
+	SSZ_TRACE_CAT(TRACE_SYS, "command_mod_key_state");
+	//
+	// Implements the SSZ command.ssz modKeyState() logic:
+	//   public bool modKeyState(bool keyState, int jn, int key)
+	//   {
+	//     bool ctrl = JoystickButtonState(-1, 224) || JoystickButtonState(-1, 228);
+	//     branch{
+	//     cond !keyState: ret true;
+	//     else:
+	//       branch{
+	//       cond !str.equ(gameMode,"practice") && gameState == 1: ret false;
+	//       cond jn > -1:                                    ret false;
+	//       cond key != 6 && key != 15 && ...:                ret false;
+	//       cond !(ctrl && debugCombo):                       ret false;
+	//       else:                                             ret true;
+	//       }
+	//     }
+	//     ret true;
+	//   }
+	//
+	// Returns true to BLOCK the key from being registered.
+	//
+
+	// If the key is not pressed, nothing to block.
+	if (!keyState)
+		return true;
+
+	CommonData& com = common_get_state();
+
+	// During gameplay (gameState == 1, non-practice), let keys through.
+	if (com.gameMode != "practice" && com.gameState == 1)
+		return false;
+
+	// Joystick inputs always pass through.
+	if (jn > -1)
+		return false;
+
+	// Only block specific debug-function keys (scancodes 6, 15, 19, 21, 22, 25).
+	if (key != 6 && key != 15 && key != 19 && key != 21 && key != 22 && key != 25)
+		return false;
+
+	// Check ctrl + debug button combo (joystick buttons 224/228 = ctrl).
+	bool ctrl = JoystickButtonState(-1, 224) || JoystickButtonState(-1, 228);
+	bool debugCombo =
+		((JoystickButtonState(-1, 6) || JoystickButtonState(-1, 15) ||
+		  JoystickButtonState(-1, 19) || JoystickButtonState(-1, 21) ||
+		  JoystickButtonState(-1, 22)) && com.gameState == 1)
+		|| (JoystickButtonState(-1, 25) && com.gameState == 0);
+
+	if (!(ctrl && debugCombo))
+		return false;
+
+	// Ctrl + appropriate debug combo held — block the key.
+	return true;
 }
 
 void command_reset_read_keymap() {
-	// Deferred — depends on config/key mapping
+	SSZ_TRACE_CAT(TRACE_SYS, "command_reset_read_keymap");
+	// In the SSZ, resetReadKeymap() sets module-level Key variables:
+	//   .a = Key::a; .b = Key::b; ... .na = Key::na; ...
+	// These are used by command.ssz's readCmd() parser to resolve
+	// key names to enum values. In the native C++ implementation,
+	// readCmd() uses compile-time enum constants directly (Key::a, etc.),
+	// so no runtime mapping is needed. This function is a no-op.
 }
 
 bool command_update() {
-	// SSZ: main update loop — reads input, updates buffers, syncs netplay
-	// For now, just return true
+	SSZ_TRACE_CAT(TRACE_SYS, "command_update");
+	//
+	// Main update loop: polls input state from sdlevent keyboard booleans
+	// and joystick state, applies command_mod_key_state() filtering for
+	// debug keys, and feeds the filtered input into each player's buffer.
+	//
+	// In the SSZ, this is split across module-level update() (which calls
+	// .se.event(60) for frame timing) and CommandList::input() (which does
+	// the per-button polling and modKeyState filtering). This C++ version
+	// combines both into a single function.
+	//
+
+	SdleventState& sdle = sdlevent_get_state();
+
+	// Process input for each player (P1, P2)
+	for (int pn = 0; pn < 2; ++pn) {
+		int bits = 0;
+
+		// ── Poll keyboard directions from sdlevent state ──
+		if (sdle.upKey)    bits |= 0x01;  // bit 0 = U
+		if (sdle.downKey)  bits |= 0x02;  // bit 1 = D
+		if (sdle.leftKey)  bits |= 0x04;  // bit 2 = L
+		if (sdle.rightKey) bits |= 0x08;  // bit 3 = R
+
+		// ── Poll keyboard buttons from sdlevent state ──
+		// Default M.U.G.E.N key bindings: a/b/c/x/y/z = A/B/C/X/Y/Z
+		if (sdle.zKey) bits |= 0x0010;  // bit 4  = A (attack)
+		if (sdle.xKey) bits |= 0x0020;  // bit 5  = B
+		if (sdle.cKey) bits |= 0x0040;  // bit 6  = C
+		if (sdle.aKey) bits |= 0x0080;  // bit 7  = X
+		if (sdle.sKey) bits |= 0x0100;  // bit 8  = Y
+		if (sdle.dKey) bits |= 0x0200;  // bit 9  = Z
+		if (sdle.qKey) bits |= 0x0400;  // bit 10 = Q
+		if (sdle.wKey) bits |= 0x0800;  // bit 11 = W
+		if (sdle.eKey) bits |= 0x1000;  // bit 12 = E
+		if (sdle.returnKey) bits |= 0x2000;  // bit 13 = S (start) — ENTER in default M.U.G.E.N bindings
+
+		// ── Filter through modKeyState per button ──
+		int filtered = bits;
+		for (int bit = 0; bit < 14; ++bit) {
+			int mask = 1 << bit;
+			if (bits & mask) {
+				// Use jn = -1 (keyboard) as default. When the config
+				// system is wired, this should use the actual joystick
+				// number and scancode from cfg.in[pn].
+				if (command_mod_key_state(true, -1, bit))
+					filtered &= ~mask;
+			}
+		}
+
+		// ── Feed into this player's buffer ──
+		g_cmd_state.buf[pn].inputStat(filtered, 1);
+
+		// ── Update KeyInfo for start/any button checks ──
+		g_cmd_state.keyInfo[pn].localIn = filtered;
+	}
+
 	return true;
 }
 
