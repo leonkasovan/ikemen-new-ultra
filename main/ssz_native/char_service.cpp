@@ -193,11 +193,32 @@ void ProjectileData::clear() { *this = ProjectileData{}; }
 void ProjectileData::setX(float x_) { x = x_; }
 void ProjectileData::setY(float y_) { y = y_; }
 void ProjectileData::remvel() { xvel = 0; yvel = 0; }
-void ProjectileData::update(int playerNo) { (void)playerNo; }
-void ProjectileData::hitCheck(ProjectileData& pr) { (void)pr; }
-void ProjectileData::projClsn(int playerNo) { (void)playerNo; }
-void ProjectileData::tick(int playerNo) { (void)playerNo; }
-void ProjectileData::anime(bool oVer, int playerNo) { (void)oVer; (void)playerNo; }
+void ProjectileData::update(int playerNo) {
+	// Update position based on velocity (frame-step physics)
+	(void)playerNo;
+	x += xvel;
+	y += yvel;
+}
+void ProjectileData::hitCheck(ProjectileData& pr) {
+	// projectile-vs-projectile collision detection
+	// Deferred — needs full hitdef/hitbox system
+	(void)pr;
+}
+void ProjectileData::projClsn(int playerNo) {
+	// projectile-vs-character hitbox collision
+	// Deferred — needs full ClsnHanteiData system
+	(void)playerNo;
+}
+void ProjectileData::tick(int playerNo) {
+	// Decrement projectile lifetime counters
+	// Deferred — needs hitCount/hitCountMax, owner state reference
+	(void)playerNo;
+}
+void ProjectileData::anime(bool oVer, int playerNo) {
+	// Advance projectile animation frame
+	// Deferred — needs anim->updateSprite() with projectile-specific logic
+	(void)oVer; (void)playerNo;
+}
 
 // =========================================================================
 // CharData

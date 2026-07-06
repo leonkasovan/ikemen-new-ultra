@@ -2240,36 +2240,36 @@ static void test_debug_script_service()
     TEST(L"DebugScriptState noHUDDisplay false", ds.noHUDDisplay == false);
     TEST(L"DebugScriptState L null", ds.L == nullptr);
 
-    // Stub functions compile and don't crash
+    // Lua callback functions compile and don't crash
     int re = 0;
-    debug_puts(nullptr, re);
-    debug_ssz_reload(nullptr, re);
-    debug_set_life(nullptr, re);
-    debug_set_life_max(nullptr, re);
-    debug_set_power(nullptr, re);
-    debug_set_attack(nullptr, re);
-    debug_set_defence(nullptr, re);
-    debug_self_state(nullptr, re);
-    debug_add_hotkey(nullptr, re);
-    debug_toggle_clsn_draw(nullptr, re);
-    debug_toggle_debug_draw(nullptr, re);
-    debug_toggle_status_draw(nullptr, re);
-    debug_toggle_post_match(nullptr, re);
-    debug_toggle_pause(nullptr, re);
-    debug_toggle_pause_menu(nullptr, re);
-    debug_step(nullptr, re);
-    debug_toggle_record(nullptr, re);
-    debug_toggle_playback(nullptr, re);
-    debug_toggle_record_end(nullptr, re);
-    debug_round_reset(nullptr, re);
-    debug_reload(nullptr, re);
-    debug_set_accel(nullptr, re);
-    debug_set_ai_level(nullptr, re);
-    debug_set_time(nullptr, re);
-    debug_clear(nullptr, re);
+    lua_debug_puts(nullptr, re);
+    lua_debug_ssz_reload(nullptr, re);
+    lua_debug_set_life(nullptr, re);
+    lua_debug_set_life_max(nullptr, re);
+    lua_debug_set_power(nullptr, re);
+    lua_debug_set_attack(nullptr, re);
+    lua_debug_set_defence(nullptr, re);
+    lua_debug_self_state(nullptr, re);
+    lua_debug_add_hotkey(nullptr, re);
+    lua_debug_toggle_clsn_draw(nullptr, re);
+    lua_debug_toggle_debug_draw(nullptr, re);
+    lua_debug_toggle_status_draw(nullptr, re);
+    lua_debug_toggle_post_match(nullptr, re);
+    lua_debug_toggle_pause(nullptr, re);
+    lua_debug_toggle_pause_menu(nullptr, re);
+    lua_debug_step(nullptr, re);
+    lua_debug_toggle_record(nullptr, re);
+    lua_debug_toggle_playback(nullptr, re);
+    lua_debug_toggle_record_end(nullptr, re);
+    lua_debug_round_reset(nullptr, re);
+    lua_debug_reload(nullptr, re);
+    lua_debug_set_accel(nullptr, re);
+    lua_debug_set_ai_level(nullptr, re);
+    lua_debug_set_time(nullptr, re);
+    lua_debug_clear(nullptr, re);
     TEST(L"All 25 debug callbacks no-crash", true);
 
-    // File loading stubs
+    // File loading functions
     TEST(L"debug_load_file empty", debug_load_file("test.lua").empty());
     TEST(L"debug_run_file empty", debug_run_file("test.lua").empty());
 
