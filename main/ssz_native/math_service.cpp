@@ -1,4 +1,5 @@
 #include "math_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -23,6 +24,7 @@ int32_t& seed() {
 }
 
 int32_t random() {
+    SSZ_TRACE_CAT(TRACE_MATH, "Random");
     int32_t w = g_seed / 127773;
     g_seed = (g_seed - w * 127773) * 16807 - w * 2836;
     if (g_seed <= 0) {
@@ -32,10 +34,12 @@ int32_t random() {
 }
 
 int32_t rand(int32_t min, int32_t max) {
+    SSZ_TRACE_CAT(TRACE_MATH, "Rand");
     return min + random() / (RANDMAX / (max - min + 1) + 1);
 }
 
 int32_t randI(int32_t x, int32_t y) {
+    SSZ_TRACE_CAT(TRACE_MATH, "RandI");
     // Cast to int64_t before subtraction to avoid signed integer overflow UB
     // when the range exceeds INT32_MAX (~2.1 billion).
     int64_t x64 = x;
@@ -57,6 +61,7 @@ int32_t randI(int32_t x, int32_t y) {
 // SSZ usage (small ranges like frame counts or character indices) this is not a
 // problem. If distribution quality for very wide ranges matters, use double.
 float randF(float x, float y) {
+    SSZ_TRACE_CAT(TRACE_MATH, "RandF");
     double r = static_cast<double>(random()) * (static_cast<double>(y) - static_cast<double>(x))
                / static_cast<double>(RANDMAX);
     return static_cast<float>(x + r);

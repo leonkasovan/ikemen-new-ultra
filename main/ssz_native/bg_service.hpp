@@ -190,4 +190,7 @@ struct BgState {
 	std::vector<BgActionData> actions;
 };
 
+/// Access the module-level BgState (background layers, actions, timeline).
+BgState& bg_get_state();
+
 } // namespace ikemen::ssz_native

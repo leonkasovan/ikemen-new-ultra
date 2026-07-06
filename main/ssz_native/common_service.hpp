@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,7 @@ struct CameraStageData {
 	float drawOffsetY{};
 	int zoffset{};
 	float ztopscale{1.0f};
+	float xscale{1.0f}, yscale{1.0f};  // Stage horizontal/vertical scale factors
 };
 
 // ── Camera ──
@@ -46,7 +49,58 @@ struct CameraData {
 	float zoomMin{5.0f / 6.0f};
 	float zoomMax{15.0f / 14.0f};
 	float zoomSpeed{12.0f};
+
+	// Runtime camera state (set during fight loop)
+	float x{}, y{};       // Current camera position
+	float scale{1.0f};     // Current zoom scale
+
+	// Computed camera state (set by cam_init())
+	float boundL{}, boundR{}, boundH{};
+	float halfWidth{};
+	float minScale{1.0f};
+	float screenZoff{};
+	float zoff{};
+	float xOffset{}, yOffset{};
+	float bgaXOffset{}, bgaYOffset{};  // Stage background action offsets (set each frame by bg action)
+	float screenX{}, screenY{};
+	float zoomdelay{};
+	float xMin{}, xMax{};
 };
+
+// ── Camera free functions (match common.ssz camera methods) ──
+/// Initialize camera from stage data. Must be called before scaleBound/xBound/yBound.
+// Forward declaration is needed because CommonData is defined after CameraData
+// but cam_init takes a const CommonData& parameter.
+struct CommonData;
+void cam_init(CameraData& cam, const CommonData& cd);
+
+/// Clamp scale to zoomMin/zoomMax range (returns 1.0 if zoom disabled).
+/// SSZ: cam.scaleBound(scl)
+float cam_scale_bound(const CameraData& cam, float scl);
+
+/// Clamp x position within stage horizontal bounds at given scale.
+/// SSZ: cam.xBound(scl, x)
+float cam_x_bound(const CameraData& cam, float scl, float x);
+
+/// Clamp y position within stage vertical bounds at given scale.
+/// SSZ: cam.yBound(scl, y) where GameHeight is accessed from common scope.
+float cam_y_bound(const CameraData& cam, float scl, float y, float gameHeight);
+
+/// Return base scale from stage ztopscale.
+/// SSZ: cam.baseScale()
+float cam_base_scale(const CameraData& cam);
+
+/// Update camera runtime state (scale, zoff, screenX, screenY, position).
+/// SSZ: cam.update(scl, x, y) — called after round transitions and during
+/// the fight loop to sync camera computed fields with current position/scale.
+/// xOffset/yOffset depend on stage BGA data (stg.bga.xoffset/yoffset) which
+/// is not yet wired; they are stubbed to 0.0f.
+void cam_update(CameraData& cam, const CommonData& cd, float scl, float x, float y);
+
+// Helper: compute camera ground level from stage zoffset
+inline float camera_ground_level(const CameraData& cam) {
+	return static_cast<float>(cam.stg.zoffset);
+}
 
 // ── Layout ──
 struct LayoutData {
@@ -184,7 +238,7 @@ struct CommonData {
 	// Screen
 	float screenleft{}, screenright{};
 	float xmin{}, xmax{};
-	float drawscale{};
+	float drawscale{NAN}; // NaN = not set (SSZ: drawscale = 0.0/0.0)
 	float zoomposx{}, zoomposy{};
 	float turbo{};
 	int gametime{}, time{}, intro{20};
@@ -198,6 +252,7 @@ struct CommonData {
 	int win{-1};
 	std::string debugScript;
 	bool forceOver{};
+	bool timeover{};  // Set true when round ends by timer expiration (lifebar displays "Time")
 	int brightness{};
 
 	// Utility
@@ -230,6 +285,11 @@ std::string common_read_file_name(const std::string& f, bool unicode);
 std::string common_load_file(const std::string& deffile, std::string& file,
 	void* load_callback = nullptr);
 
+/// Advance the round timer by one tick: decrement roundTime when
+/// countdownTimer >= 0, and update timerFormatted to display string.
+/// Called once per game tick during the fight loop.
+void common_timer_step(CommonData& cd);
+
 // No-arg convenience wrappers for bridge/SSZ ABI.
 // These operate on an internal static CommonData instance.
 void common_flag_init();
@@ -241,6 +301,16 @@ float common_tick_interpola();
 bool common_add_frame_time(float t);
 void common_reset_frame_time();
 bool common_match_over();
+
+// Screen fill wrappers (delegate to sdlplugin)
+// SSZ: .com.screenFill(color) — fill entire screen with solid color
+void common_screen_fill(uint32_t color);
+
+// SSZ: .com.rectFill(rect, color, alpha) — fill a rectangle with color and alpha
+// rect: destination rectangle (SdlRect-style: x, y, w, h)
+// color: RGB packed as 0x00RRGGBB
+// alpha: 0-255 (256 in SSZ maps to 255 here)
+void common_rect_fill(const class SdlRect& rect, uint32_t color, int alpha);
 
 // Accessor for the internal static CommonData instance.
 // Used by other native services (e.g. loader) that need to read

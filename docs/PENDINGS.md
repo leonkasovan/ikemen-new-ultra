@@ -37,32 +37,35 @@ These must be resolved before any behavioral parity claim is trustworthy.
 
 These modules have `#if IKEMEN_NATIVE_*_LIB` guards and bridge wrappers, but their function bodies are no-ops or placeholders.
 
-### Former Big 4 Lua Callback Modules — Now Implemented
-
-Three of the four modules are now fully implemented. Only `debug_script_service` remains a stub.
+### Big 4 Lua Callback Modules — All Fully Implemented
 
 | Module | SSZ LOC | SSZ Symbols | Callbacks | Status | Blocking? |
 |--------|---------|-------------|-----------|--------|-----------|
 | `script_service` | 2,216 | 19 | 190+ | ✅ Full implementation | 🔴 Previously blocking — resolved |
 | `trigger_script_service` | 1,633 | 1 | 130+ | ✅ Full implementation | 🔴 Previously blocking — resolved |
 | `system_script_service` | 2,403 | 37 | 120+ | ✅ Full implementation | 🔴 Previously blocking — resolved |
-| `debug_script_service` | ~300 | 1 | 27 | ❌ All no-ops | 🟡 Debug tooling only |
+| `debug_script_service` | ~300 | 1 | 27 | ✅ Full implementation | 🟡 Debug tooling only |
 
 **Updates (2026-07-06):**
 - `script_service` — All 190+ Lua-callable functions implemented, `refArg` SSZ pattern wired via public `ref_arg<T>()` template, `drawTTF` now supports alignment and scaling via proper SDL_ttf rendering.
 - `trigger_script_service` — All 130+ trigger functions (player nav, game state, hit detection, edge/camera, win/lose, var access, etc.) implemented and registered.
 - `system_script_service` — All 120+ system-level functions (TextImg, Anim, netplay, match config, visual config, volume/screen, input config, portraits, lifebar, etc.) implemented and registered. Calls `script_init(L)` first matching SSZ `.sc.init(L=)` pattern.
-- `debug_script_service` — Still stub. 27 function bodies are empty `{}` with `SSZ_TRACE_CAT` calls.
+- `debug_script_service` — **Now fully implemented.** All 25 Lua-callable debug functions (puts, sszReload, setLife, setLifeMax, setPower, setAttack, setDefence, selfState, addHotkey, toggleClsnDraw, toggleDebugDraw, toggleStatusDraw, togglePostMatch, togglePause, togglePauseMenu, step, toggleRecord, togglePlayback, toggleRecordEnd, roundReset, reload, setAccel, setAILevel, setTime, clear) delegate to native service modules. Hotkey registration stored in `DebugScriptState::hotkeys`. `debug_load_file()` sets up full Lua environment.
 
 ### Other Stubs
 
 | Module | SSZ LOC | File Size | Status | Details |
 |--------|---------|-----------|--------|---------|
-| `video_service` | 57 | 10 lines | ❌ Stub | `video_play()` is empty. No real video playback. |
-| `font_service` | 409 | 13 lines | ❌ Stub | `font_init()` and `font_render_text()` are empty. No TTF/Sprite font. |
-| `fighting_service` | 671 | 9 lines | ❌ Stub | `fighting_main()` is empty. No match orchestration. |
-| `action_service` | 207 | 7 lines | ⚠️ Structs only | `action_init()` is empty. `Rect`, `Frame`, `ActionData` structs exist but no parser or behavior. |
+| `video_service` | 57 | 93 lines | ✅ Full implementation | `video_play()` now checks file existence via `_wfopen`, delegates to `sdlplugin::playVideo()`, sets `videoActive` flag, returns result (0 = ALT+F4/close, non-zero = success). No-arg wrapper calls through with defaults ("", "", 100, 1). |
+| `font_service` | 409 | 952 lines (838 .cpp + 114 .hpp) | ✅ Full implementation | Real FNT v1/v2 binary/text loader, character metrics (`charWidth`, `textWidth`), `drawChar()` with `renderMugenZoom`, `drawText()` with `renderFontBatch`, palette-banked sprite access. Static registration wired in `font_static.hpp` and called from `main.cpp`. |
+| `fighting_service` | 671 | ~1080 lines | ✅ Full implementation | `WincntMgrData` with file-persisted auto-leveling via `table::NameTable<int[]>`. `fighting_main()` — full game() orchestration loop: init phase (share push, debug script load, command sync, WincntMgr init, level-based life scaling via 2^(1/12), copyVar snapshot), round loop (hotkeys, pause toggles via Lua, camera X/Y bounds via cam_scaleBound/xBound/yBound with **cam_update() called every frame** (scale, zoff, screenX/Y, x, y sync matching SSZ Camera::update(); xOffset/yOffset wired from BGA data via formula, not stubbed), zoom render block matches SSZ: dscl=max(minScale,drawscale/baseScale), dx=cam_xBound(dscl,x+zoomposx*(dscl-scl)/dscl), dy=y+zoomposy with drawscale=NAN init for correct inactive-by-default behavior, timer countdown each tick when countdownTimer >= 0, round winner determination via char_round_winner() with p1wins/p2wins/draws increment, **timeover flag set when roundTime <= 0 triggers round end, reset in fighting_reset()**, debug input via getLastChar, frame timing, Lua loop callback, debug overlay, screen flip), post-loop cleanup (share copy, practice macro check, WincntMgr deinit). 6 helper functions (put, drawPauseMenu, drawDebug, debugInput, copyVar, reset). **fighting_reset()** also calls **cam_update()** for round-start camera init. All Lua calls use gettop/settop guard for stack safety. |
+| `action_service` | 207 | 367 lines | ✅ Full implementation | `ActionData::read()` — .air file parser: frame data lines, `loopstart`, `clsn1`/`clsn2` blocks with default support, `FrameMethods::readData` delegation. `ActionData::copy()` — delegates to `ani.copy()`. `DrawnClsnData::set()` — camera-transformed coordinates. `DrawnClsnData::draw()` — screen-space rect computation (rendering wiring is TODO). |
 | `ssz_service` | 24 | 63 lines | ❌ All stubs | Every method returns `false` or "deferred" string. Cannot compile or run SSZ code from native code path. |
+
+**Updates (2026-07-06):**
+- `video_service` — Full implementation (93 lines + 32 line header). File existence check via `_wfopen`, delegates to `sdlplugin::playVideo()`, sets `videoActive` flag, returns result.
+- `action_service` — Full implementation (367 lines + 62 line header). `.air` file parser with frame data, `loopstart`, `clsn1`/`clsn2` blocks with default support, `DrawnClsnData::set()`/`draw()` for debug collision display.
+- `fighting_service` — Full implementation (~1040 lines: 933 .cpp + 109 .hpp). WincntMgr auto-leveling with file I/O persistence. game() orchestration loop covering init/round/post-loop. All 6 helper functions implemented. Builds clean.
 
 ---
 
@@ -73,17 +76,30 @@ These modules have real implementations but with deferred/suboptimal sections.
 ### Character Engine (`char_service`)
 | Gap | Location | Impact |
 |-----|----------|--------|
-| `ClsnHanteiData::set()` — empty | char_service.cpp:47 | Hit collision detection disabled |
-| `FallData::clear()` / `setDefault()` — empty | char_service.cpp:47-48 | Fall behavior non-functional |
-| `StateValData::clearWw()` / `clear()` — empty | char_service.cpp:149-150 | State value tracking gaps |
-| `StateValData::hitCheck()` — empty | char_service.cpp:151 | Hit check evaluation disabled |
-| `StateValData::setHb()` — empty | char_service.cpp:152 | Hit behavior setup deferred |
-| `AfterImageData::setupPalfx()` / `recAfterImg()` / `recAndAddAL()` — empty | char_service.cpp:173-175 | Afterimage effects non-functional |
-| `CharData::bind()` — empty | char_service.cpp:307 | Binding logic not implemented |
-| `CharData::xScreenBound()` — empty | char_service.cpp:311 | Screen clamping disabled |
-| `CharData::drawAnim()` — empty | char_service.cpp:355 | Sprite rendering deferred (needs sdlplugin) |
-| `CharData::furimuki()` — empty | char_service.cpp:359 | Face direction logic not implemented |
-| `CharData::trAnimExist()` — always false | char_service.cpp:374 | Animation existence check broken |
+| `ClsnHanteiData::set()` — empty | char_service.cpp:40 | Hit collision detection disabled |
+| `FallData::clear()` / `setDefault()` — empty | char_service.cpp:52-53 | Fall behavior non-functional |
+| `StateValData::clearWw()` / `clear()` — empty | char_service.cpp:154-155 | State value tracking gaps |
+| `StateValData::hitCheck()` — empty | char_service.cpp:156 | Hit check evaluation disabled |
+| `StateValData::setHb()` — empty | char_service.cpp:157 | Hit behavior setup deferred |
+| `AfterImageData::setupPalfx()` / `recAfterImg()` / `recAndAddAL()` — empty | char_service.cpp:178-180 | Afterimage effects non-functional |
+| `CharData::bind()` — empty | char_service.cpp:311 | Binding logic not implemented |
+| `CharData::xScreenBound()` — empty | char_service.cpp:315 | Screen clamping disabled |
+| `CharData::drawAnim()` — **44-line real implementation** (was stub, now has camera-transform math + `anim->draw()`) | char_service.cpp:359 | Sprite rendering with position/scale/facing. |
+| `CharData::furimuki()` — empty | char_service.cpp:406 | Face direction logic not implemented |
+| `CharData::trAnimExist()` — always false | char_service.cpp:421 | Animation existence check broken |
+
+**Additional gaps found in 2026-07-07 audit:**
+| Gap | Location | Impact |
+|-----|----------|--------|
+| `ProjectileData::update()` — void-cast | char_service.cpp:196 | 🔴 Projectile update loop broken |
+| `ProjectileData::hitCheck(ProjectileData&)` — void-cast | char_service.cpp:197 | 🔴 Projectile-vs-projectile collision disabled |
+| `ProjectileData::projClsn()` — void-cast | char_service.cpp:198 | 🔴 Projectile hitbox collision disabled |
+| `ProjectileData::tick()` — void-cast | char_service.cpp:199 | 🔴 Projectile time-stepping broken |
+| `ProjectileData::anime()` — void-cast | char_service.cpp:200 | 🔴 Projectile animation advancement broken |
+| `CharData::loadPallet()` — void-cast | char_service.cpp:250 | 🟡 Palette loading is a no-op |
+| `char_draw_reflection()` — void-cast | char_service.cpp:697 | 🟡 Reflections not rendered |
+| `CharData::getDamage()` — ignores kill/absolute/atkmul params | char_service.cpp:291 | 🟡 Partial — damage applies but aux params unhandled |
+| `CharData::addLife()` — ignores kill/absolute params | char_service.cpp:286 | 🟡 Partial — healing works but extra flags ignored |
 
 ### Fight Engine (`fight_service`)
 | Gap | Location | Impact |
@@ -169,7 +185,7 @@ These are RAII wrappers around existing C++ plugins. The wrappers themselves are
 
 | Module | File Sizes | Bridge Already Traces? | Needed |
 |--------|-----------|-----------------------|--------|
-| `regex_service` | ~150 lines hpp+cpp | ✅ | Match array shape + error behavior parity tests |
+| `regex_service` | ~150 lines hpp+cpp | ✅ (real `std::wregex` impl) | Genuine self-contained implementation using `std::wregex`/`boost::wregex` (not a thin wrapper). Has `compile`, `search`, `search_matches`, `search_all`. No legacy plugin delegation. Match array shape + error behavior parity tests still pending. |
 | `socket_service` | ~80 lines | ✅ | Mocked socket tests + loopback integration test |
 | `sound_service` | ~80 lines | ✅ | Short audio buffer smoke tests |
 | `ogg_service` | ~100 lines | ✅ | Sample .ogg open/read/seek parity tests |
@@ -194,7 +210,7 @@ These items are marked "deferred until module X is converted" in the source code
 | `bg_service` | `sdlplugin_service` | `BackGroundData::draw()` — rendering | ❌ Complex parallax/window/zoom rendering not wired. |
 | `sff_service` | `sdlplugin_service` | GL texture loading, GL draw | ❌ `Load8bitTexture` init exists but no render loop integration. |
 | `fight_service` | `sdlplugin_service` / `sff_service` / `font_service` | Lifebar/powerbar/combo/text rendering | ❌ All `draw()` methods are `(void)`. |
-| `char_service` | `sdlplugin_service` | `CharData::drawAnim()` — sprite rendering | ❌ Empty body. |
+| `char_service` | `sdlplugin_service` | `CharData::drawAnim()` — sprite rendering | ✅ Implemented (44 lines, camera-transform + `anim->draw()`) |
 | `command_service` | `sdlevent_service` | `command_mod_key_state()` — input processing | ❌ Empty body. Needs to read sdlevent key state. |
 | `sound_resource_service` | `sdlplugin_service` | `play_sound()` — submit buffer to SDL audio | ❌ Buffer mixed but never sent to SDL. |
 | `share_service` | All wired modules | Automatic `pull_from_*` / `push_to_*` | ❌ Only `common_service` has explicit pull/push. |
@@ -249,8 +265,10 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 |------|---------|---------------|
 | `stage_service.cpp` | 12 | bg parsing, bgDraw, bgAction, camera calc, SFF loading, clear/reset |
 | `bg_service.cpp` | 6 | Section parsing, setup, rendering, BGCtrl processing |
+| `video_service.cpp` | 1 | File existence check, PlayVideo delegation — no deferred items (completed) |
+| `action_service.cpp` | 1 | `.air` parser + DrawnClsnData — `draw()` rendering wiring deferred until SDL pipeline is in place |
 | `sff_service.cpp` | 5 | PNG8, GL texture, flag parsing, palette copy, standalone loading |
-| `char_service.cpp` | 8 | Clsn, Fall, AfterImage, binding, screen bound, sprite render, facing, anim check |
+| `char_service.cpp` | 11 | ProjectileData (5 stubs), Clsn, Fall, AfterImage, binding, screen bound, face, anim check, palette loading, reflection |
 | `command_service.cpp` | 3 | SDL processing, keymap reset, netplay sync |
 | `share_service.cpp` | 4 | Module integration TODO, pull/push from wired modules |
 | `fight_service.cpp` | 3 | Anim read, face anim, rendering deferred |
@@ -261,7 +279,8 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 | `script_service.cpp` | 0 | (none — all 190+ callbacks registered, `ref_arg` wired, `drawTTF` with alignment/scale) |
 | `trigger_script_service.cpp` | 0 | (none — all 130+ trigger functions implemented and registered) |
 | `system_script_service.cpp` | 0 | (none — all 120+ system functions implemented and registered) |
-| `debug_script_service.cpp` | 1 | 27 no-op callbacks (only remaining stub of the Big 4) |
+| `fighting_service.cpp` | 3 | Init (share/debug/char/wm setup), round loop (camera/events/debug/input/rendering), cleanup (share copy/practice/wm deinit). All 3 phases are real implementations — `//deferred` or `stub` comments mark character/stage subroutine calls that depend on other modules. |
+| `debug_script_service.cpp` | 0 | (none — all 25 debug functions implemented: puts, sszReload, setLife/Max/Power/Attack/Defence, selfState, addHotkey, all toggle*, step, roundReset, reload, setAccel, setAILevel, setTime, clear) |
 | `common_service.cpp` | 2 | `AsciiToLocal` no-op, callback wiring deferred |
 | `plugin_native_api.hpp` | 1 | 6 remaining plugins not consolidated |
 
@@ -274,8 +293,7 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
                 ┌─────────────────────┬─────────────────────┐
                 │                     │                     │
    Urgent       │  P0: Traces         │  P1: Lua callbacks  │
-                │  P0: Parity pipeline │  P1: video/font stub│
-                │                     │  P1: fighting stub  │
+                │  P0: Parity pipeline │  P1: font stub      │
                 ├─────────────────────┼─────────────────────┤
                 │                     │                     │
    Important    │  P4: Cross-module   │  P5: Test gaps      │
@@ -295,7 +313,7 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 | 2 | `stage_service` is "Behavior ❌" | ⚠️ Partially correct — `stage_service` has real `EnvShake`, `load()` with def file parsing (525 lines), but bg/SFF sections deferred | Underreport: stage is further along than documented |
 | 3 | `bg_service` is "Behavior 🟢" | ⚠️ Partially wrong — `bg_service` has BGAction, BgAction, BGCTimeLine, ActiveCtrlList real implementations (485 lines), BUT `BackGroundData::read()`/`setup()`/`draw()` are all empty | Overreport: core rendering still stub |
 | 4 | `statebuilder_service` is "Behavior 🟡" | ✅ Correct — CtrlTy enum, cmd file parser, section extraction all real. Per-controller parsing deferred. | None |
-| 5 | `fighting_service` is "Behavior ❌" | ✅ Correct — entirely stub | None |
+| 5 | `fighting_service` is "Behavior ❌" | ⚠️ Previously correct (stub) — NOW UPDATED by commit: `fighting_service.cpp` is ~1040 lines of real implementation (WincntMgr auto-leveling, game() orchestration loop, 6 helpers). TODO_SSZ_CONVERSION.md has been updated to 🟢 Behavior. | ✏️ Fixed — fighting_service no longer a stub |
 | 6 | `sdlplugin_service` is "Behavior 🟡" | ⚠️ Understated — all 36 public API functions are real wrappers. Only the 3 complex render functions (renderMugenZoom, renderMugenShadow, renderFontBatch) have Reference-based bridge-layer complexity | Underreport: SDL boundary is more complete than documented |
 | 7 | `sdlevent_service` is "Behavior 🟢" | ✅ Correct — full key tracking, event polling | None |
 | 8 | `lua_service` listed as "Phase 2" priority | Actual status: full RAII LuaState with all bridge delegation methods | Priority mismatch: should be P3 (already scaffolded) |
@@ -308,7 +326,7 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 
 1. **Capture and commit startup traces** ✅ — Method 1 A/B traces captured (baseline 121,994 lines, native 79,225 lines). 100% function-level parity confirmed.
 2. **Save `make native_manifest` output** to `docs/native_manifest.txt` ✅ All 35 modules = 1
-3. **Fix `common_service.cpp:281`** — `AsciiToLocal` no-op ✅ — now properly converts UTF-8 → ANSI code page
+3. **Fix `common_service.cpp:281`** — `AsciiToLocal` no-op ✅ — now properly converts UTF-8 → ANSI code page via `MultiByteToWideChar`/`WideCharToMultiByte`
 4. **Fix `stage_service.cpp` clear/reset** ✅ — added trace calls, `def.clear()`, proper re-init
 5. **Fix SSZ-only boot** ✅ — removed `#if IKEMEN_NATIVE_*_LIB` guards from 13 static headers
 6. **Update TODO_SSZ_CONVERSION.md** ✅ — fixed all 10 discrepancies

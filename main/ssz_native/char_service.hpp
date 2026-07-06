@@ -326,6 +326,41 @@ struct PlayerListData {
 };
 
 // =========================================================================
+// AnimSprite — A sprite queued for rendering via the anim list system
+// =========================================================================
+// Matches SSZ `&AnimSprite` in char.ssz — the rendering queue entry.
+// Each AnimSprite references an ActionData animation and carries all
+// the transform, blending, and priority data needed for drawAnimList.
+struct ActionData; // forward
+
+struct AnimSpriteData {
+	ActionData* anim{nullptr};   // Owning action (^.act.Action)
+	int priority{0};
+	float x{}, y{};
+	float xscl{1.0f}, yscl{1.0f};
+	float angle{0.0f}, axscl{1.0f}, ayscl{1.0f};
+	bool padding{}, oVer{false}, screen{false}, bright{false};
+	int salpha{-1}, dalpha{0};
+	// PalFX pointer deferred (SSZ: ^&.com.PalFX fx)
+};
+
+// =========================================================================
+// ShadowSprite — A shadow entry to be drawn after the main sprite
+// =========================================================================
+// Matches SSZ `&ShadowSprite` in char.ssz.
+// CAUTION: `as` stores a raw pointer into the `anims` vector. Any insertion
+// into `anims` may reallocate the vector and invalidate all shadow pointers.
+// The SSZ managed this with reference-type semantics; native callers must
+// ensure shadows are added only when the anims vector is stable.
+struct ShadowSpriteData {
+	AnimSpriteData* as{nullptr};
+	int color{0};
+	int alpha{256};
+	float offsety{0.0f};
+	float fadeoffset{0.0f};
+};
+
+// =========================================================================
 // Module-level state
 // =========================================================================
 
@@ -334,6 +369,12 @@ struct CharModuleState {
 	CharGlobalInfo cgi;
 	// fight, stg, etc. are opaque pointers
 	int numPlayers{};
+
+	// ── Anim list (sprite rendering queue) ──
+	// SSZ: %^&AnimSprite anims, topanims;
+	std::vector<AnimSpriteData> anims;
+	std::vector<AnimSpriteData> topanims;
+	std::vector<ShadowSpriteData> shadows;
 };
 
 // =========================================================================
@@ -342,5 +383,55 @@ struct CharModuleState {
 
 void char_init();
 CharModuleState& char_get_state();
+
+/// Check if the current round is over.
+/// Returns true when all characters on at least one team have life <= 0
+/// (KO condition) and the intro phase has completed.
+bool char_round_over();
+
+/// Determine which team won the current round.
+/// Returns 0 for P1 win, 1 for P2 win, or -1 for draw.
+/// Handles both KO (team still alive wins) and timeover (team with more
+/// total remaining life wins; equal life = draw).
+int char_round_winner();
+
+// =========================================================================
+// Drawing functions
+// =========================================================================
+
+/// Add a sprite to the anim list (sorted by priority, binary insertion).
+/// SSZ: .addAnimList(anims, action, priority, x, y, screen, xs, ys, ...)
+void char_add_anim_list(
+	std::vector<AnimSpriteData>& list,
+	ActionData* action, int priority,
+	float x, float y, bool screen,
+	float xscl, float yscl, float angle, bool oVer,
+	float axscl, float ayscl, int salpha, int dalpha,
+	bool bright);
+
+/// Draw all sprites in an anim list.
+/// SSZ: .drawAnimList(anims, x, y, scl)
+void char_draw_anim_list(
+	const std::vector<AnimSpriteData>& list,
+	float x, float y, float scl);
+
+/// Add a shadow sprite to the shadow list.
+/// SSZ: .addShadowList(AnimSprite, color, offset, alpha, fadeoffset)
+void char_add_shadow_list(
+	AnimSpriteData* as, int color, float offset, int alpha, float fadeoffset);
+
+/// Draw all shadows in the shadow list.
+/// SSZ: .drawShadowList(x, y, scl)
+void char_draw_shadow_list(float x, float y, float scl);
+
+/// Draw reflections.
+/// SSZ: .drawReflection(x, y, scl)
+void char_draw_reflection(float x, float y, float scl);
+
+/// Module-level draw function matching SSZ char.draw(x, y, scl).
+/// Renders all players, anim lists, edge fading, and fight UI.
+/// Called by fighting_service each frame with camera-adjusted coords.
+/// SSZ: .chr.draw(dx, dy, dscl);
+void char_draw(float x, float y, float scl);
 
 } // namespace ikemen::ssz_native

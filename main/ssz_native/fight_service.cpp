@@ -5,6 +5,7 @@
 
 #include "fight_service.hpp"
 #include "common_service.hpp"
+#include "sdlplugin_service.hpp"
 #include "ssz_trace.hpp"
 
 #include <algorithm>
@@ -157,8 +158,110 @@ void LifebarData::step(float life, bool hit) {
 	if (mlifetime > 0) mlifetime--;
 	midlifelim = midlife;
 }
-void LifebarData::bgDraw(int layerno) { (void)layerno; }
-void LifebarData::draw(int layerno, float life) { (void)layerno; (void)life; }
+void LifebarData::bgDraw(int layerno) {
+	// SSZ: render bg0, bg1, bg2 backgrounds for this lifebar at the given layer
+	// These are rendered at full size (no life-based clipping)
+	const auto& cd = common_get_state();
+	
+	// Helper: render an AnimData background layer
+	auto drawLayer = [&](AnimData& anim, AnimData& lay) {
+		(void)lay;
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, dr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+		tile.set(0, 0, 0, 0);
+		
+		float drawX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+		float drawY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(dr, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, -drawX, -drawY, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	(void)layerno; // Layer check deferred (FightLayoutData not wired for sub-layers)
+	drawLayer(bg0, bg0_lay);
+	drawLayer(bg1, bg1_lay);
+	drawLayer(bg2, bg2_lay);
+}
+
+void LifebarData::draw(int layerno, float life) {
+	SSZ_TRACE_CAT(TRACE_SYS, "LifebarData::draw");
+	const auto& cd = common_get_state();
+	
+	// SSZ: compute two rects — lrct (current-life portion) and mrct (max-life remainder)
+	// laydraw renders mid layer into mrct (the "missing" life portion) and
+	// front layer into lrct (the "current" life portion).
+	
+	float baseX = static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f;
+	float baseY = static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240);
+	
+	// Compute width in pixels matching SSZ setLifeWidth logic
+	int rangeWidth = (range_xz < range_xm) ? (range_xm - range_xz + 1) : (range_xz - range_xm + 1);
+	float fullWidth = static_cast<float>(rangeWidth) * cd.WidthScale;
+	
+	// Current-life rect (lrct)
+	float currentLife = mid.spr ? (life < midlife ? life : midlife) : midlife;
+	float lrctW = fullWidth * currentLife;
+	float lrctX;
+	if (range_xz < range_xm) {
+		lrctX = (baseX + static_cast<float>(range_xz)) * cd.WidthScale;
+	} else {
+		lrctX = (baseX + static_cast<float>(range_xz + 1)) * cd.WidthScale - lrctW;
+	}
+	
+	// Max-life remainder rect (mrct) — the part of the bar that has no current life
+	float mrctW = fullWidth * (1.0f - currentLife);
+	float mrctX;
+	if (range_xz < range_xm) {
+		mrctX = lrctX + lrctW;
+	} else {
+		mrctX = (baseX + static_cast<float>(range_xz)) * cd.WidthScale - lrctW;
+	}
+	if (mrctW > fullWidth - lrctW) mrctW = fullWidth - lrctW;
+	
+	// Render mid layer into the "missing" portion (mrct)
+	auto drawClipped = [&](AnimData& anim, const SdlRect& clipRect, float xOff, float yOff) {
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		tile.set(0, 0, 0, 0);
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(clipRect, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, xOff, yOff, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	// Draw mid layer (missing-life portion)
+	SdlRect mrct;
+	mrct.set(static_cast<int>(mrctX), static_cast<int>(baseY * cd.HeightScale),
+		static_cast<int>(mrctW), cd.GameHeight);
+	drawClipped(mid, mrct, 0.0f, 0.0f);
+	
+	// Draw front layer (current-life portion)
+	SdlRect lrct;
+	lrct.set(static_cast<int>(lrctX), static_cast<int>(baseY * cd.HeightScale),
+		static_cast<int>(lrctW), cd.GameHeight);
+	drawClipped(front, lrct, 0.0f, 0.0f);
+	
+	(void)layerno;
+}
+
 void LifebarData::reset() { *this = LifebarData{}; }
 
 // =========================================================================
@@ -180,8 +283,100 @@ void PowerbarData::step(float power, int level) {
 	midpower = power;
 	prevlevel = level;
 }
-void PowerbarData::bgDraw(int layerno) { (void)layerno; }
-void PowerbarData::draw(int layerno, float power, int level) { (void)layerno; (void)power; (void)level; }
+void PowerbarData::bgDraw(int layerno) {
+	const auto& cd = common_get_state();
+	
+	auto drawLayer = [&](AnimData& anim) {
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, dr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+		tile.set(0, 0, 0, 0);
+		
+		float drawX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+		float drawY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(dr, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, -drawX, -drawY, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	(void)layerno;
+	drawLayer(bg0);
+	drawLayer(bg1);
+	drawLayer(bg2);
+}
+
+void PowerbarData::draw(int layerno, float power, int level) {
+	SSZ_TRACE_CAT(TRACE_SYS, "PowerbarData::draw");
+	const auto& cd = common_get_state();
+	(void)level;
+	
+	float baseX = static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f;
+	float baseY = static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240);
+	
+	int rangeWidth = (range_xz < range_xm) ? (range_xm - range_xz + 1) : (range_xz - range_xm + 1);
+	float fullWidth = static_cast<float>(rangeWidth) * cd.WidthScale;
+	
+	float pw = power;
+	if (pw > 1.0f) pw = 1.0f;
+	if (pw < 0.0f) pw = 0.0f;
+	
+	float lrctW = fullWidth * pw;
+	float lrctX;
+	if (range_xz < range_xm) {
+		lrctX = (baseX + static_cast<float>(range_xz)) * cd.WidthScale;
+	} else {
+		lrctX = (baseX + static_cast<float>(range_xz + 1)) * cd.WidthScale - lrctW;
+	}
+	
+	float mrctW = fullWidth * (1.0f - pw);
+	float mrctX;
+	if (range_xz < range_xm) {
+		mrctX = lrctX + lrctW;
+	} else {
+		mrctX = (baseX + static_cast<float>(range_xz)) * cd.WidthScale - lrctW;
+	}
+	if (mrctW > fullWidth - lrctW) mrctW = fullWidth - lrctW;
+	
+	auto drawClipped = [&](AnimData& anim, const SdlRect& clipRect, float xOff, float yOff) {
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		tile.set(0, 0, 0, 0);
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(clipRect, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, xOff, yOff, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	SdlRect mrct;
+	mrct.set(static_cast<int>(mrctX), static_cast<int>(baseY * cd.HeightScale),
+		static_cast<int>(mrctW), cd.GameHeight);
+	drawClipped(mid, mrct, 0.0f, 0.0f);
+	
+	SdlRect lrct;
+	lrct.set(static_cast<int>(lrctX), static_cast<int>(baseY * cd.HeightScale),
+		static_cast<int>(lrctW), cd.GameHeight);
+	drawClipped(front, lrct, 0.0f, 0.0f);
+	
+	(void)layerno;
+}
+
 void PowerbarData::reset() { *this = PowerbarData{}; }
 
 // =========================================================================
@@ -203,8 +398,53 @@ void FaceData::read(const std::string& prefix, const std::string& sc) {
 	}
 }
 void FaceData::step() { /* face animation — deferred */ }
-void FaceData::bgDraw(int layerno) { (void)layerno; }
-void FaceData::draw(int layerno) { (void)layerno; }
+void FaceData::bgDraw(int layerno) {
+	const auto& cd = common_get_state();
+	
+	// Render face background sprite
+	auto drawBg = [&](AnimData& anim) {
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, dr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+		tile.set(0, 0, 0, 0);
+		
+		float drawX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+		float drawY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(dr, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, -drawX, -drawY, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	(void)layerno;
+	drawBg(bg);
+}
+
+void FaceData::draw(int layerno) {
+	SSZ_TRACE_CAT(TRACE_SYS, "FaceData::draw");
+	const auto& cd = common_get_state();
+	(void)layerno;
+	
+	// Face portrait rendering — uses face_sprg/face_spri to look up a sprite
+	// from the loaded SFF. For now, this is a simplified version that
+	// renders the face background (which doubles as the portrait frame).
+	// Full SSZ implementation also applies PalFX from facefx.
+	
+	// Face portrait sprite lookup deferred until SFF sprite group/no API
+	// is wired for external sprite access. For now, draw the background only.
+	
+	// TODO: Load sprite from SFF using face_sprg/face_spri and render
+	// with PalFX. SSZ stores the sprite in a temporary AnimData.
+}
+
 void FaceData::reset() {
 	numko = 0; face_sprg = 0; face_spri = 0;
 	posx = 0; posy = 0;
@@ -224,8 +464,44 @@ void NameData::read(const std::string& prefix, const std::string& sc) {
 	}
 }
 void NameData::step() {}
-void NameData::bgDraw(int layerno) { (void)layerno; }
-void NameData::draw(int layerno) { (void)layerno; }
+void NameData::bgDraw(int layerno) {
+	const auto& cd = common_get_state();
+	
+	// Render name background sprite
+	auto drawBg = [&](AnimData& anim) {
+		if (!anim.spr) anim.updateSprite();
+		if (!anim.spr) return;
+		FrameData* frame = anim.drawFrame();
+		if (!frame) return;
+		
+		SdlRect sr, dr, tile;
+		sr.set(anim.spr->rct_x, anim.spr->rct_y, anim.spr->rct_w, anim.spr->rct_h);
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+		tile.set(0, 0, 0, 0);
+		
+		float drawX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+		float drawY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(dr, 0.0f, 0.0f, anim.spr->pxl, anim.spr->colorPallet,
+			-1, sr, -drawX, -drawY, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, anim.spr->rle, pb);
+	};
+	
+	(void)layerno;
+	drawBg(bg);
+}
+
+void NameData::draw(int layerno) {
+	SSZ_TRACE_CAT(TRACE_SYS, "NameData::draw");
+	(void)layerno;
+	// Name text rendering requires font_service which is not yet converted.
+	// The SSZ renders player name text using fnt.Font::drawText().
+	// TODO: When font_service is wired, call:
+	//   f.drawText(posx, posy, scaleX, scaleY, bank, alphaS, alphaD, scrrect, alignment, name);
+}
 void NameData::reset() { *this = NameData{}; }
 
 // =========================================================================
@@ -243,8 +519,42 @@ void TimeData::read(const std::string& prefix, const std::string& sc) {
 	}
 }
 void TimeData::step() {}
-void TimeData::bgDraw(int layerno) { (void)layerno; }
-void TimeData::draw(int layerno, int time) { (void)layerno; (void)time; }
+void TimeData::bgDraw(int layerno) {
+	const auto& cd = common_get_state();
+	
+	// Render timer background sprite
+	if (!bg.spr) bg.updateSprite();
+	if (!bg.spr) return;
+	FrameData* frame = bg.drawFrame();
+	if (!frame) return;
+	
+	SdlRect sr, dr, tile;
+	sr.set(bg.spr->rct_x, bg.spr->rct_y, bg.spr->rct_w, bg.spr->rct_h);
+	dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+	tile.set(0, 0, 0, 0);
+	
+	float drawX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+	float drawY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+	
+	std::vector<int8_t> pb;
+	pb.reserve(1024);
+	renderMugenZoom(dr, 0.0f, 0.0f, bg.spr->pxl, bg.spr->colorPallet,
+		-1, sr, -drawX, -drawY, tile,
+		cd.WidthScale, cd.WidthScale, cd.HeightScale,
+		0.0f, 0u, 256, bg.spr->rle, pb);
+	
+	(void)layerno;
+}
+void TimeData::draw(int layerno, int time) {
+	SSZ_TRACE_CAT(TRACE_SYS, "TimeData::draw");
+	(void)layerno; (void)time;
+	// Timer counter text requires font_service.
+	// TODO: When font_service is wired, render time as formatted text.
+}
+void TimeData::drawSimple(int layerno) {
+	// No-font fallback — renders only the background sprite
+	bgDraw(layerno);
+}
 void TimeData::reset() { *this = TimeData{}; }
 
 // =========================================================================
@@ -273,7 +583,13 @@ void ComboData::step(int combo, int wt) {
 	if (cur > 1) { counterX = start_x; shaketime = counter_shake; }
 	if (shaketime > 0) shaketime--;
 }
-void ComboData::draw(int layerno) { (void)layerno; }
+void ComboData::draw(int layerno) {
+	SSZ_TRACE_CAT(TRACE_SYS, "ComboData::draw");
+	(void)layerno;
+	// Combo counter text requires font_service.
+	// SSZ renders combo number and "Hits" text using fnt.Font::drawText().
+	// TODO: When font_service is wired, render cur counter value and text_text.
+}
 void ComboData::reset() { *this = ComboData{}; }
 
 // =========================================================================
@@ -293,7 +609,41 @@ void WinIconData::read(const std::string& prefix, const std::string& sc) {
 	}
 }
 void WinIconData::step(int numwin) { (void)numwin; }
-void WinIconData::draw(int layerno) { (void)layerno; }
+void WinIconData::draw(int layerno) {
+	SSZ_TRACE_CAT(TRACE_SYS, "WinIconData::draw");
+	const auto& cd = common_get_state();
+	(void)layerno;
+	
+	// WinIcon rendering — render a sprite for each win
+	// SSZ: for each win, draw icon.spr at posx + i*iconoffsetx, posy
+	// with icon_lay layout. Counter text uses font.
+	
+	if (!icon.spr) icon.updateSprite();
+	if (!icon.spr) return;
+	FrameData* frame = icon.drawFrame();
+	if (!frame) return;
+	
+	SdlRect sr, dr, tile;
+	sr.set(icon.spr->rct_x, icon.spr->rct_y, icon.spr->rct_w, icon.spr->rct_h);
+	dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+	tile.set(0, 0, 0, 0);
+	
+	float baseX = (static_cast<float>(posx) + static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+	float baseY = (static_cast<float>(posy) + static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+	
+	// TODO: iterate actual win count once connected to CommonData
+	for (int i = 0; i < 1; i++) {
+		float drawX = baseX + static_cast<float>(i * iconoffsetx);
+		float drawY = baseY + static_cast<float>(i * iconoffsety);
+		
+		std::vector<int8_t> pb;
+		pb.reserve(1024);
+		renderMugenZoom(dr, 0.0f, 0.0f, icon.spr->pxl, icon.spr->colorPallet,
+			-1, sr, -drawX, -drawY, tile,
+			cd.WidthScale, cd.WidthScale, cd.HeightScale,
+			0.0f, 0u, 256, icon.spr->rle, pb);
+	}
+}
 void WinIconData::add(int wt) { (void)wt; }
 void WinIconData::reset() { *this = WinIconData{}; }
 void WinIconData::clear() { *this = WinIconData{}; }
@@ -332,7 +682,93 @@ bool RoundData::act(KOTy ko) {
 	if (cur > 0) cur--;
 	return false;
 }
-void RoundData::draw(int layerno, KOTy ko) { (void)layerno; (void)ko; }
+void RoundData::draw(int layerno, KOTy ko,
+	const std::string* winnerNames, int nameCount)
+{
+	SSZ_TRACE_CAT(TRACE_SYS, "RoundData::draw");
+	
+	// Save/restore brightness is SSZ-only — not applicable natively.
+	// SSZ: int ob = .com.brightness; .com.brightness = .cfg.Brightness;
+	
+	// Helper: draw an AnimFontSndData at the round position
+	auto drawAnimFont = [&](AnimFontSndData& afsd, int ln) {
+		(void)ln;
+		// Draw the animation sprite (if present)
+		if (afsd.anim && afsd.anim->spr) {
+			const auto& cd = common_get_state();
+			SdlRect sr, dr, tile;
+			sr.set(afsd.anim->spr->rct_x, afsd.anim->spr->rct_y,
+				afsd.anim->spr->rct_w, afsd.anim->spr->rct_h);
+			dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+			tile.set(0, 0, 0, 0);
+			
+			float drawX = (static_cast<float>(posx + afsd.lay.posx)
+				+ static_cast<float>(cd.GameWidth - 320) / 2.0f) * cd.WidthScale;
+			float drawY = (static_cast<float>(posy + afsd.lay.posy)
+				+ static_cast<float>(cd.GameHeight - 240)) * cd.HeightScale;
+			
+			std::vector<int8_t> pb;
+			pb.reserve(1024);
+			renderMugenZoom(dr, 0.0f, 0.0f, afsd.anim->spr->pxl, afsd.anim->spr->colorPallet,
+				-1, sr, -drawX, -drawY, tile,
+				cd.WidthScale, cd.WidthScale, cd.HeightScale,
+				0.0f, 0u, 256, afsd.anim->spr->rle, pb);
+		}
+		// TODO: When font_service is wired, render text:
+		//   f.drawText(posx + lay.posx, posy + lay.posy, scale, scale,
+		//              fontb, ..., fontn, text);
+	};
+	
+	// State machine matching SSZ:
+	// cur=0: Round announcement ("Round 1", etc.)
+	// cur=1: "Fight!"
+	// cur=2: KO/TimeOver + Winner
+	
+	switch (cur) {
+	case 0:
+		if (wt >= 0) break;
+		// Draw round number text ("Round X")
+		// SSZ uses round_default or per-round sprite based on .com.round
+		drawAnimFont(round_default, layerno);
+		break;
+		
+	case 1:
+		if (wt >= 0) break;
+		// Draw "Fight!"
+		drawAnimFont(fight, layerno);
+		break;
+		
+	case 2:
+		if (ko == KOTy::None) break; // No KO yet — don't draw anything
+		// Draw KO/TimeOver/DKO
+		switch (ko) {
+		case KOTy::Ko:
+			drawAnimFont(this->ko, layerno);
+			break;
+		case KOTy::DoubleKO:
+			drawAnimFont(this->dko, layerno);
+			break;
+		default:
+			drawAnimFont(this->to, layerno);
+			break;
+		}
+		// Draw winner text (when wt2 has expired)
+		if (wt2 < 0 && winnerNames) {
+			// SSZ: branches on draw type and number of winners
+			if (ko == KOTy::DoubleKO) {
+				drawAnimFont(this->drawn, layerno);
+			} else if (nameCount >= 2) {
+				drawAnimFont(this->win2, layerno);
+			} else if (nameCount >= 1) {
+				drawAnimFont(this->win, layerno);
+			}
+		}
+		break;
+	}
+	
+	(void)layerno;
+}
+
 void RoundData::reset() { *this = RoundData{}; calledFight = false; cur = 0; }
 
 // =========================================================================
@@ -445,10 +881,79 @@ void FightData::step(int& tm, LifePowerData& life0, LifePowerData& life1, bool& 
 	round.act(KOTy::None);
 }
 
-void FightData::draw(int layerno) {
+void FightData::draw(int layerno, LifePowerData* life, int lifeCount,
+	const std::string* names, int nameCount,
+	bool nbd, int superplayer)
+{
 	SSZ_TRACE_CAT(TRACE_SYS, "FightData::draw");
-	// Rendering deferred — needs sdlplugin/sff/font
-	(void)layerno;
+	
+	(void)lifeCount;
+	(void)nameCount;
+	(void)superplayer;
+	
+	// SSZ: statusDraw / lifebarDisplay gate — checked at start
+	// For native, these would check CommonData flags.
+	
+	if (!nbd) {
+		// ── Lifebars ──
+		// P1 lifebars (even indices in SSZ)
+		lifebar[0].bgDraw(layerno);
+		lifebar[0].draw(layerno, life ? life[0].l : 1.0f);
+		// P2 lifebars (odd indices in SSZ)
+		lifebar[1].bgDraw(layerno);
+		lifebar[1].draw(layerno, life ? life[1].l : 1.0f);
+		
+		// ── Powerbars ──
+		powerbar[0].bgDraw(layerno);
+		powerbar[0].draw(layerno, life ? life[0].p : 0.0f, life ? life[0].lv : 0);
+		powerbar[1].bgDraw(layerno);
+		powerbar[1].draw(layerno, life ? life[1].p : 0.0f, life ? life[1].lv : 0);
+		
+		// ── Faces (reverse order for z-ordering) ──
+		face[0].bgDraw(layerno);
+		face[1].bgDraw(layerno);
+		face[0].draw(layerno);
+		face[1].draw(layerno);
+		
+		// ── Names ──
+		name[0].bgDraw(layerno);
+		name[1].bgDraw(layerno);
+		name[0].draw(layerno);
+		name[1].draw(layerno);
+		
+		// ── Timer ──
+		time.bgDraw(layerno);
+		time.drawSimple(layerno);
+		
+		// ── Win icons ──
+		winicon[0].draw(layerno);
+		winicon[1].draw(layerno);
+		
+		// ── Display text sections ──
+		// These are font-only elements (wincount, timer, countdown, score,
+		// match no, AI level, game mode, reward, tourney, abyss, etc.)
+		// All require font_service which is not yet converted.
+		// SSZ passes formatted text + shared font ref to DisplayTextData::draw().
+		// When font_service is wired:
+		//   wincount[0].draw(layerno);
+		//   wincount[1].draw(layerno);
+		//   timer[0].draw(layerno);  timer[1].draw(layerno);
+		//   countdown[0].draw(layerno);  countdown[1].draw(layerno);
+		//   score[0].draw(layerno);  score[1].draw(layerno);
+		//   match.draw(layerno);
+		//   ailevel.draw(layerno);
+		//   gamemode.draw(layerno);
+		//   reward.draw(layerno);
+		//   tourneystate.draw(layerno);
+		//   matchstowin.draw(layerno);
+		//   abyssdepth.draw(layerno);
+		//   abyssreward.draw(layerno);
+		//   nickname.draw(layerno);
+	}
+	
+	// ── Combo counter (always drawn, even when nbd) ──
+	combo[0].draw(layerno);
+	combo[1].draw(layerno);
 }
 
 void FightData::clear() {

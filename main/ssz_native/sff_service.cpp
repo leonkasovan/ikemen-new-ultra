@@ -7,6 +7,8 @@
 #include "sff_service.hpp"
 #include "common_service.hpp"
 #include "file_service.hpp"
+#include "sdlplugin_service.hpp"
+#include "sdlplugin_service.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -909,6 +911,73 @@ void FrameMethods::readData(FrameData& frame, const std::vector<int>& ary,
 	// Full parsing deferred — this is complex SSZ string logic
 
 	// For now, just store basic frame data
+}
+
+// =========================================================================
+// AnimData::draw — Render the current animation frame sprite
+// =========================================================================
+// SSZ: Anim.draw(scrrect, x, y, xscl, yscl, xtscl, xbscl, ysscl, rxadd, agl, palFX, oVer)
+// Renders the current animation sprite at the given screen position/scale.
+void AnimData::draw(int alpha, float x, float y, float xs, float ys,
+	float xts, float xbs, float yss, float rxadd, float agl, int trans)
+{
+	(void)trans; // alpha mode — not used in basic rendering
+	if (!spr) return;
+	if (spr->pxl.empty() && spr->colorPallet.empty()) return;
+
+	const auto& cd = common_get_state();
+
+	// Build source rect from sprite dimensions
+	SdlRect sr;
+	sr.set(spr->rct_x, spr->rct_y, spr->rct_w, spr->rct_h);
+
+	// Build destination rect (full screen — scrrect)
+	SdlRect dr;
+	dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+
+	// Build tile rect (zero-origin)
+	SdlRect tile;
+	tile.set(0, 0, 0, 0);
+
+	// Compute final scale taking all factors into account
+	float finalXScl = xs * xts;
+	float finalYScl = ys * yss;
+
+	// Map SSZ alpha (0-256) to software-renderer alpha (0-255)
+	// When trans is -1 (no blend) or -2 (subtract), use unmodified alpha
+	int renderAlpha = alpha;
+	if (renderAlpha > 255) renderAlpha = 255;
+	if (renderAlpha < 0) renderAlpha = 0;
+
+	// Local plugin buffer
+	std::vector<int8_t> pluginbuf;
+	pluginbuf.reserve(1024);
+
+	// Screen-space position: the SSZ passes px, py which are already in
+	// camera-transformed screen coordinates. agl is GameWidth/2.0 (x half-offset).
+	// The renderMugenZoom call maps the sprite to the screen rect.
+	float screenX = -x * cd.WidthScale;
+	float screenY = -y * cd.HeightScale;
+
+	renderMugenZoom(
+		dr,                                             // dr = scrrect
+		0.0f, 0.0f,                                     // rcx, rcy
+		spr->pxl,                                        // pxl
+		spr->colorPallet,                                // pal
+		-1,                                              // ckey = -1
+		sr,                                              // sr = sprite rect
+		screenX,                                         // cx
+		screenY,                                         // ty
+		tile,                                            // tile
+		finalXScl * cd.WidthScale * static_cast<float>(spr->rct_w),  // xtopscl
+		finalXScl * cd.WidthScale * static_cast<float>(spr->rct_w),  // xbotscl
+		finalYScl * cd.HeightScale * static_cast<float>(spr->rct_h), // yscl
+		rxadd,                                           // rasterxadd
+		0u,                                              // roto
+		renderAlpha,                                     // alpha
+		spr->rle,                                        // rle
+		pluginbuf                                       // pluginbuf
+	);
 }
 
 // =========================================================================

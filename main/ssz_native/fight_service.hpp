@@ -175,6 +175,7 @@ struct TimeData {
 	void step();
 	void bgDraw(int layerno);
 	void draw(int layerno, int time);
+	void drawSimple(int layerno);  // No-font fallback
 	void reset();
 };
 
@@ -252,7 +253,8 @@ struct RoundData {
 	void read(const std::string& prefix, const std::string& sc);
 	void callFight();
 	bool act(KOTy ko);
-	void draw(int layerno, KOTy ko);
+	void draw(int layerno, KOTy ko,
+		const std::string* winnerNames, int nameCount);
 	void reset();
 };
 
@@ -309,7 +311,9 @@ struct FightData {
 	// Lifecycle
 	void load(const std::string& defPath);
 	void step(int& tm, LifePowerData& life0, LifePowerData& life1, bool& hit, int& combo);
-	void draw(int layerno);
+	void draw(int layerno, LifePowerData* life, int lifeCount,
+		const std::string* names, int nameCount,
+		bool nbd, int superplayer);
 	void clear();
 	void reset();
 };

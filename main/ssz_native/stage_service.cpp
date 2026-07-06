@@ -6,6 +6,7 @@
 
 #include "stage_service.hpp"
 #include "common_service.hpp"
+#include "bg_service.hpp"
 #include "ssz_trace.hpp"
 
 #include <algorithm>
@@ -276,6 +277,7 @@ std::string StageData::load(const std::string& defPath) {
 				std::string val = trim_str(line.substr(eq + 1));
 				if (key == "topscale")
 					cd.cam.stg.ztopscale = static_cast<float>(common_atof(val));
+					SSZ_TRACE_CAT(TRACE_SYS, ("scaling topscale -> cam.stg.ztopscale = " + std::to_string(cd.cam.stg.ztopscale)).c_str());
 			}
 		}
 
@@ -301,7 +303,10 @@ std::string StageData::load(const std::string& defPath) {
 				std::string key = trim_str(line.substr(0, eq));
 				std::string val = trim_str(line.substr(eq + 1));
 
-				if (key == "zoffset") cd.cam.stg.zoffset = common_atoi(val);
+				if (key == "zoffset") {
+					cd.cam.stg.zoffset = common_atoi(val);
+					SSZ_TRACE_CAT(TRACE_SYS, ("stageinfo zoffset -> cam.stg.zoffset = " + std::to_string(cd.cam.stg.zoffset)).c_str());
+				}
 				else if (key == "zoffsetlink") zoffsetlink = common_atoi(val);
 				else if (key == "hires") hires = common_atoi(val) != 0;
 				else if (key == "resetbg") resetbg = common_atoi(val) != 0;
@@ -313,8 +318,15 @@ std::string StageData::load(const std::string& defPath) {
 						cd.cam.stg.localh = common_atoi(val.substr(space + 1));
 					}
 				}
-				else if (key == "xscale") xscale = static_cast<float>(common_atof(val));
-				else if (key == "yscale") yscale = static_cast<float>(common_atof(val));
+				else if (key == "xscale") {
+					xscale = static_cast<float>(common_atof(val));
+					cd.cam.stg.xscale = xscale;
+					SSZ_TRACE_CAT(TRACE_SYS, ("stageinfo xscale -> cam.stg.xscale = " + std::to_string(xscale)).c_str());
+				} else if (key == "yscale") {
+					yscale = static_cast<float>(common_atof(val));
+					cd.cam.stg.yscale = yscale;
+					SSZ_TRACE_CAT(TRACE_SYS, ("stageinfo yscale -> cam.stg.yscale = " + std::to_string(yscale)).c_str());
+				}
 			}
 		}
 
@@ -427,9 +439,9 @@ std::string StageData::load(const std::string& defPath) {
 		}
 	}
 
-	// ── Final setup ──
-	localscl = static_cast<float>(cd.GameWidth) / static_cast<float>(cd.cam.stg.localw);
+	// ── Final setup ──	localscl = static_cast<float>(cd.GameWidth) / static_cast<float>(cd.cam.stg.localw);
 	cd.cam.stg.localscl = localscl;
+	SSZ_TRACE_CAT(TRACE_SYS, ("StageData::load postproc localscl=" + std::to_string(localscl) + " cam.stg.xscale=" + std::to_string(cd.cam.stg.xscale) + " yscale=" + std::to_string(cd.cam.stg.yscale)).c_str());
 
 	if (std::isnan(leftbound))
 		leftbound = 1000.0f / localscl;
@@ -457,9 +469,97 @@ void StageData::action() {
 }
 
 void StageData::bgDraw(bool t, float x, float y, float scl) {
-	// Deferred until bg_service converts.
-	// SSZ: iterate bg layers, call bg[i].draw(...)
-	(void)t; (void)x; (void)y; (void)scl;
+	SSZ_TRACE_CAT(TRACE_SYS, "StageData::bgDraw");
+
+	// SSZ: float bgscl = `hires ? 0.5 : 1.0;
+	float bgscl = hires ? 0.5f : 1.0f;
+	float yofs = g_env_shake.getOffset();
+	float posx = x, posy = y;
+	float scl2 = localscl * scl;
+
+	const CommonData& cd = common_get_state();
+	const CameraData& cam = cd.cam;
+
+	// ── Boundhigh clamping ──
+	// SSZ: branch { float bhtmp = max(0, boundhigh); cond posy > bhtmp: ... cond posy < boundhigh: ... }
+	{
+		float bhtmp = static_cast<float>(std::max(0, cam.stg.boundhigh));
+		if (posy > bhtmp) {
+			yofs += (posy - bhtmp) * scl2;
+			posy = bhtmp;
+		} else if (posy < static_cast<float>(cam.stg.boundhigh)) {
+			yofs += (posy - static_cast<float>(cam.stg.boundhigh)) * scl2;
+			posy = static_cast<float>(cam.stg.boundhigh);
+		}
+	}
+
+	// ── Vertical follow ──
+	// SSZ: if(cam.stg.verticalfollow > 0.0) branch { ... }
+	if (cam.stg.verticalfollow > 0.0f) {
+		if (yofs < 0.0f) {
+			// SSZ: branch { float temp = ...; if(temp >= 0.0) break; cond yofs < temp: ... else: ... }
+			float temp =
+				(static_cast<float>(cam.stg.boundhigh) - posy) * scl2
+				+ (
+					scl > 1.0f
+						? (cam.screenZoff + static_cast<float>(cd.GameHeight - 240))
+						: static_cast<float>(cd.GameHeight)
+				  ) * (1.0f / scl - 1.0f);
+			if (temp >= 0.0f) {
+				// break (SSZ: if(temp >= 0.0) break — skip the rest of the inner branch)
+			} else if (yofs < temp) {
+				yofs -= temp;
+				posy += temp / scl2;
+			} else {
+				posy += yofs / scl2;
+				yofs = 0.0f;
+			}
+		} else {
+			// SSZ: else: branch { cond -yofs < posy * scl2: ... else: ... }
+			if (-yofs < posy * scl2) {
+				yofs += posy * scl2;
+				posy = 0.0f;
+			} else {
+				posy += yofs / scl2;
+				yofs = 0.0f;
+			}
+		}
+	}
+
+	// ── Non-zoom → ceil position ──
+	// SSZ: if(!cam.zoom) { posx = ceil(posx - 0.5); posy = ceil(posy - 0.5); }
+	if (!cam.zoom) {
+		posx = std::ceil(posx - 0.5f);
+		posy = std::ceil(posy - 0.5f);
+	}
+
+	// ── drawOffsetY computation ──
+	// SSZ: yofs += (drawOffsetY + (localh - 240.0) * localscl) * scl ** (...)
+	{
+		double exponent = (
+			(360.0 * static_cast<double>(cam.stg.localw)
+			 + 160.0 * static_cast<double>(cam.stg.localh))
+			/ static_cast<double>(cam.stg.localw)
+			+ static_cast<double>(cam.stg.drawOffsetY)
+		) / 480.0;
+
+		yofs += (
+			cam.stg.drawOffsetY
+			+ static_cast<float>(cam.stg.localh - 240) * localscl
+		) * static_cast<float>(std::pow(static_cast<double>(scl), exponent));
+	}
+
+	// ── Draw background layers ──
+	// SSZ: loop index i = 0; while i < #bg; if visible && toplayer == t && #anim.spr > 0 → draw(...)
+	{
+		auto& bgState = bg_get_state();
+		for (size_t i = 0; i < bgState.layers.size(); i++) {
+			auto& bg = bgState.layers[i];
+			if (bg.visible && bg.toplayer == t && bg.anim && bg.anim->spr) {
+				bg.draw(posx, posy, scl, bgscl, localscl, xscale, yscale, yofs);
+			}
+		}
+	}
 }
 
 void StageData::clear() {

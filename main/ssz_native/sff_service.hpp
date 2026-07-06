@@ -23,6 +23,13 @@
 namespace ikemen::ssz_native {
 
 // =========================================================================
+// Rect — Axis-aligned rectangle (from action.ssz)
+// =========================================================================
+struct Rect {
+	int l{}, t{}, r{-1}, b{-1};
+};
+
+// =========================================================================
 // Constants
 // =========================================================================
 inline constexpr int kNumCharPalettes = 12;
@@ -118,6 +125,9 @@ struct SpriteData {
 // FrameData — A single animation frame (action.ssz &Frame)
 // =========================================================================
 struct FrameData {
+	// Collision boxes: clsn[0] = clsn1 (hit), clsn[1] = clsn2 (guard)
+	// Each element is itself a vector of Rect (SSZ: ^^&.Rect)
+	std::vector<std::vector<Rect>> clsn;
 	short group{-1}, number{};
 	short x{}, y{};
 	int time{-1};

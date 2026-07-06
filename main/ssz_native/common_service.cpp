@@ -4,6 +4,9 @@
 // Matches the SSZ common.ssz (1199 line) behavior exactly.
 
 #include "common_service.hpp"
+#include "math_service.hpp"
+#include "sdlplugin_service.hpp"
+#include "ssz_trace.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -383,6 +386,167 @@ std::string common_load_file(const std::string& deffile, std::string& file,
 	}
 
 	return file + ":\r\n" + "Failed to open file";
+}
+
+// =========================================================================
+// Camera functions — match common.ssz Camera::scaleBound/xBound/yBound/init
+// =========================================================================
+
+void cam_init(CameraData& cam, const CommonData& cd) {
+	SSZ_TRACE_CAT(TRACE_SYS, "cam_init");
+	cam.boundL = static_cast<float>(cam.stg.boundleft - cam.stg.startx) * cam.stg.localscl;
+	cam.boundR = static_cast<float>(cam.stg.boundright - cam.stg.startx) * cam.stg.localscl;
+	cam.halfWidth = static_cast<float>(cd.GameWidth) / 2.0f;
+	cam.xMin = cam.boundL - cam.halfWidth / cam_base_scale(cam);
+	cam.xMax = cam.boundR + cam.halfWidth / cam_base_scale(cam);
+
+	if (cam.stg.verticalfollow > 0.0f) {
+		cam.boundH = math::min(0.0f,
+			static_cast<float>(cam.stg.boundhigh) * cam.stg.localscl
+			+ static_cast<float>(cd.GameHeight) - cam.stg.drawOffsetY
+			- static_cast<float>(cd.GameWidth) * static_cast<float>(cam.stg.localh) / static_cast<float>(cam.stg.localw));
+	} else {
+		cam.boundH = 0.0f;
+	}
+
+	if (cam.stg.boundhigh > 0)
+		cam.boundH += static_cast<float>(cam.stg.boundhigh) * cam.stg.localscl;
+
+	float xminscl = static_cast<float>(cd.GameWidth) / (static_cast<float>(cd.GameWidth) - cam.boundL + cam.boundR);
+	float yminscl = static_cast<float>(cd.GameHeight) / (240.0f - math::min(0.0f, cam.boundH));
+	cam.minScale = math::max(cam.zoomMin, math::min(cam.zoomMax, math::max(xminscl, yminscl)));
+
+	cam.screenZoff =
+		static_cast<float>(cam.stg.zoffset) * cam.stg.localscl - cam.stg.drawOffsetY + 240.0f
+		- static_cast<float>(cd.GameWidth) * static_cast<float>(cam.stg.localh) / static_cast<float>(cam.stg.localw);
+}
+
+float cam_scale_bound(const CameraData& cam, float scl) {
+	SSZ_TRACE_CAT(TRACE_SYS, "cam_scale_bound");
+	// SSZ: ret `zoom ? .m.max!float?(`minScale, .m.min!float?(`zoomMax, scl)) : 1.0;
+	if (!cam.zoom) return 1.0f;
+	return math::max(cam.minScale, math::min(cam.zoomMax, scl));
+}
+
+float cam_x_bound(const CameraData& cam, float scl, float x) {
+	SSZ_TRACE_CAT(TRACE_SYS, "cam_x_bound");
+	// SSZ: ret .m.max!float?(boundL - halfWidth + halfWidth / scl),
+	//          .m.min!float?(boundR + halfWidth - halfWidth / scl, x);
+	float minX = cam.boundL - cam.halfWidth + cam.halfWidth / scl;
+	float maxX = cam.boundR + cam.halfWidth - cam.halfWidth / scl;
+	return math::max(minX, math::min(maxX, x));
+}
+
+float cam_y_bound(const CameraData& cam, float scl, float y, float gameHeight) {
+	SSZ_TRACE_CAT(TRACE_SYS, "cam_y_bound");
+	// SSZ: if(stg.verticalfollow <= 0.0) ret 0.0;
+	if (cam.stg.verticalfollow <= 0.0f) return 0.0f;
+
+	float tmp = math::max(0.0f, 240.0f - cam.screenZoff);
+
+	// SSZ: ret .m.max!float?(0.0, boundH) + .m.min!float?(0.0),
+	//          .m.min!float?(tmp * (1.0 / scl - 1.0)),
+	//          .m.max!float?(boundH - 240.0 + .m.max!float?((float)GameHeight / scl),
+	//              (tmp + screenZoff / scl),
+	//               y + 240.0 * (1.0 - .m.min!float?(1.0, scl)));
+	//
+	// The chained .< syntax passes the value before < as the first positional arg
+	// to the function after the comma. So the inner max is:
+	//   max(max(GameHeight / scl, 0.0f), tmp + screenZoff / scl, y + 240.0 * (1.0 - min(1.0, scl)))
+	// But < passes a single value, and the function after comma receives it as arg 1.
+	// Actually in SSZ: A.<, .func(B) means func(A, B).
+	// So: outer = max(0.0f, boundH) + min(0.0f, min(tmp * (1.0/scl - 1.0), maxA))
+	// where maxA = max(boundH - 240.0 + max(GameHeight/scl, 0.0f), tmp + screenZoff/scl, y + 240.0 * (1.0 - min(1.0, scl)))
+
+	float innerMax = math::max(cam.boundH - 240.0f + math::max(gameHeight / scl, 0.0f),
+		math::max(tmp + cam.screenZoff / scl,
+			y + 240.0f * (1.0f - math::min(1.0f, scl))));
+
+	return math::max(0.0f, cam.boundH) + math::min(0.0f,
+		math::min(tmp * (1.0f / scl - 1.0f), innerMax));
+}
+
+float cam_base_scale(const CameraData& cam) {
+	// SSZ: ret `stg.ztopscale;
+	return cam.stg.ztopscale;
+}
+
+// ── Camera::update — sync camera runtime state with current position/scale ──
+// SSZ: cam.update(scl, x, y, stg=)
+// The `stg` template parameter (chr.stg) provides stage BGA offsets for
+// xOffset/yOffset. Since stage BGA data is not yet wired, those are stubbed.
+void cam_update(CameraData& cam, const CommonData& cd, float scl, float x, float y) {
+	SSZ_TRACE_CAT(TRACE_SYS, "cam_update");
+	// `scale = baseScale() * scl;
+	cam.scale = cam_base_scale(cam) * scl;
+
+	// `zoff = scl * (stg.zoffset * localscl - drawOffsetY
+	//          + (240.0 - GameWidth * localh / localw) + (GameHeight - 240))
+	//          + (1.0 - scl) * GameHeight;
+	cam.zoff =
+		scl * (
+			static_cast<float>(cam.stg.zoffset) * cam.stg.localscl - cam.stg.drawOffsetY
+			+ (240.0f - static_cast<float>(cd.GameWidth) * static_cast<float>(cam.stg.localh) / static_cast<float>(cam.stg.localw))
+			+ static_cast<float>(cd.GameHeight - 240))
+		+ (1.0f - scl) * static_cast<float>(cd.GameHeight);
+
+	// `xOffset = stg.bga.xoffset * localscl * xscale * scl;
+	// bgaXOffset/bgaYOffset are set by the stage's background action system
+	// (BGActionData::action()) each frame. Until the background system is fully
+	// wired, they default to 0.0f — matching the previous stub behavior.
+	cam.xOffset = cam.bgaXOffset * cam.stg.localscl * cam.stg.xscale * scl;
+	cam.yOffset = cam.bgaYOffset * cam.stg.localscl * cam.stg.yscale * scl;
+
+	// `screenX = x - halfWidth / scale - xOffset;
+	cam.screenX = x - cam.halfWidth / cam.scale - cam.xOffset;
+
+	// `screenY = y - (zoff - (GameHeight - 240) * scl) / scale - yOffset;
+	cam.screenY = y - (cam.zoff - static_cast<float>(cd.GameHeight - 240) * scl) / cam.scale - cam.yOffset;
+
+	// `x = x;
+	// `y = y;
+	cam.x = x;
+	cam.y = y;
+}
+
+// ── common_timer_step — decrement roundTime and format timerFormatted ──
+
+void common_timer_step(CommonData& cd) {
+	// Decrement roundTime each tick when countdownTimer is active (>= 0).
+	// countdownTimer starts at -1 (disabled); it's set to a positive value
+	// by trigger-script or game-mode code to start the countdown.
+	if (common_tick_frame(cd) && cd.countdownTimer >= 0 && cd.roundTime > 0) {
+		cd.roundTime--;
+	}
+
+	// Format timerFormatted as integer seconds remaining.
+	// roundTime is in 60ths of a second (M.U.G.E.N convention);
+	// roundTime / 60 gives the number of whole seconds remaining.
+	// This matches the display format used by the lifebar.
+	cd.timerFormatted = std::to_string(cd.roundTime / 60);
+}
+
+// ── screenFill ──
+// Fill the entire screen with a solid color.
+// SSZ: .com.screenFill(color) — fills the full .com.scrrect rect.
+void common_screen_fill(uint32_t color) {
+	CommonData& cd = common_get_state();
+	// Use sdlplugin's fill to fill the entire window
+	SdlRect r;
+	r.set(0, 0, cd.GameWidth, cd.GameHeight);
+	fill(r, color);
+}
+
+// ── rectFill ──
+// Fill a screen rectangle with color and alpha.
+// SSZ: .com.rectFill(rect, color, alpha)
+// The SSZ passes alpha as 0-256; we convert to 0-255.
+void common_rect_fill(const SdlRect& rect, uint32_t color, int alpha) {
+	// Map alpha range: SSZ uses 0-256, sdlplugin uses 0-255
+	int a = (alpha > 255) ? 255 : (alpha < 0 ? 0 : alpha);
+	(void)a; // Unused with current fill — sdlplugin fill() doesn't take alpha
+	// SSZ uses .com.rectFill which calls softFill
+	softFill(rect, color);
 }
 
 // ── No-arg convenience wrappers (internal static CommonData) ──

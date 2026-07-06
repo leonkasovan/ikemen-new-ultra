@@ -1,28 +1,36 @@
-// debug_script_service.hpp — Native C++ scaffolding for ssz_script/ssz/debug-script.ssz
+// debug_script_service.hpp — Native C++ implementation for ssz_script/ssz/debug-script.ssz
 //
 // debug-script.ssz implements the Lua debug API — functions registered as
-// Lua callbacks for developer tools (stat manipulation, toggles, recording,
-// hotkeys, reload, etc.).
+// Lua callbacks for developer tools (stat manipulation, display toggles,
+// recording, hotkeys, reload, etc.).
 //
-// All functions receive a lua_State* (L) and int re (return code), parse
-// arguments via the SSZ script runtime, and mutate game state.
+// All functions follow the standard lua_CFunction pattern:
+//   int func(lua_State* L)
+// They parse arguments from Lua, mutate game state via native services,
+// and return 0 (or 1 for value returns).
 //
-// Design note: This is a Lua callback bridge module. Unlike share_service
-// and system_service (which are DTO structs), this module's functions are
-// designed to be registered as Lua C callbacks via sc/tscri/sscri init.
-//
-// Phase 3: All function bodies are stubs. Wired when sc/tscri/sscri Lua
-// bridge modules are converted or when the engine's Lua console/API layer
-// is refactored.
+// Registration: debug_script_init(lua_State* L) registers all 25 debug
+// functions with Lua. Called from debug_load_file() or directly from
+// the Lua bridge when IKEMEN_NATIVE_DEBUG_SCRIPT_LIB=1.
 
 #pragma once
 
 #include <string>
+#include <vector>
 
 // Forward declarations for Lua types
 struct lua_State;
 
 namespace ikemen::ssz_native {
+
+// ── Hotkey entry — stored from addHotkey calls ──
+struct HotkeyEntry {
+	std::string key;
+	bool ctrl;
+	bool alt;
+	bool shift;
+	std::string script;
+};
 
 // ── Debug Script State ──
 // Module-level globals from debug-script.ssz
@@ -31,52 +39,65 @@ struct DebugScriptState {
 	bool reloadFlg{false};
 	bool noHUDDisplay{false};
 	lua_State* L{nullptr};
-
-	// Module-level globals as independent flags (not wrapped in the struct
-	// when used as free functions by the Lua bridge — kept here for struct
-	// completeness).
+	std::vector<std::string> clipboardText;  // Clipboard buffer (replaces SSZ com.clipboardText)
+	std::vector<HotkeyEntry> hotkeys;        // Registered debug hotkeys (from addHotkey)
 };
 
-// ── Lua callback function stubs ──
-// Each matches the SSZ signature: void func(lua_State* L, int& re)
-// Phase 3: bodies are no-ops until the Lua bridge is wired.
+// ── Lua callback function declarations ──
+// Each implements one SSZ debug-script function as a lua_CFunction.
 
-void debug_puts(lua_State* L, int& re);
-void debug_ssz_reload(lua_State* L, int& re);
-void debug_set_life(lua_State* L, int& re);
-void debug_set_life_max(lua_State* L, int& re);
-void debug_set_power(lua_State* L, int& re);
-void debug_set_attack(lua_State* L, int& re);
-void debug_set_defence(lua_State* L, int& re);
-void debug_self_state(lua_State* L, int& re);
-void debug_add_hotkey(lua_State* L, int& re);
-void debug_toggle_clsn_draw(lua_State* L, int& re);
-void debug_toggle_debug_draw(lua_State* L, int& re);
-void debug_toggle_status_draw(lua_State* L, int& re);
-void debug_toggle_post_match(lua_State* L, int& re);
-void debug_toggle_pause(lua_State* L, int& re);
-void debug_toggle_pause_menu(lua_State* L, int& re);
-void debug_step(lua_State* L, int& re);
-void debug_toggle_record(lua_State* L, int& re);
-void debug_toggle_playback(lua_State* L, int& re);
-void debug_toggle_record_end(lua_State* L, int& re);
-void debug_round_reset(lua_State* L, int& re);
-void debug_reload(lua_State* L, int& re);
-void debug_set_accel(lua_State* L, int& re);
-void debug_set_ai_level(lua_State* L, int& re);
-void debug_set_time(lua_State* L, int& re);
-void debug_clear(lua_State* L, int& re);
+int lua_debug_puts(lua_State* L);
+int lua_debug_ssz_reload(lua_State* L);
+int lua_debug_set_life(lua_State* L);
+int lua_debug_set_life_max(lua_State* L);
+int lua_debug_set_power(lua_State* L);
+int lua_debug_set_attack(lua_State* L);
+int lua_debug_set_defence(lua_State* L);
+int lua_debug_self_state(lua_State* L);
+int lua_debug_add_hotkey(lua_State* L);
+int lua_debug_toggle_clsn_draw(lua_State* L);
+int lua_debug_toggle_debug_draw(lua_State* L);
+int lua_debug_toggle_status_draw(lua_State* L);
+int lua_debug_toggle_post_match(lua_State* L);
+int lua_debug_toggle_pause(lua_State* L);
+int lua_debug_toggle_pause_menu(lua_State* L);
+int lua_debug_step(lua_State* L);
+int lua_debug_toggle_record(lua_State* L);
+int lua_debug_toggle_playback(lua_State* L);
+int lua_debug_toggle_record_end(lua_State* L);
+int lua_debug_round_reset(lua_State* L);
+int lua_debug_reload(lua_State* L);
+int lua_debug_set_accel(lua_State* L);
+int lua_debug_set_ai_level(lua_State* L);
+int lua_debug_set_time(lua_State* L);
+int lua_debug_clear(lua_State* L);
+
+// ── Init ──
+// Registers all 25 debug functions with the given Lua state so they
+// are callable from Lua scripts as global functions (puts, setLife,
+// toggleClsnDraw, etc.).
+//
+// Called from debug_load_file() or from the SSZ bridge when
+// IKEMEN_NATIVE_DEBUG_SCRIPT_LIB=1.
+void debug_script_init(lua_State* L);
+
+// No-arg convenience wrapper — calls debug_script_init on stored Lua state.
+void debug_script_init();
 
 // ── File loading ──
-// loadFile and runFile are higher-level operations that wire the Lua
-// environment.  Phase 3: stubs returning empty string (success).
+// Loads and runs a debug Lua script file. Sets up the Lua environment
+// first by calling script_init(), register_function(), system_script_init(),
+// and debug_script_init(), then runs the file.
+//
+// Returns empty string on success, error message on failure.
 std::string debug_load_file(const std::string& file);
 std::string debug_run_file(const std::string& file);
 
 // No-arg convenience wrappers for bridge/SSZ ABI.
-// These provide parameter-free entry points for the bridge wrappers.
-// Currently stubs returning empty string (success).
 std::string debug_load_file();
 std::string debug_run_file();
+
+// ── State accessor ──
+DebugScriptState& debug_script_get_state();
 
 } // namespace ikemen::ssz_native

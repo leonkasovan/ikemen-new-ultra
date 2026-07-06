@@ -5,8 +5,13 @@
 #include "common_service.hpp"
 #include "command_service.hpp"
 #include "sff_service.hpp"
+#include "action_service.hpp"
+#include "sdlplugin_service.hpp"
+#include "fight_service.hpp"
+#include "stage_service.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -352,7 +357,50 @@ void CharData::setXV(float xv) { xvel = xv; }
 void CharData::setYV(float yv) { yvel = yv; }
 
 void CharData::drawAnim() {
-	// Sprite rendering deferred (needs sdlplugin)
+	if (!anim) return;
+	if (!anim->spr) {
+		anim->updateSprite();
+		if (!anim->spr) return;
+	}
+
+	// Get the current frame
+	FrameData* frame = anim->drawFrame();
+	if (!frame) return;
+
+	// Compute world-space position (char pos + offset)
+	float drawX = x;
+	float drawY = y;
+
+	// Screen-space: use character facing and scale
+	float xs = static_cast<float>(facing);
+	float ys = 1.0f;
+
+	// Queue via addAnimList for priority-sorted rendering
+	// SSZ Char::drawAnim calls .addAnimList() directly
+	// For simplicity, render immediately via AnimData::draw
+	const auto& cd = common_get_state();
+	const auto& cam = cd.cam;
+
+	// Compute screen position following SSZ drawAnim code path:
+	// For non-screen, non-angle sprites:
+	//   px = cam.xOffset / cs - (camX - charX);
+	//   py = (cam.groundLevel() + cam.yOffset) / cs - (camY - charY);
+	float cs = cd.cam.scale / cam_base_scale(cam); // scl ≈ scale / baseScale
+	float px = cam.xOffset / cs - (cd.cam.x - drawX);
+	float py = (camera_ground_level(cam) + cam.yOffset) / cs - (cd.cam.y - drawY);
+
+	// Render directly
+	anim->draw(
+		256,                // alpha (0-256, SSZ default)
+		px, py,             // screen position (x, y)
+		cs, cs,             // base scale (xs, ys)
+		xs,                 // xts (extra x scale = facing)
+		ys,                 // xbs (extra y scale = base)
+		1.0f,               // yss (final y scale)
+		0.0f,               // rxadd (raster x add)
+		static_cast<float>(cd.GameWidth) / 2.0f,  // agl (angle/offset)
+		0                   // trans (blend mode)
+	);
 }
 
 void CharData::furimuki() {
@@ -400,6 +448,496 @@ void PlayerListData::tick() { for (auto* p : players) p->tick(); }
 
 void char_init() {
 	g_char_state = CharModuleState{};
+}
+
+// =========================================================================
+// char_round_over() — Check if the current round is over
+// =========================================================================
+//
+// SSZ semantics (chr.roundOver() in char.ssz):
+//   Returns true when the round should end. The fight engine orchestration
+//   (fighting.ssz game()) uses this to drive round transitions.
+//
+// Native implementation:
+//   Checks if all characters on at least one team have life <= 0 after the
+//   intro phase has completed. In the full SSZ, this also checks fight
+//   round state machine (roundState() >= 3) and KO flags (sfOVER/sfKO).
+//
+bool char_round_over() {
+	CommonData& cd = common_get_state();
+
+	// Forced round over (e.g., debug skip or exitMatch)
+	if (cd.forceOver) return true;
+
+	// Round isn't over during intro phase (first ~20 frames)
+	// SSZ: .com.intro < -.fight~ro.over_hittime check via roundEnd()
+	if (cd.intro > 0) return false;
+
+	// Don't check during loading state
+	if (cd.gameState == 0) return false;
+
+	// Check each team (0 = P1 side, 1 = P2 side)
+	// Track both KO status AND whether the team has any characters
+	bool team0AllKO = true;
+	bool team1AllKO = true;
+	bool team0HasChar = false;
+	bool team1HasChar = false;
+
+	for (int i = 0; i < 4; i++) {
+		CharData* ch = g_char_state.chars[i];
+		if (!ch) continue;
+
+		int team = i & 1; // Even = team 0 (P1), Odd = team 1 (P2)
+		bool isKO = (ch->life <= 0.0f);
+
+		if (team == 0) {
+			team0HasChar = true;
+			if (!isKO) team0AllKO = false;
+		} else {
+			team1HasChar = true;
+			if (!isKO) team1AllKO = false;
+		}
+	}
+
+	// A team can only be considered KO'd if it has at least one character
+	// AND all of its characters have life <= 0
+	if ((team0HasChar && team0AllKO) || (team1HasChar && team1AllKO)) {
+		return true;
+	}
+
+	// Timer expiration — when roundTime counts down to 0, time-over ends the round
+	// In the SSZ: tscri.cwc~roundState() >= 3 also covers this case
+	if (cd.roundTime <= 0) {
+		// Round timer has expired — time-over condition
+		// This is valid regardless of whether characters are loaded on both teams
+		cd.timeover = true;  // Signal to lifebar to display "Time"
+		return true;
+	}
+
+	return false;
+}
+
+// =========================================================================
+// char_round_winner() — Determine which team won the round
+// =========================================================================
+//
+// Returns 0 for P1 win, 1 for P2 win, or -1 for draw.
+//
+// For KO: the team that still has at least one character with life > 0 wins.
+// For timeover: the team with more total remaining life wins.
+//   If total life is equal, returns -1 (draw).
+//
+int char_round_winner() {
+	CommonData& cd = common_get_state();
+
+	// Sum remaining life per team and count alive characters
+	float team0Life = 0.0f;
+	float team1Life = 0.0f;
+	int team0Alive = 0;
+	int team1Alive = 0;
+	int team0Total = 0;
+	int team1Total = 0;
+
+	for (int i = 0; i < 4; i++) {
+		CharData* ch = g_char_state.chars[i];
+		if (!ch) continue;
+
+		if ((i & 1) == 0) {
+			// Team 0 (P1 side: slots 0, 2)
+			team0Life += ch->life;
+			team0Total++;
+			if (ch->life > 0.0f)
+				team0Alive++;
+		} else {
+			// Team 1 (P2 side: slots 1, 3)
+			team1Life += ch->life;
+			team1Total++;
+			if (ch->life > 0.0f)
+				team1Alive++;
+		}
+	}
+
+	// ── KO check: team with no alive characters loses ──
+	// Handle double KO first (both simultaneously KO'd → draw)
+	bool team0KO = (team0Total > 0 && team0Alive == 0);
+	bool team1KO = (team1Total > 0 && team1Alive == 0);
+	if (team0KO && team1KO)
+		return -1; // Double KO = draw
+	if (team0KO)
+		return 1; // P2 wins (team 0 all KO'd)
+	if (team1KO)
+		return 0; // P1 wins (team 1 all KO'd)
+
+	// ── Timeover check: team with more total life wins ──
+	if (cd.roundTime <= 0) {
+		if (team0Life > team1Life)
+			return 0; // P1 wins
+		if (team1Life > team0Life)
+			return 1; // P2 wins
+		// Equal life → draw
+		return -1;
+	}
+
+	// If neither KO nor timeover, return -1 (undetermined)
+	return -1;
+}
+
+// =========================================================================
+// char_add_anim_list — Insert a sprite into the anim list by priority
+// =========================================================================
+// SSZ: binary insertion sort by priority into the anim sprite array.
+void char_add_anim_list(
+	std::vector<AnimSpriteData>& list,
+	ActionData* action, int priority,
+	float x, float y, bool screen,
+	float xscl, float yscl, float angle, bool oVer,
+	float axscl, float ayscl, int salpha, int dalpha,
+	bool bright)
+{
+	if (!action) return;
+
+	AnimSpriteData as;
+	as.anim = action;
+	as.priority = priority;
+	as.x = x;
+	as.y = y;
+	as.screen = screen;
+	as.xscl = xscl;
+	as.yscl = yscl;
+	as.angle = angle;
+	as.oVer = oVer;
+	as.axscl = axscl;
+	as.ayscl = ayscl;
+	as.salpha = salpha;
+	as.dalpha = dalpha;
+	as.bright = bright;
+
+	// Binary insertion by priority (ascending)
+	size_t lo = 0, hi = list.size();
+	while (lo < hi) {
+		size_t mid = lo + (hi - lo) / 2;
+		if (priority < list[mid].priority) {
+			hi = mid;
+		} else {
+			lo = mid + 1;
+		}
+	}
+	list.insert(list.begin() + static_cast<std::ptrdiff_t>(lo), std::move(as));
+}
+
+// =========================================================================
+// char_draw_anim_list — Render all sprites in the anim list
+// =========================================================================
+// SSZ: drawAnimList(anims, x, y, scl * cam.baseScale())
+void char_draw_anim_list(
+	const std::vector<AnimSpriteData>& list,
+	float x, float y, float scl)
+{
+	const auto& cd = common_get_state();
+	const auto& cam = cd.cam;
+
+	for (const auto& as : list) {
+		if (!as.anim) continue;
+		if (!as.anim->ani.spr) as.anim->ani.updateSprite();
+		if (!as.anim->ani.spr) continue;
+
+		float cs = as.screen ? 1.0f : scl;
+
+		float px, py;
+		if (as.angle != 0.0f) {
+			// Angle draw path
+			if (as.screen) {
+				px = as.x;
+				py = as.y + static_cast<float>(cd.GameHeight - 240);
+			} else {
+				px = cam.xOffset - (x - as.x) * cs;
+				py = camera_ground_level(cam) + cam.yOffset
+					- (y - as.y) * cs;
+			}
+			// Angle draw deferred — use normal draw as fallback
+			as.anim->ani.draw(
+				256, px, py, cs * as.xscl * as.axscl,
+				cs * as.yscl * as.ayscl,
+				1.0f, 1.0f, 0.0f, 0.0f,
+				static_cast<float>(cd.GameWidth) / 2.0f, 0);
+		} else {
+			// Normal draw path
+			if (as.screen) {
+				px = as.x;
+				py = as.y + static_cast<float>(cd.GameHeight - 240);
+			} else {
+				px = cam.xOffset / cs - (x - as.x);
+				py = (camera_ground_level(cam) + cam.yOffset) / cs - (y - as.y);
+			}
+			as.anim->ani.draw(
+				256, px, py, cs, cs,
+				as.xscl, as.xscl, as.yscl,
+				0.0f, static_cast<float>(cd.GameWidth) / 2.0f, 0);
+		}
+	}
+}
+
+// =========================================================================
+// char_add_shadow_list — Add a shadow sprite to the shadow list
+// =========================================================================
+void char_add_shadow_list(
+	AnimSpriteData* as, int color, float offset, int alpha, float fadeoffset)
+{
+	if (!as) return;
+	auto& shadows = char_get_state().shadows;
+	ShadowSpriteData ss;
+	ss.as = as;
+	ss.color = color;
+	ss.alpha = alpha;
+	ss.offsety = offset * (as->oVer ? 1.5f : 1.0f);
+	ss.fadeoffset = fadeoffset;
+
+	// Sort by shadow's sprite priority
+	int p = as->priority;
+	size_t lo = 0, hi = shadows.size();
+	while (lo < hi) {
+		size_t mid = lo + (hi - lo) / 2;
+		if (p <= shadows[mid].as->priority) {
+			hi = mid;
+		} else {
+			lo = mid + 1;
+		}
+	}
+	shadows.insert(shadows.begin() + static_cast<std::ptrdiff_t>(lo), std::move(ss));
+}
+
+// =========================================================================
+// char_draw_shadow_list — Render all shadow sprites
+// =========================================================================
+// SSZ: drawShadowList(x, y, scl) — iterates shadows and renders each
+void char_draw_shadow_list(float x, float y, float scl) {
+	const auto& cd = common_get_state();
+	const auto& cam = cd.cam;
+	(void)scl;
+
+	for (const auto& ss : char_get_state().shadows) {
+		if (!ss.as || !ss.as->anim) continue;
+		AnimData* ani = &ss.as->anim->ani;
+		if (!ani->spr) continue;
+
+		// Compute screen position (simplified — matches SSZ shadowDraw logic)
+		float px = cam.xOffset - (x - ss.as->x) * scl;
+		float py = camera_ground_level(cam) + cam.yOffset
+			- (y + ss.as->y - ss.offsety) * scl;
+
+		// Shadow rendering via renderMugenShadow
+		SdlRect dr;
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+		SdlRect sr;
+		sr.set(ani->spr->rct_x, ani->spr->rct_y, ani->spr->rct_w, ani->spr->rct_h);
+
+		uint32_t color = static_cast<uint32_t>(ss.color);
+		int alphaVal = ss.alpha;
+		if (alphaVal > 255) alphaVal = 255;
+		if (alphaVal < 0) alphaVal = 0;
+
+		std::vector<int8_t> pluginbuf;
+		pluginbuf.reserve(1024);
+
+		renderMugenShadow(
+			dr, 0.0f, 0.0f,
+			ani->spr->pxl, color,
+			sr,
+			-px * cd.WidthScale, -py * cd.HeightScale,
+			scl * ss.as->xscl * ss.as->axscl,
+			scl * -ss.as->yscl * ss.as->ayscl,
+			1.0f, 0u,
+			alphaVal,
+			ani->spr->rle,
+			pluginbuf
+		);
+	}
+}
+
+// =========================================================================
+// char_draw_reflection — Render reflections
+// =========================================================================
+// SSZ: drawReflection(x, y, scl) — renders shadow-like reflections
+void char_draw_reflection(float x, float y, float scl) {
+	// Reflections are a type of shadow rendering — deferred
+	// The SSZ implementation is similar to drawShadowList but with
+	// vertical flip (negative yscl) and alpha adjustments.
+	// For now, render as shadows with flipped Y.
+	(void)x;
+	(void)y;
+	(void)scl;
+	// Reflection rendering deferred until shadow pipeline is verified
+}
+
+// =========================================================================
+// char_draw — Main module-level draw function
+// =========================================================================
+// SSZ: char.draw(x, y, scl) — renders the entire fight scene including
+// characters, shadows, reflections, fight UI, edge fading, and effects.
+// This is the native equivalent of the ~170-line SSZ function at line 7406
+// of char.ssz. Subsystems that are not yet converted are stubbed with
+// comments.
+void char_draw(float x, float y, float scl) {
+	CommonData& cd = common_get_state();
+	CharModuleState& cs = char_get_state();
+
+	// ── 1. Brightness: darken during super moves ──
+	// SSZ: .com.brightness = 256 >> (int)(super > 0 && superdarken != 0);
+	// The brightness field is not yet wired to rendering — skip for now.
+
+	// ── 2. Background ──
+	// SSZ: if NOBG → solid fill with palFX color; else stg~bgDraw(false, bgx, bgy, scl)
+	// bgx = x / localscl, bgy = y / localscl (SSZ char.draw() line 7440)
+	{
+		float bgx = x / cd.cam.stg.localscl;
+		float bgy = y / cd.cam.stg.localscl;
+		stage_bg_draw(false, bgx, bgy, scl);
+	}
+
+	// ── 3. Reflections and shadows ──
+	// SSZ: if(reflection > 0) drawReflection(...); drawShadowList(...)
+	// Shadow/reflection rendering deferred until stage data is wired.
+	// char_draw_shadow_list(x, y, scl);
+	// char_draw_reflection(x, y, scl);
+
+	// ── 4. Edge fading (screen borders to hide void space) ──
+	// SSZ: computes fade rects for top/bottom/left/right screen edges
+	// based on camera bounds and scroll position.
+	{
+		float off = stage_get_env_shake().getOffset();
+		const CameraData& cam = cd.cam;
+
+		// Vertical yofs/yofs2 compute the screen-space offset caused by zoom
+		// (scl > 1 means zoomed in, exposing void at screen edges).
+		float yofs = (scl > 1.0f && cam.stg.verticalfollow > 0.0f)
+			? (cam.screenZoff + static_cast<float>(cd.GameHeight - 240))
+			: static_cast<float>(cd.GameHeight);
+		yofs *= (1.0f / scl - 1.0f);
+
+		float yofs2 = (scl > 1.0f && cam.stg.verticalfollow > 0.0f)
+			? (240.0f - cam.screenZoff) * (1.0f - 1.0f / scl)
+			: 0.0f;
+
+		SdlRect rect;
+		rect.set(0, 0, cd.GameWidth, cd.GameHeight);
+
+		// ── Top edge: envShake pulls screen down, revealing void above ──
+		if (off < (yofs - y + cam.boundH) * scl) {
+			rect.h = (
+				static_cast<int>(std::ceil(
+					((yofs - y + cam.boundH) * scl - off)
+					* static_cast<float>(cd.GameHeight)))
+				+ (cd.GameHeight - 1))
+				/ cd.GameHeight;
+			common_rect_fill(rect, 0x000000, 255);
+		}
+
+		// ── Bottom edge: envShake pushes screen up, revealing void below ──
+		if (off > (-y + yofs2) * scl) {
+			rect.h = (
+				static_cast<int>(std::ceil(
+					((y - yofs2) * scl + off)
+					* static_cast<float>(cd.GameHeight)))
+				+ (cd.GameHeight - 1))
+				/ cd.GameHeight;
+			rect.y = cd.GameHeight - rect.h;
+			common_rect_fill(rect, 0x000000, 255);
+		}
+
+		// ── Horizontal bounds ──
+		float bl = std::min(x, cam.boundL);
+		float br = std::max(x, cam.boundR);
+		float xofs = static_cast<float>(cd.GameWidth) * (1.0f / scl - 1.0f) / 2.0f;
+
+		rect.set(0, 0, cd.GameWidth, cd.GameHeight);
+
+		// ── Left edge: camera scrolled left past stage left bound ──
+		if (x - xofs < bl) {
+			rect.w = (
+				static_cast<int>(std::ceil(
+					(bl - (x - xofs)) * scl * static_cast<float>(cd.GameWidth)))
+				+ (cd.GameWidth - 1))
+				/ cd.GameWidth;
+			common_rect_fill(rect, 0x000000, 255);
+		}
+
+		// ── Right edge: camera scrolled right past stage right bound ──
+		if (x + xofs > br) {
+			rect.w = (
+				static_cast<int>(std::ceil(
+					((x + xofs) - br) * scl * static_cast<float>(cd.GameWidth)))
+				+ (cd.GameWidth - 1))
+				/ cd.GameWidth;
+			rect.x = cd.GameWidth - rect.w;
+			common_rect_fill(rect, 0x000000, 255);
+		}
+	}
+
+	// ── Collect char data from character state ──
+	LifePowerData lifeBuf[4]{};
+	std::string nameBuf[4]{};
+	int lifeCount = 0;
+	int nameCount = 0;
+	for (int i = 0; i < 4; i++) {
+		CharData* ch = cs.chars[i];
+		if (ch) {
+			lifeBuf[lifeCount].l = ch->life / ch->lifeMax;
+			lifeBuf[lifeCount].p = static_cast<float>(ch->power) / 1000.0f;
+			lifeBuf[lifeCount].lv = 0;
+			lifeCount++;
+			
+			nameBuf[nameCount] = ch->name;
+			nameCount++;
+		}
+	}
+	bool nbd = false;
+	int superplayer = -1;
+	
+	// ── 5. Fight UI layer 0 ──
+	{
+		fight_get_state().fight.draw(0, lifeBuf, lifeCount, nameBuf, nameCount, nbd, superplayer);
+		fight_get_state().fight.round.draw(0, KOTy::None, nameBuf, nameCount);
+	}
+
+	// ── 6. Anim list (character sprites) ──
+	// SSZ: .drawAnimList(.anims=, x, y, scl * cam.baseScale())
+	char_draw_anim_list(cs.anims, x, y, scl * cam_base_scale(cd.cam));
+
+	// ── 7. Foreground background ──
+	// SSZ: if(!NOFG) stg~bgDraw(true, bgx, bgy, scl)
+	{
+		float bgx = x / cd.cam.stg.localscl;
+		float bgy = y / cd.cam.stg.localscl;
+		stage_bg_draw(true, bgx, bgy, scl);
+	}
+
+	// ── 8. Fight UI layer 1 ──
+	{
+		fight_get_state().fight.draw(1, lifeBuf, lifeCount, nameBuf, nameCount, nbd, superplayer);
+		fight_get_state().fight.round.draw(1, KOTy::None, nameBuf, nameCount);
+	}
+
+	// ── 9. Top anims ──
+	// SSZ: .drawAnimList(.topanims=, x, y, scl * cam.baseScale())
+	char_draw_anim_list(cs.topanims, x, y, scl * cam_base_scale(cd.cam));
+
+	// ── 10. Fight UI layer 2 ──
+	{
+		fight_get_state().fight.draw(2, lifeBuf, lifeCount, nameBuf, nameCount, nbd, superplayer);
+		fight_get_state().fight.round.draw(2, KOTy::None, nameBuf, nameCount);
+	}
+
+	// ── 11. Screen fade (intro/outro transitions) ──
+	// SSZ: fade animation for intro, KO, and outro screens
+	// Uses fight~ro data for timing — not yet converted.
+
+	// ── 12. Shutter effect ──
+	// SSZ: shuttertime > 0 draws bars from top and bottom
+	// shuttertime not yet wired — skip.
+
+	// ── 13. Cleanup ──
+	// SSZ: .com.brightness = ob; restore brightness
+	// if(clsndraw) drawClsn();
 }
 
 } // namespace ikemen::ssz_native
