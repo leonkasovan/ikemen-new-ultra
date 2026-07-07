@@ -16,6 +16,15 @@
 #include <cstdio>
 #include <cstdint>
 
+// Native SetSndBuf function from main/sdlplugin/sdlplugin.cpp (global scope).
+// Takes a stereo int32_t mix buffer (g_samples * 2 elements) and submits it
+// to the SDL audio callback for playback. Normalises samples and double-
+// buffers to avoid audio tearing. Defined at global scope, not in any namespace.
+#ifndef SSZ_STDCALL
+#define SSZ_STDCALL __stdcall
+#endif
+bool SSZ_STDCALL SetSndBuf(int32_t* buf);
+
 namespace ikemen::ssz_native {
 
 // =========================================================================
@@ -484,10 +493,14 @@ bool add_wave(const WaveData* wav) {
 }
 
 void play_sound() {
-	// Submit buffer to SDL — deferred until SDL plugin is wired.
-	// For now, just simulate the buffer management:
+	// Clear and mix all active channels into the module-level buffer
 	sndbuf_clear();
 	mix_sounds();
+
+	// Submit the mixed buffer to the SDL audio subsystem for playback.
+	// ::SetSndBuf is declared at file scope (before the namespace block)
+	// to match its definition in main/sdlplugin/sdlplugin.cpp at global scope.
+	::SetSndBuf(g_sound_state.sndbuf);
 }
 
 void stop_sound() {

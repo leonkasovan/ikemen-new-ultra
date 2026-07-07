@@ -108,19 +108,35 @@ These modules have real implementations but with deferred/suboptimal sections.
 | `TimeData::step()` — empty | fight_service.cpp:245 | Time display never updates |
 | `DisplayTextData::step()` — empty | fight_service.cpp:352 | Display text never updates |
 | `AnimFontSndData::read()` — reads sndg/sndi/fontn only | fight_service.cpp:117 | Sprite/anim read deferred |
-| All `bgDraw()` / `draw()` methods — empty (or call `(void)`) | fight_service.cpp | Rendering everywhere is deferred |
-| `FightData::draw()` — empty with comment | fight_service.cpp:450 | No lifebar/powerbar/combo rendering |
+| `AnimFontSndData::draw()` — empty | fight_service.cpp:129 | AnimFontSnd rendering deferred |
+| `NameData::draw()` — empty (TODO comment) | fight_service.cpp:500 | Name text needs font_service |
+| `TimeData::draw()` — empty (TODO comment) | fight_service.cpp:550 | Timer counter text needs font_service |
+| `ComboData::draw()` — empty (TODO comment) | fight_service.cpp:590 | Combo counter text needs font_service |
+| `FaceData::draw()` — empty (TODO comment) | fight_service.cpp:440 | Face portrait needs SFF sprite lookup |
+| `DisplayTextData::bgDraw()` / `draw()` — empty | fight_service.cpp:691 | Display text rendering deferred |
+| ⚠️ **Many other draw/bgDraw methods have REAL implementations** — see notes below | fight_service.cpp | Lifebar/Powerbar/Time/WinIcon/Round/Fight draw methods all implemented with renderMugenZoom |
+
+**Draw methods with real implementations (2026-07-07 audit):**
+- `LifebarData::bgDraw()` — renders bg0/bg1/bg2 layers via `renderMugenZoom`
+- `LifebarData::draw()` — creates clipped lrct/mrct rects with life-bar fill rendering
+- `PowerbarData::bgDraw()` — renders power bar backgrounds
+- `PowerbarData::draw()` — clipped power-bar fill rendering
+- `TimeData::bgDraw()` — renders timer background sprite
+- `TimeData::drawSimple()` — no-font fallback (renders bg only)
+- `WinIconData::draw()` — renders win icon sprites with offset looping
+- `RoundData::draw()` — full state machine (Round→Fight→KO→Win) with AnimFontSnd rendering
+- `FightData::draw()` — orchestrates all sub-component draws across 3 layers (lifebars, powerbars, faces, names, timer, win icons)
 
 ### Stage Engine (`stage_service`)
 | Gap | Location | Impact |
 |-----|----------|--------|
-| `StageData::bgDraw()` — empty | stage_service.cpp:452 | Background rendering deferred |
-| `StageData::action()` — calls `envShake.next()` only | stage_service.cpp:404 | Background animation stepping deferred |
-| `StageData::clear()` — skips bg/actionList/bgctrlList | stage_service.cpp:474-482 | Memory/reset leak |
-| `StageData::reset()` — all deferred | stage_service.cpp:478-482 | Round reset incomplete |
-| Background parsing — empty `if (secname.substr(0, 2) == "bg")` block | stage_service.cpp:404 | No background layer loading |
-| Camera draw offset calculation — deferred | stage_service.cpp:443 | Stage may render at wrong position |
-| SFF loading — commented-out placeholder | stage_service.cpp:419 | Sprite file not loaded |
+| `StageData::bgDraw()` — **~80-line real implementation** (was claimed empty) | stage_service.cpp:460-560 | Boundhigh clamping, vertical follow, drawOffsetY computation, iterates over bg layers calling `bg.draw()`. Per-layer rendering (`BackGroundData::draw()`) still stub in `bg_service.cpp`. |
+| `StageData::action()` — calls `envShake.next()` only | stage_service.cpp:465 | Background animation stepping deferred |
+| `StageData::clear()` — skips bg/actionList/bgctrlList | stage_service.cpp:577-588 | Memory/reset leak |
+| `StageData::reset()` — all deferred | stage_service.cpp:585-588 | Round reset incomplete |
+| Background section parsing — deferred | stage_service.cpp:417-419 | No background layer loading from .def bg sections |
+| Camera draw offset calculation — deferred | stage_service.cpp:458-459 | Stage may render at wrong position (① computed in `common_service.cpp` cam_update) |
+| SFF loading — deferred | stage_service.cpp:432 | Sprite file not loaded until sff_service is wired |
 
 ### Background Engine (`bg_service`)
 | Gap | Location | Impact |
@@ -206,15 +222,15 @@ These items are marked "deferred until module X is converted" in the source code
 | `loader_service` | `char_service` | Character loading via `loader_chara()` | ⚠️ Partially wired — calls `system_get_selected_char_def()` but `char_service::load()` only parses def file name, no full char init. |
 | `loader_service` | `statebuilder_service` | State compilation via `loader_state_compile()` | ❌ Returns false. No SSZ compiler handle available. |
 | `loader_service` | `thread_service` | Async load thread | ❌ Thread creation is `//deferred`. Load always runs synchronously. |
-| `stage_service` | `bg_service` | Background layer parsing and rendering | ❌ All `bgDraw()`, `action()`, section parsing deferred. |
+| `stage_service` | `bg_service` | Background layer parsing and rendering | ⚠️ `bgDraw()` orchestration implemented at stage level (calls `bg.draw()` per layer). Section parsing and `BackGroundData::draw()` still deferred in bg_service. |
 | `bg_service` | `sdlplugin_service` | `BackGroundData::draw()` — rendering | ❌ Complex parallax/window/zoom rendering not wired. |
 | `sff_service` | `sdlplugin_service` | GL texture loading, GL draw | ❌ `Load8bitTexture` init exists but no render loop integration. |
-| `fight_service` | `sdlplugin_service` / `sff_service` / `font_service` | Lifebar/powerbar/combo/text rendering | ❌ All `draw()` methods are `(void)`. |
+| `fight_service` | `sdlplugin_service` / `sff_service` / `font_service` | Lifebar/powerbar/combo/text rendering | ⚠️ **Partially wired** — Lifebar/Powerbar/Time/WinIcon/Round/Fight draw methods call `renderMugenZoom`. Name/Combo/DisplayText text rendering still deferred (needs font_service). |
 | `char_service` | `sdlplugin_service` | `CharData::drawAnim()` — sprite rendering | ✅ Implemented (44 lines, camera-transform + `anim->draw()`) |
-| `command_service` | `sdlevent_service` | `command_mod_key_state()` — input processing | ❌ Empty body. Needs to read sdlevent key state. |
+| `command_service` | `sdlevent_service` | `command_mod_key_state()` — input filtering | ✅ Implemented — `command_mod_key_state()` has full SSZ logic; `command_update()` polls sdlevent key state directly. |
 | `sound_resource_service` | `sdlplugin_service` | `play_sound()` — submit buffer to SDL audio | ❌ Buffer mixed but never sent to SDL. |
 | `share_service` | All wired modules | Automatic `pull_from_*` / `push_to_*` | ❌ Only `common_service` has explicit pull/push. |
-| `common_service` | `mesdialog_service` | `common_read_file_name()` — AsciiToLocal conversion | ❌ No-op returning input unchanged. |
+| `common_service` | `mesdialog_service` | `common_read_file_name()` — AsciiToLocal conversion | ✅ **Fixed** — now properly converts UTF-8 → ANSI code page via `MultiByteToWideChar`/`WideCharToMultiByte`. |
 
 ---
 
@@ -268,10 +284,10 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 | `video_service.cpp` | 1 | File existence check, PlayVideo delegation — no deferred items (completed) |
 | `action_service.cpp` | 1 | `.air` parser + DrawnClsnData — `draw()` rendering wiring deferred until SDL pipeline is in place |
 | `sff_service.cpp` | 5 | PNG8, GL texture, flag parsing, palette copy, standalone loading |
-| `char_service.cpp` | 11 | ProjectileData (5 stubs), Clsn, Fall, AfterImage, binding, screen bound, face, anim check, palette loading, reflection |
+| `char_service.cpp` | 14 | ProjectileData (5 stubs), Clsn, Fall, AfterImage, binding, screen bound, face, anim check, palette loading, reflection, angle draw, shadow draw, char draw subsystems |
 | `command_service.cpp` | 3 | SDL processing, keymap reset, netplay sync |
 | `share_service.cpp` | 4 | Module integration TODO, pull/push from wired modules |
-| `fight_service.cpp` | 3 | Anim read, face anim, rendering deferred |
+| `fight_service.cpp` | 11 | Anim read deferred, face anim deferred, face portrait SFF lookup deferred, name text rendering deferred, timer text rendering deferred, combo text rendering deferred, winicon count iteration deferred, 5 TODO markers for font_service wiring |
 | `loader_service.cpp` | 4 | Thread creation, state compile, char loading |
 | `sound_resource_service.cpp` | 2 | SDL submission, BGM playback |
 | `statebuilder_service.cpp` | 8 | Per-controller parsing deferred, reset methods empty, placeholder codegen |
@@ -279,7 +295,7 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 | `script_service.cpp` | 0 | (none — all 190+ callbacks registered, `ref_arg` wired, `drawTTF` with alignment/scale) |
 | `trigger_script_service.cpp` | 0 | (none — all 130+ trigger functions implemented and registered) |
 | `system_script_service.cpp` | 0 | (none — all 120+ system functions implemented and registered) |
-| `fighting_service.cpp` | 3 | Init (share/debug/char/wm setup), round loop (camera/events/debug/input/rendering), cleanup (share copy/practice/wm deinit). All 3 phases are real implementations — `//deferred` or `stub` comments mark character/stage subroutine calls that depend on other modules. |
+| `fighting_service.cpp` | 13 | Init (share/debug/char/wm setup — 4 stubs), round loop (camera/events/debug/input/rendering — 6 stubs for char/stage/hotkey access), cleanup (share copy/practice/wm deinit — 3 stubs). All 3 high-level phases are real implementations; the stubs mark character/stage subroutine calls that depend on other modules. |
 | `debug_script_service.cpp` | 0 | (none — all 25 debug functions implemented: puts, sszReload, setLife/Max/Power/Attack/Defence, selfState, addHotkey, all toggle*, step, roundReset, reload, setAccel, setAILevel, setTime, clear) |
 | `common_service.cpp` | 2 | `AsciiToLocal` no-op, callback wiring deferred |
 | `plugin_native_api.hpp` | 1 | 6 remaining plugins not consolidated |
@@ -311,7 +327,7 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 |---|---------------------------|-------------------|--------|
 | 1 | `config_service` is "Behavior implemented 🟢" | ✅ Correct — full INI save/load exists | None |
 | 2 | `stage_service` is "Behavior ❌" | ⚠️ Partially correct — `stage_service` has real `EnvShake`, `load()` with def file parsing (525 lines), but bg/SFF sections deferred | Underreport: stage is further along than documented |
-| 3 | `bg_service` is "Behavior 🟢" | ⚠️ Partially wrong — `bg_service` has BGAction, BgAction, BGCTimeLine, ActiveCtrlList real implementations (485 lines), BUT `BackGroundData::read()`/`setup()`/`draw()` are all empty | Overreport: core rendering still stub |
+| 3 | `bg_service` is "Behavior 🟢" | ✅ **TODO is actually correct** — the module status matrix shows Behavior = 🟡 (yellow/partial), not 🟢. This PENDINGS entry was itself stale. `BackGroundData::read()`/`setup()`/`draw()` are indeed stubs, justifying 🟡. | Stale PENDINGS claim — no longer a TODO discrepancy |
 | 4 | `statebuilder_service` is "Behavior 🟡" | ✅ Correct — CtrlTy enum, cmd file parser, section extraction all real. Per-controller parsing deferred. | None |
 | 5 | `fighting_service` is "Behavior ❌" | ⚠️ Previously correct (stub) — NOW UPDATED by commit: `fighting_service.cpp` is ~1040 lines of real implementation (WincntMgr auto-leveling, game() orchestration loop, 6 helpers). TODO_SSZ_CONVERSION.md has been updated to 🟢 Behavior. | ✏️ Fixed — fighting_service no longer a stub |
 | 6 | `sdlplugin_service` is "Behavior 🟡" | ⚠️ Understated — all 36 public API functions are real wrappers. Only the 3 complex render functions (renderMugenZoom, renderMugenShadow, renderFontBatch) have Reference-based bridge-layer complexity | Underreport: SDL boundary is more complete than documented |
@@ -319,6 +335,10 @@ Quick-reference count of `TODO` / `FIXME` / `deferred` / `pending` markers per f
 | 8 | `lua_service` listed as "Phase 2" priority | Actual status: full RAII LuaState with all bridge delegation methods | Priority mismatch: should be P3 (already scaffolded) |
 | 9 | "20 of 45 SSZ modules now have real native behavior" in Overview | ✅ Still accurate as of 2026-07-05 | None |
 | 10 | Stub files list includes `sdlevent_service.cpp` | ❌ Wrong — `sdlevent_service.cpp` is ~320 lines of real implementation | Stale documentation |
+| 11 | `fight_service` Behavior is 🟡 (partial) — rendering deferred | ✅ Behavior is correctly 🟡, but **draw progress is further along than the 🟡 implies** — LifebarData/PowerbarData/TimeData/WinIconData/RoundData/FightData all have real bgDraw/draw methods with renderMugenZoom calls. Only font-dependent text rendering (Name/Combo/DisplayText) and face portrait SFF lookup remain stubbed. | Underreport: draw/bgDraw is more complete than documented |
+| 12 | `command_service` — `command_update()` claimed "always returns true" / "input loop deferred" | ⚠️ **Source now has real implementation** — `command_update()` polls sdlevent key state (upKey/downKey/leftKey/rightKey/aKey/sKey/dKey/zKey/xKey/cKey/qKey/wKey/eKey) and feeds filtered input into each player's buffer via `command_mod_key_state()` filtering. Only `command_synchronize()` (netplay) remains stub. | PENDINGS claim was stale — command_update is now real |
+| 13 | `StageData::bgDraw()` claimed "empty" / rendering deferred | ⚠️ **Source has ~80-line real implementation** — boundhigh clamping, vertical follow with screen offset math, drawOffsetY exponent computation, non-zoom ceil rounding, and iteration over background layers calling `bg.draw()`. The remaining stub is `BackGroundData::draw()` in bg_service.cpp (per-layer rendering). PENDINGS itself was stale on this. | PENDINGS claim was stale — stage bgDraw orchestration is real |
+| 14 | `font_service` is "Full implementation" in PENDINGS | ✅ Correct — 952 lines with FNT v1/v2 loader, charWidth/textWidth, drawChar/drawText with renderMugenZoom/renderFontBatch, palette-banked sprite access. However, no SSZ parity traces exist for font rendering output. | Parity traces still pending for font rendering |
 
 ---
 

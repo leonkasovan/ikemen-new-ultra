@@ -918,14 +918,26 @@ void FrameMethods::readData(FrameData& frame, const std::vector<int>& ary,
 // =========================================================================
 // SSZ: Anim.draw(scrrect, x, y, xscl, yscl, xtscl, xbscl, ysscl, rxadd, agl, palFX, oVer)
 // Renders the current animation sprite at the given screen position/scale.
+// When a PalFXData* is provided and its enable flag is true, the palette is
+// transformed by palfx_transform_palette() before rendering (SSZ getFxPal).
 void AnimData::draw(int alpha, float x, float y, float xs, float ys,
-	float xts, float xbs, float yss, float rxadd, float agl, int trans)
+	float xts, float xbs, float yss, float rxadd, float agl, int trans,
+	const PalFXData* pal)
 {
 	(void)trans; // alpha mode — not used in basic rendering
 	if (!spr) return;
 	if (spr->pxl.empty() && spr->colorPallet.empty()) return;
 
 	const auto& cd = common_get_state();
+
+	// ── Apply PalFX transformation when active ──
+	// SSZ: getFxPal(src_pal, false) → workpal, pass workpal to renderer
+	// The palette is transformed only when pal is non-null and enabled.
+	const std::vector<uint32_t>* renderPal = &spr->colorPallet;
+	if (pal && pal->enable) {
+		const auto& transformed = palfx_transform_palette(*pal, spr->colorPallet, false);
+		renderPal = &transformed;
+	}
 
 	// Build source rect from sprite dimensions
 	SdlRect sr;
@@ -963,7 +975,7 @@ void AnimData::draw(int alpha, float x, float y, float xs, float ys,
 		dr,                                             // dr = scrrect
 		0.0f, 0.0f,                                     // rcx, rcy
 		spr->pxl,                                        // pxl
-		spr->colorPallet,                                // pal
+		*renderPal,                                      // pal — transformed if PalFX active
 		-1,                                              // ckey = -1
 		sr,                                              // sr = sprite rect
 		screenX,                                         // cx

@@ -121,6 +121,8 @@ inline ConfigData make_default_config() {
 	return c;
 }
 
+ConfigData& config_get_state();
+
 bool config_save(const std::string& path, const ConfigData& cfg);
 bool config_load(const std::string& path, ConfigData& cfg);
 

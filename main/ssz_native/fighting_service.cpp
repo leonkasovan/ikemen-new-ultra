@@ -875,6 +875,12 @@ void fighting_main() {
 		// ── Character actions ──
 		fs.sclmul = 1.0f; // chr.action(newx, newy, l, r, scl)
 
+		// ── Update blocking state for all characters ──
+		// Checks command input to determine which characters are holding back.
+		// Must run before projectile/attack collision checks so that
+		// guardflag-based guard detection in projClsn() is accurate.
+		char_update_blocking();
+
 		// ── Debug input ──
 		char16_t lastChar = getLastChar();
 		std::string chStr;
@@ -890,6 +896,10 @@ void fighting_main() {
 			// Continue to next frame (do-loop style: jump to start)
 			continue;
 		}
+
+		// ── Tick explods on game tick frames ──
+		// Advance animations, decrement timers, remove expired explods.
+		char_tick_explods();
 
 		// ── Pause menu trigger ──
 		if (command_start_button(cd.pauseMenu))

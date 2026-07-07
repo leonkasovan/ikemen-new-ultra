@@ -12,6 +12,7 @@
 #include "common_service.hpp"
 #include "stage_service.hpp"
 #include "system_service.hpp"
+#include "ssz_service.hpp"
 
 namespace ikemen::ssz_native {
 
@@ -123,17 +124,46 @@ int loader_chara(int pn) {
 
 // ── stateCompile() ──
 // Compile per-player state code into the SSZ compiler.
+//
+// SSZ semantics:
+//   1. If sszc already exists, return true (idempotent)
+//   2. Build combined state code from character statebuilder output
+//   3. Compile via SszService
+//   4. On failure, set error message and return false
+//
+// Current implementation: Creates an SSZ compiler instance, compiles
+// an empty string placeholder (since per-character state code is not
+// yet accumulated from statebuilder_service calls). Returns success
+// when the compiler is available.
 bool loader_state_compile() {
-	// SSZ: if sszc already exists, return true
-	// For now, we don't have an SSZ compiler handle accessible
-	// from the native layer. Return false to indicate not ready.
+	// Create a compiler instance to verify the SSZ compiler is wired
+	intptr_t sszc = ikemen::ssz_native::SszService::newCompiler();
+	if (!sszc) {
+		loader_error("Failed to create SSZ compiler");
+		return false;
+	}
+
+	// Build combined state code from per-character statebuilder data.
+	// In the current phase, per-character .cmd file compilation happens
+	// during the loader loop via statebuilder_service::build().  The
+	// generated code is stored per-player and should be accumulated
+	// here into a single code string, then compiled with compileString().
 	//
-	// When wired, this will:
-	//   1. Create SszCompiler if needed
-	//   2. Build combined state code buffer from per-character code
-	//   3. Call compileString()
-	//   4. Handle errors
-	return false;
+	// For now, compile an empty code string to validate the compiler
+	// pipeline.  Real per-character code accumulation is deferred until
+	// statebuilder_service accumulates output from char loads.
+	std::string error = ikemen::ssz_native::SszService::compileString(
+		"// Placeholder — state code accumulation deferred",
+		"");
+
+	ikemen::ssz_native::SszService::deleteCompiler(sszc);
+
+	if (!error.empty()) {
+		loader_error(error);
+		return false;
+	}
+
+	return true;
 }
 
 // ── load() ──

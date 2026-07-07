@@ -57,6 +57,11 @@ bool parse_bool(const std::string& v) {
 
 }
 
+ConfigData& config_get_state() {
+	static ConfigData g_config = make_default_config();
+	return g_config;
+}
+
 bool config_save(const std::string& path, const ConfigData& cfg) {
 	std::ofstream out(path);
 	if (!out.is_open()) return false;

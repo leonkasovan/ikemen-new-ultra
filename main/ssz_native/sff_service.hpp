@@ -140,6 +140,7 @@ struct FrameData {
 // AnimData — Animation state machine (sff.ssz &Anim)
 // =========================================================================
 struct SffData; // forward
+struct PalFXData; // forward (defined in common_service.hpp)
 
 struct AnimData {
 	std::vector<FrameData> frames;
@@ -171,7 +172,8 @@ struct AnimData {
 	int alphaFoo() const;
 
 	void draw(int alpha, float x, float y, float xs, float ys,
-		float xts, float xbs, float yss, float rxadd, float agl, int trans);
+		float xts, float xbs, float yss, float rxadd, float agl, int trans,
+		const PalFXData* pal = nullptr);
 };
 
 // =========================================================================

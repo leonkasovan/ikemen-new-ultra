@@ -462,7 +462,9 @@ LUA_DIR   = $(EXT)/lua-5.2.4
 LUA_SRCS  = $(addprefix $(LUA_DIR)/, lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c lctype.c ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c lparser.c lstate.c lstring.c lstrlib.c ltable.c ltablib.c ltm.c lundump.c lvm.c lzio.c lfs.c \
               ffi/ffi.c ffi/call.c ffi/ctype.c ffi/parser.c \
               lpeg-1.1.0/lpcap.c lpeg-1.1.0/lpcode.c lpeg-1.1.0/lpcset.c lpeg-1.1.0/lpprint.c lpeg-1.1.0/lptree.c lpeg-1.1.0/lpvm.c)
-LUA_DEFS  = -DLUA_COMPAT_LOADSTRING -DLUA_COMPAT_MODULE
+LUA_DEFS  = -DLUA_COMPAT_LOADSTRING -DLUA_COMPAT_MODULE \
+            -mno-sse3 -mno-ssse3 -mno-sse4.1 -mno-sse4.2 -mno-sse4 \
+            -mno-avx -mno-avx2 -mno-xop -mno-fma -mno-bmi -mno-bmi2
 LUA_OBJS  = $(patsubst $(LUA_DIR)/%.c,$(BLD)/lua/%.o,$(LUA_SRCS))
 
 # ---- zlib ----
@@ -734,7 +736,7 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
 
-.PHONY: all clean install test
+.PHONY: all clean install test parity-test
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
@@ -914,6 +916,76 @@ test_install: $(TEST_FILE_BIN)
 	taskkill /f /im test_file.exe 2>nul || true
 	cp -f $(TEST_FILE_BIN) install/
 	cd install && ./test_file.exe > test_result_install.log 2>&1 && grep -c "FAIL" test_result_install.log | xargs -I{} echo "FAIL={}" && grep -c "PASS" test_result_install.log | xargs -I{} echo "PASS={}"
+
+# ---- PalFX parity test (standalone) ----
+# Verifies palfx_transform_palette() against an SSZ bit-exact reference.
+# Self-contained: no project headers needed.
+PARITY_TEST_BIN = $(BLD)/palfx_parity_test.exe
+
+$(BLD)/test/palfx_parity_test.o: $(TEST)/palfx_parity_test.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) -std=c++17 -O2 -I $(MAIN) -I $(SSZ) -I $(SSZ_NATIVE) -c -o $@ $<
+
+# The standalone build also links common_service.o + stubs because the test
+# includes common_service.hpp (function declaration) but the implementation
+# is in common_service.o. The stubs satisfy fill/softFill symbols never
+# reached at runtime from palfx_transform_palette().
+PARITY_TEST_OBJS = \
+	$(BLD)/test/palfx_parity_test.o \
+	$(BLD)/test/palfx_stubs.o \
+	$(BLD)/main/ssz_native/common_service.o
+
+$(PARITY_TEST_BIN): $(PARITY_TEST_OBJS)
+	$(CXX) -std=c++17 -O2 -o $@ $(PARITY_TEST_OBJS) $(LDFLAGS)
+
+parity-test: $(PARITY_TEST_BIN)
+	$(PARITY_TEST_BIN)
+
+# ---- PalFX parity test (linked against real common_service.o) ----
+# Links the REAL palfx_transform_palette() from common_service.o, with
+# stubs for fill/softFill (never called by palfx_transform_palette()).
+PARITY_TEST_REAL_BIN = $(BLD)/palfx_parity_test_real.exe
+PARITY_TEST_REAL_OBJS = \
+	$(BLD)/test/palfx_parity_test_real.o \
+	$(BLD)/test/palfx_stubs.o \
+	$(BLD)/main/ssz_native/common_service.o
+
+$(BLD)/test/palfx_stubs.o: $(TEST)/palfx_stubs.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# Compile palfx_parity_test.cpp with full project CXXFLAGS so it can
+# find common_service.hpp and link against the real implementation.
+$(BLD)/test/palfx_parity_test_real.o: $(TEST)/palfx_parity_test.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I $(SSZ_NATIVE) -c -o $@ $<
+
+$(PARITY_TEST_REAL_BIN): $(PARITY_TEST_REAL_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(PARITY_TEST_REAL_OBJS) $(LDFLAGS)
+
+parity-test-real: $(PARITY_TEST_REAL_BIN)
+	$(PARITY_TEST_REAL_BIN)
+
+.PHONY: parity-test parity-test-real capture-vectors
+
+# ---- Known-answer vector capture ----
+CAPTURE_VEC_BIN = $(BLD)/capture_palfx_vectors.exe
+CAPTURE_VEC_OBJS = \
+	$(BLD)/test/palfx_vector_capture.o \
+	$(BLD)/test/palfx_stubs.o \
+	$(BLD)/main/ssz_native/common_service.o
+
+$(BLD)/test/palfx_vector_capture.o: $(TEST)/palfx_vector_capture.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) -std=c++17 -O2 -I $(MAIN) -I $(SSZ) -I $(SSZ_NATIVE) -c -o $@ $<
+
+$(CAPTURE_VEC_BIN): $(CAPTURE_VEC_OBJS)
+	$(CXX) -std=c++17 -O2 -o $@ $(CAPTURE_VEC_OBJS) $(LDFLAGS)
+
+# Run the capture program to generate test/palfx_known_vectors.hpp
+capture-vectors: $(CAPTURE_VEC_BIN)
+	$(CAPTURE_VEC_BIN) > $(TEST)/palfx_known_vectors.hpp
+	@echo "=== Generated $(TEST)/palfx_known_vectors.hpp ==="
 
 # ---- Native SSZ manifest target ----
 # Prints which native modules are currently active at compile time.

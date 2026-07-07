@@ -126,7 +126,40 @@ struct PalFXData {
 	float ecolor{1.0f};
 	int einvertall{}, enegType{};
 	bool enable{};
+
+	/// Advance the PalFX by one frame.
+	/// Decrements `time` if > 0. When `time` reaches 0, resets all color
+	/// transformation fields (mul/add/ampl/invert) back to neutral defaults
+	/// so the palette effect expires cleanly.
+	/// SSZ: com.PalFX::step()
+	void step();
+
+	/// Clear2: reset to defaults while preserving enable/negType.
+	/// SSZ: com.PalFX::clear2(keepFirstFlag)
+	/// When keepFirstFlag=1, preserves `enable` and `negType`.
+	void clear2(int keepFirstFlag);
 };
+
+/// Transform a source palette using PalFX effective fields, matching SSZ
+/// PalFX::getFxPal() exactly.  The transformed palette is written to a
+/// static module-level work buffer and returned as a const reference.
+///
+/// SSZ: .workpal = palfx.getFxPal(src_pal, nega)
+///
+/// The algorithm per palette entry:
+///   1. Invert all (bitwise NOT) if einvertall is set
+///   2. Blend each channel towards the average using ecolor
+///   3. Saturated subtraction of negative add components
+///   4. Per-channel: (channel + eadd*) * emul* / 256, clamped to 0-255
+///
+/// @param palfx  The PalFX whose effective fields to apply
+/// @param src_pal  Source palette (must be 256 entries, 0x00RRGGBB format)
+/// @param nega  Whether to use negative mode (negated when enegType==0)
+/// @return Reference to the internal work palette with the transformed colors
+const std::vector<uint32_t>& palfx_transform_palette(
+	const PalFXData& palfx,
+	const std::vector<uint32_t>& src_pal,
+	bool nega = false);
 
 // ── Section — config file section parser ──
 struct SectionData {
@@ -254,6 +287,10 @@ struct CommonData {
 	bool forceOver{};
 	bool timeover{};  // Set true when round ends by timer expiration (lifebar displays "Time")
 	int brightness{};
+
+	// Spark sound (configurable SFX played when a hit spark appears)
+	int sparkSoundGroup{-1};
+	int sparkSoundNumber{};
 
 	// Utility
 	static constexpr int maxSimul = 10;

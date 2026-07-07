@@ -567,4 +567,258 @@ bool common_match_over() { return common_match_over(g_common_state); }
 
 CommonData& common_get_state() { return g_common_state; }
 
+// =========================================================================
+// PalFXData methods
+// =========================================================================
+
+void PalFXData::step() {
+	// SSZ: com.PalFX::step() (common.ssz lines 952-967):
+	//   1. enable = (time != 0)
+	//   2. Copy active fields → effective fields (emul*, eadd*, ecolor, einvertall, enegType)
+	//   3. Apply sine-wave amplitude: sinAdd(eaddr=, eaddg=, eaddb=)
+	//   4. Advance sintime: if(cycletime > 0) sintime = (sintime+1) % cycletime
+	//   5. Decrement time; reset transforms when time reaches 0.
+	//
+	// The effective fields (e*) are the "live" values consumed by the rendering
+	// pipeline. The active fields (mul, add, ampl, color, invert) are the target
+	// values set by hitdefs, state controllers, or PalFX triggers. step() copies
+	// active→effective each frame so external modifiers (like sine amplitude
+	// cycling) can modulate the effective values without altering the originals.
+
+	enable = (time != 0);
+
+	if (time > 0) {
+		// ── Copy active fields to effective fields ──
+		// SSZ: emulr = mulr; emulg = mulg; emulb = mulb;
+		emulr = mulr;
+		emulg = mulg;
+		emulb = mulb;
+		// SSZ: eaddr = addr; eaddg = addg; eaddb = addb;
+		eaddr = addr;
+		eaddg = addg;
+		eaddb = addb;
+		// SSZ: ecolor = color; einvertall = invertall; enegType = negType;
+		ecolor = color;
+		einvertall = invertall;
+		enegType = negType;
+
+		// ── Apply sine-wave amplitude to effective add values ──
+		// SSZ: sinAdd(eaddr=, eaddg=, eaddb=) with amplr/amplg/amplb as amplitude.
+		// Sine wave: sin(PI*2*sintime + (cycletime==2 ? PI/2 : 0)) / cycletime
+		// Result is added to eaddr/eaddg/eaddb: eaddr += (int)(sin * amplr)
+		// Uses math::PI (double constant from math_service.hpp) for cross-platform safety.
+		if (cycletime >= 2) {
+			double phase = (math::PI * 2.0 * static_cast<double>(sintime)
+				+ (cycletime == 2 ? math::PI / 2.0 : 0.0))
+				/ static_cast<double>(cycletime);
+			float sinVal = static_cast<float>(std::sin(phase));
+			eaddr += static_cast<int>(sinVal * static_cast<float>(amplr));
+			eaddg += static_cast<int>(sinVal * static_cast<float>(amplg));
+			eaddb += static_cast<int>(sinVal * static_cast<float>(amplb));
+		}
+
+		// ── Advance cycle counter ──
+		// SSZ: if(cycletime > 0) sintime = (sintime+1) % cycletime
+		if (cycletime > 0) {
+			sintime = (sintime + 1) % cycletime;
+		}
+
+		// ── Decrement time; reset transforms on expiry ──
+		// SSZ: if(time > 0) time--
+		time--;
+		if (time == 0) {
+			// Reset hit-effect transforms to neutral defaults.
+			// color and cycletime persist — they set base palette color level
+			// and cycle behavior separate from hit-effect transform fields.
+			mulr = mulg = mulb = 256;
+			addr = addg = addb = 0;
+			amplr = amplg = amplb = 0;
+			invertall = 0;
+		}
+	}
+}
+
+// =========================================================================
+// palfx_transform_palette — Apply PalFX to a 256-color palette
+// =========================================================================
+// SSZ: com.PalFX::getFxPal(^uint pal, bool nega)
+// Full implementation matching the SSZ bit-exact algorithm.
+//
+// The palette is in 0x00RRGGBB format (R at [23:16], G at [15:8], B at [7:0]).
+// Each of 256 entries is transformed by:
+//   1. Bitwise NOT if einvertall is set
+//   2. ecolor blend: each channel lerps towards the RGB average
+//   3. Saturated subtraction of negative add components (packed into subc)
+//   4. Per-channel: (channel + eadd*) * emul* / 256, clamped to 0-255
+
+namespace {
+	// Module-level work palette buffer (SSZ: ^uint workpal; workpal.new(256))
+	static std::vector<uint32_t> s_workpal(256, 0);
+}
+
+const std::vector<uint32_t>& palfx_transform_palette(
+	const PalFXData& palfx,
+	const std::vector<uint32_t>& src_pal,
+	bool nega)
+{
+	// ── SSZ structure (common.ssz lines 969-1000):
+	//   1. bool neg = enegType == 0 ? nega : false;
+	//   2. branch{ cond neg: mr=mg=mb=256; else: mr=emulr,... }   ← once
+	//   3. limRange(mr/mg/mb, 0, 255*256)                         ← once
+	//   4. adr=eaddr, adg=eaddg, adb=eaddb; addsubset(subc,adr,adg,adb)  ← once
+	//   5. loop{i=0..255} apply transform using fixed mr/mg/mb/ad*/subc
+
+	bool neg = (palfx.enegType == 0) ? nega : false;
+
+	// Ensure work palette has 256 entries
+	if (s_workpal.size() < 256)
+		s_workpal.resize(256, 0);
+
+	// ── Step 2: Set per-channel multiply values (fixed for all iterations) ──
+	// SSZ: branch{ cond neg: mr=mg=mb=256; else: mr=emulr, mg=emulg, mb=emulb }
+	int mr_i, mg_i, mb_i;  // stored as int (SSZ uses int, not uint32)
+	if (neg) {
+		mr_i = mg_i = mb_i = 256;
+	} else {
+		mr_i = palfx.emulr;
+		mg_i = palfx.emulg;
+		mb_i = palfx.emulb;
+	}
+
+	// SSZ: .m.limRange!int?(mr=, 0, 255*256); etc.
+	mr_i = std::max(0, std::min(255 * 256, mr_i));
+	mg_i = std::max(0, std::min(255 * 256, mg_i));
+	mb_i = std::max(0, std::min(255 * 256, mb_i));
+
+	uint32_t mr = static_cast<uint32_t>(mr_i);
+	uint32_t mg = static_cast<uint32_t>(mg_i);
+	uint32_t mb = static_cast<uint32_t>(mb_i);
+
+	// ── Step 4: addsubset logic (SSZ inner function, called once) ──
+	// Extracts negative add values into a packed subc subtraction mask,
+	// caps positive add values to prevent overflow after multiplication.
+	// This modifies adr/adg/adb (the caller's variables) AND packs subc.
+	int adr = palfx.eaddr;
+	int adg = palfx.eaddg;
+	int adb = palfx.eaddb;
+	uint32_t subc = 0;
+
+	// SSZ: in neg mode, r=g=b=-1 inside addsubset
+	if (neg) {
+		adr = adg = adb = -1;
+	}
+
+	// bar(): if add value < 0, capture its magnitude into a subtraction
+	// byte (0-255) and set the add value to 0.
+	uint32_t s_r = 0, s_g = 0, s_b = 0;
+	auto bar = [](int& add_val, uint32_t& sub_byte) {
+		if (add_val < 0) {
+			uint32_t abs_val = static_cast<uint32_t>(-add_val);
+			sub_byte = (abs_val < 255u) ? abs_val : 255u;
+			add_val = 0;
+		}
+	};
+	bar(adr, s_r);
+	bar(adg, s_g);
+	bar(adb, s_b);
+
+	// baz(): cap positive add value to prevent overflow:
+	//   limit = (255 * 256 * 256) / max(1, mul)
+	auto baz = [](int& add_val, uint32_t mul) {
+		if (add_val > 0 && mul > 0) {
+			int limit = static_cast<int>((255u * 256u * 256u) / std::max(1u, mul));
+			if (add_val > limit)
+				add_val = limit;
+		}
+	};
+	baz(adr, mr);
+	baz(adg, mg);
+	baz(adb, mb);
+
+	// Pack subtraction values: subc = sb | sg<<8 | sr<<16 (matching SSZ 0x00RRGGBB)
+	// where bits 0-7 = Blue subtraction, 8-15 = Green, 16-23 = Red
+	subc = s_b | (s_g << 8) | (s_r << 16);
+
+	// ── Step 5: Loop over all 256 palette entries ──
+	for (int i = 0; i < 256; i++) {
+		uint32_t c = src_pal[i];
+
+		// ── Step 5a: Invert all (bitwise NOT) ──
+		// SSZ: if(`einvertall != 0) c = !c;
+		if (palfx.einvertall != 0) {
+			c = ~c;
+		}
+
+		// ── Step 5b: ecolor blend ──
+		// SSZ: each channel lerps towards the average of all three:
+		//   c = B + (avg-B)*(1-ecolor) | (G + (avg-G)*(1-ecolor))<<8 | (R + (avg-R)*(1-ecolor))<<16
+		{
+			uint32_t blue   =  c        & 0xFF;
+			uint32_t green  = (c >> 8)  & 0xFF;
+			uint32_t red    = (c >> 16) & 0xFF;
+			float avg = static_cast<float>(red + green + blue) * (1.0f / 3.0f);
+			float invEcolor = 1.0f - palfx.ecolor;
+			blue  = static_cast<uint32_t>(static_cast<float>(blue)  + (avg - static_cast<float>(blue))  * invEcolor);
+			green = static_cast<uint32_t>(static_cast<float>(green) + (avg - static_cast<float>(green)) * invEcolor);
+			red   = static_cast<uint32_t>(static_cast<float>(red)   + (avg - static_cast<float>(red))   * invEcolor);
+			c = (blue & 0xFF) | ((green & 0xFF) << 8) | ((red & 0xFF) << 16);
+		}
+
+		// ── Step 5c: Saturated subtraction of subc from c ──
+		// SSZ bit hack for per-byte saturated subtraction:
+		//   tmp = (((!c & subc) << 1) + ((!c ^ subc) & 0xfefefefe)) & 0x01010100;
+		//   c = (c - subc + tmp) & !(tmp - (tmp >> 8));
+		{
+			uint32_t tmp = (((~c & subc) << 1) + ((~c ^ subc) & 0xfefefefe)) & 0x01010100;
+			c = (c - subc + tmp) & ~(tmp - (tmp >> 8));
+		}
+
+		// ── Step 5d: Per-channel multiply after add ──
+		// SSZ:
+		//   tmp = ((c&0xff) + (uint)adb) * (uint)mb >> 8;   // Blue: (B + adb)*mb/256
+		//   tmp = tmp_clamp_B | (((c>>8&0xff) + adg) * mg >> 8) << 8;  // Green
+		//   tmp = tmp_clamp_BG | (((c>>16&0xff) + adr) * mr >> 8) << 16; // Red
+		// Clamp each channel to 0-255 (matches SSZ's saturation via tmp mask).
+		{
+			// Blue channel: (B + adb) * mb / 256
+			uint32_t tmp_b = (static_cast<uint32_t>((c & 0xFF) + static_cast<uint32_t>(adb)) * mb) >> 8;
+			if (tmp_b > 255) tmp_b = 255;
+
+			// Green channel: (G + adg) * mg / 256
+			uint32_t tmp_g = (static_cast<uint32_t>(((c >> 8) & 0xFF) + static_cast<uint32_t>(adg)) * mg) >> 8;
+			if (tmp_g > 255) tmp_g = 255;
+
+			// Red channel: (R + adr) * mr / 256
+			uint32_t tmp_r = (static_cast<uint32_t>(((c >> 16) & 0xFF) + static_cast<uint32_t>(adr)) * mr) >> 8;
+			if (tmp_r > 255) tmp_r = 255;
+
+			// SSZ: .workpal[i] = tmp | -(uint)((tmp&0xff000000)!=0x0)<<0d16;
+			// Since we clamp individually, this fits cleanly in 24 bits.
+			s_workpal[i] = (tmp_b & 0xFF) | ((tmp_g & 0xFF) << 8) | ((tmp_r & 0xFF) << 16);
+		}
+	}
+
+	return s_workpal;
+}
+
+void PalFXData::clear2(int keepFirstFlag) {
+	// SSZ: com.PalFX::clear2(keepFirstFlag)
+	if (keepFirstFlag == 0) {
+		enable = false;
+		negType = 0;
+	}
+	time = 0;
+	mulr = mulg = mulb = 256;
+	addr = addg = addb = 0;
+	amplr = amplg = amplb = 0;
+	cycletime = 0; sintime = 0;
+	color = 1.0f;
+	invertall = 0;
+	emulr = emulg = emulb = 256;
+	eaddr = eaddg = eaddb = 0;
+	ecolor = 1.0f;
+	einvertall = 0;
+	enegType = 0;
+}
+
 } // namespace ikemen::ssz_native
