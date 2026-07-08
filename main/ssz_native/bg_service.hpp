@@ -116,7 +116,8 @@ struct BackGroundData {
 	void read(SectionData& sc, BackGroundData* link);
 	void setup();
 	void draw(float x, float y, float scl, float bgscl,
-		float localscl, float xscale, float yscale, float shakeY);
+		float localscl, float xscale, float yscale, float shakeY,
+		const PalFXData* fx = nullptr);
 };
 
 // =========================================================================

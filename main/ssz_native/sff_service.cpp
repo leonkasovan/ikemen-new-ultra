@@ -922,7 +922,7 @@ void FrameMethods::readData(FrameData& frame, const std::vector<int>& ary,
 // transformed by palfx_transform_palette() before rendering (SSZ getFxPal).
 void AnimData::draw(int alpha, float x, float y, float xs, float ys,
 	float xts, float xbs, float yss, float rxadd, float agl, int trans,
-	const PalFXData* pal)
+	const PalFXData* pal, const SdlRect* clipRect)
 {
 	(void)trans; // alpha mode — not used in basic rendering
 	if (!spr) return;
@@ -945,7 +945,11 @@ void AnimData::draw(int alpha, float x, float y, float xs, float ys,
 
 	// Build destination rect (full screen — scrrect)
 	SdlRect dr;
-	dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+	if (clipRect) {
+		dr = *clipRect;
+	} else {
+		dr.set(0, 0, cd.GameWidth, cd.GameHeight);
+	}
 
 	// Build tile rect (zero-origin)
 	SdlRect tile;

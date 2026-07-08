@@ -44,6 +44,7 @@ std::string to_lower(std::string s) {
 
 static StageData g_stage;
 static EnvShakeData g_env_shake;
+static PalFXData g_bg_palfx;
 static std::string g_bgmusic;
 
 // =========================================================================
@@ -553,10 +554,12 @@ void StageData::bgDraw(bool t, float x, float y, float scl) {
 	// SSZ: loop index i = 0; while i < #bg; if visible && toplayer == t && #anim.spr > 0 → draw(...)
 	{
 		auto& bgState = bg_get_state();
+		PalFXData& bgPalfx = stage_get_bg_palfx();
 		for (size_t i = 0; i < bgState.layers.size(); i++) {
 			auto& bg = bgState.layers[i];
 			if (bg.visible && bg.toplayer == t && bg.anim && bg.anim->spr) {
-				bg.draw(posx, posy, scl, bgscl, localscl, xscale, yscale, yofs);
+				bg.draw(posx, posy, scl, bgscl, localscl, xscale, yscale, yofs,
+					bgPalfx.enable ? &bgPalfx : nullptr);
 			}
 		}
 	}
@@ -622,6 +625,10 @@ void stage_reset() {
 
 EnvShakeData& stage_get_env_shake() {
 	return g_env_shake;
+}
+
+PalFXData& stage_get_bg_palfx() {
+	return g_bg_palfx;
 }
 
 std::string& stage_get_bgmusic() {

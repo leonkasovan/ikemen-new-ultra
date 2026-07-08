@@ -48,11 +48,49 @@ void ClsnHanteiData::clear() {
 void ClsnHanteiData::set(float xs1, float ys1, float xo1, float yo1, int lr1,
 	float xs2, float ys2, float xo2, float yo2, int lr2)
 {
-	// Original SSZ-compatible stub — stores transform parameters for use by
-	// external callers that prefer the old interface.  New code should use
-	// setFromFrame() + testOverlap() instead.
-	(void)xs1; (void)ys1; (void)xo1; (void)yo1; (void)lr1;
-	(void)xs2; (void)ys2; (void)xo2; (void)yo2; (void)lr2;
+	// SSZ-compatible parameter storage — stores scale, offset, and facing
+	// for use by testRects() (SSZ hantei()).
+	// Set 1 (e.g. attacker/projectile clsn)
+	xscl1 = xs1; yscl1 = ys1; xofs1 = xo1; yofs1 = yo1; facing1 = lr1;
+	// Set 2 (e.g. target clsn)
+	xscl2 = xs2; yscl2 = ys2; xofs2 = xo2; yofs2 = yo2; facing2 = lr2;
+}
+
+bool ClsnHanteiData::testRects(const Rect& c1, const Rect& c2) const {
+	// SSZ hantei() — tests two local-space rects using stored transform params.
+	// Step 1: Apply facing-aware L/R swapping.
+	// SSZ lrset1/lrset2: pLrSet when facing>=0 (l=c.l, r=c.r),
+	// mLrSet when facing<0 (l=c.r, r=c.l).
+	float l1, r1, l2, r2;
+	if (facing1 >= 0) {
+		l1 = static_cast<float>(c1.l);
+		r1 = static_cast<float>(c1.r);
+	} else {
+		l1 = static_cast<float>(c1.r);
+		r1 = static_cast<float>(c1.l);
+	}
+	if (facing2 >= 0) {
+		l2 = static_cast<float>(c2.l);
+		r2 = static_cast<float>(c2.r);
+	} else {
+		l2 = static_cast<float>(c2.r);
+		r2 = static_cast<float>(c2.l);
+	}
+
+	// Step 2: AABB overlap check using transformed coords with scale + offset.
+	// SSZ: l1*xscl1+xofs1 < r2*xscl2+xofs2
+	//   && l2*xscl2+xofs2 < r1*xscl1+xofs1
+	//   && c1.t*yscl1+yofs1 < (c2.b+1.0)*yscl2+yofs2
+	//   && c2.t*yscl2+yofs2 < (c1.b+1.0)*yscl1+yofs1
+	// Note: bottom edge uses (c2.b + 1.0) / (c1.b + 1.0) — the +1 accounts
+	// for M.U.G.E.N's clsn convention where rect bottom is exclusive.
+	return
+		l1 * xscl1 + xofs1 < r2 * xscl2 + xofs2
+		&& l2 * xscl2 + xofs2 < r1 * xscl1 + xofs1
+		&& static_cast<float>(c1.t) * yscl1 + yofs1
+			< (static_cast<float>(c2.b) + 1.0f) * yscl2 + yofs2
+		&& static_cast<float>(c2.t) * yscl2 + yofs2
+			< (static_cast<float>(c1.b) + 1.0f) * yscl1 + yofs1;
 }
 
 void ClsnHanteiData::setFromFrame(int clsnSet, const FrameData& frame, int frameClsnIdx,
@@ -1656,7 +1694,71 @@ void CharData::load(const std::string& defPath) {
 }
 
 void CharData::loadPallet(const std::string& defPath, int no) {
-	(void)defPath; (void)no;
+	// SSZ char.ssz line 2710: loads .act palette file and remaps SFF palette table.
+	// The SSZ version is complex: reads .act files per palette slot, remaps
+	// SFF palList, and manages palExist/palSelectable arrays.
+	//
+	// Simplified native: construct .act file path relative to .def directory
+	// and read 768 bytes (256 RGB triplets) into a palette array on CharGlobalInfo.
+	// Full SFF palette table remapping is deferred until sff_service palList is
+	// wired for runtime palette operations.
+	//
+	// .act file naming convention (M.U.G.E.N standard):
+	//   Pal<no>.act  or  name<no>.act  or  <defname>.act
+	// Where no is 1-indexed (1-12 typically).
+	if (defPath.empty() || no < 0) return;
+
+	// Try constructing: <defDir>/Pal<no>.act  then  <defDir>/<name><no>.act
+	std::string dir;
+	size_t slash = defPath.find_last_of("/\\");
+	if (slash != std::string::npos) {
+		dir = defPath.substr(0, slash + 1);
+	} else {
+		dir = "";
+	}
+
+	// Try palette files in priority order
+	std::vector<std::string> candidates;
+	// Pal<no>.act (M.U.G.E.N standard naming)
+	candidates.push_back(dir + "Pal" + std::to_string(no) + ".act");
+	// pal<no>.act (lowercase variant)
+	candidates.push_back(dir + "pal" + std::to_string(no) + ".act");
+	// <defname>.<no>.act (alternate naming)
+	size_t dot = defPath.find_last_of('.');
+	if (dot != std::string::npos && dot > slash) {
+		std::string baseName = defPath.substr(slash + 1, dot - slash - 1);
+		candidates.push_back(dir + baseName + std::to_string(no) + ".act");
+	}
+
+	for (const auto& path : candidates) {
+		FILE* f = fopen(path.c_str(), "rb");
+		if (!f) continue;
+
+		// Read 256 RGB triplets (768 bytes) — standard .act format
+		// .act files are exactly 768 bytes, 3 bytes per color (R, G, B)
+		uint8_t palette[768];
+		size_t bytesRead = fread(palette, 1, 768, f);
+		fclose(f);
+
+		if (bytesRead == 768) {
+			// Store palette as 256 uint32_t ARGB entries
+			// For now, just parse and store — actual SFF palette remap deferred
+			// SSZ: .cgi[playerno].sf~palList.palTable.set(...)
+			// Native: store in a simple vector for future use
+			std::vector<uint32_t> palColors(256);
+			for (int i = 0; i < 256; i++) {
+				uint8_t r = palette[i * 3];
+				uint8_t g = palette[i * 3 + 1];
+				uint8_t b = palette[i * 3 + 2];
+				palColors[i] = 0xFF000000 | (static_cast<uint32_t>(r) << 16)
+					| (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
+			}
+			// Store on CharGlobalInfo for use by sff_service palette remapping
+			// cgi[playerno].palData[no] = std::move(palColors);
+			// TODO: Wire palData storage when CharGlobalInfo is extended
+		}
+		break; // Found and processed the first candidate
+	}
 }
 
 void CharData::clearDef() {
@@ -1750,27 +1852,82 @@ void CharData::gravityStep() {
 }
 
 void CharData::bind() {
-	// SSZ char.ssz lines 3573-3598:
-	//   if(`sysivar[.iBINDTIME] == 0) ret;
-	//   ^`self c = .players.get(`sysivar[.iBINDTOID]);
-	//   branch{
-	//   cond #c > 0:
-	//     if(c~hasTarget(`id)){
-	//       if(c~ls(.lsDESTROY)){ `trSelfState(5050, -1, -1); break, break, else; }
-	//       if(!.m.isnan(`sysfvar[.fBINDPOSX])){
-	//         `setXV((float)(`facing*c~facing)*c~sysfvar[.fVX]);
-	//       }
-	//       if(!.m.isnan(`sysfvar[.fBINDPOSY])) `setYV(c~sysfvar[.fVY]);
-	//     }
-	//   else:
-	//     `setBindTime(0); ret;
-	//   }
-	//   if(!.m.isnan(`sysfvar[.fBINDPOSX])){
-	//     float f = (float)(#`sysivar[.iBINDFACING] == 2 ? `sysivar[.iBINDFACING]/2 : c~facing);
-	//     `setX(c~sysfvar[.fX] + f*`sysfvar[.fBINDPOSX]);
-	//   }
-	// Simplified: bind position matching is deferred until full CharData sysvar array is wired.
-	// Currently just a placeholder for the bind lifecycle.
+	// SSZ char.ssz lines 3573-3612: character binding (throws, grabs, ride)
+	// Syncs position, velocity, and facing with the bound target character.
+	//
+	// Native implementation uses dedicated fields (bindTime/bindToId/bindPosX/Y/bindFacing)
+	// instead of sysivar/sysfvar arrays. Core logic matches SSZ.
+
+	// Early out if not bound
+	if (bindTime == 0) return;
+
+	// Find the target character by playerNo
+	CharData* target = nullptr;
+	CharModuleState& cs = char_get_state();
+	for (int i = 0; i < 4; i++) {
+		if (cs.chars[i] && cs.chars[i]->playerNo == bindToId) {
+			target = cs.chars[i];
+			break;
+		}
+	}
+
+	if (target) {
+		// SSZ: if(c~hasTarget(id)) — check if target considers us bound
+		// Simplified: assume binding is symmetric (both sides participate)
+
+		// SSZ: if(c~ls(.lsDESTROY)) → selfState(5050)
+		// We don't have ls() flags — skip destroy check for now
+
+		// SSZ: sync velocity from target when bind pos is set (not NaN)
+		if (!std::isnan(bindPosX)) {
+			// SSZ: setXV((float)(facing * c.facing) * c.sysfvar[fVX])
+			// The multiplier (facing * c.facing) determines relative direction:
+			//   facing same direction: +1 (move same direction as target)
+			//   facing opposite: -1 (move opposite direction)
+			float dirFactor = static_cast<float>(facing * target->facing);
+			xvel = dirFactor * target->xvel;
+		}
+		if (!std::isnan(bindPosY)) {
+			yvel = target->yvel;
+		}
+
+		// SSZ: sync position from target
+		// x = c.x + f * bindPosX  where f = bindFacing==2 ? bindFacing/2 : c.facing
+		if (!std::isnan(bindPosX)) {
+			float f;
+			if (bindFacing == 2) {
+				f = static_cast<float>(bindFacing) / 2.0f; // 2/2 = 1.0
+			} else {
+				f = static_cast<float>(target->facing);
+			}
+			x = target->x + f * bindPosX;
+			pos_x = x;
+		}
+
+		if (!std::isnan(bindPosY)) {
+			y = target->y + bindPosY;
+			pos_y = y;
+		}
+
+		// SSZ: sync facing from target based on bindFacing mode
+		// SSZ: branch{ cond sysivar[iBINDFACING] > 0: setFacing(c.facing)
+		//            cond sysivar[iBINDFACING] < 0: setFacing(-c.facing) }
+		// bindFacing: positive = match target, negative = opposite, 0 = no change
+		if (bindFacing > 0) {
+			facing = target->facing;
+		} else if (bindFacing < 0) {
+			facing = -target->facing;
+		}
+	} else {
+		// SSZ: target not found → unbind
+		bindTime = 0;
+		return; // Don't decrement bindTime when already reset
+	}
+
+	// Decrement bind timer each frame (SSZ: handled by state machine tick)
+	if (bindTime > 0) {
+		bindTime--;
+	}
 }
 
 void CharData::xScreenBound() {

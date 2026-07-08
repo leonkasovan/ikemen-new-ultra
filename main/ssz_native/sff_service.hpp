@@ -20,6 +20,9 @@
 
 #include "file_service.hpp"   // for FileHandle
 
+// Forward declarations
+namespace ikemen::ssz_native { struct SdlRect; }
+
 namespace ikemen::ssz_native {
 
 // =========================================================================
@@ -173,7 +176,8 @@ struct AnimData {
 
 	void draw(int alpha, float x, float y, float xs, float ys,
 		float xts, float xbs, float yss, float rxadd, float agl, int trans,
-		const PalFXData* pal = nullptr);
+		const PalFXData* pal = nullptr,
+		const SdlRect* clipRect = nullptr);
 };
 
 // =========================================================================

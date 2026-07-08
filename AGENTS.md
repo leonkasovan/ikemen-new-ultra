@@ -143,7 +143,7 @@ Full status: [TODO_SSZ_CONVERSION.md](./TODO_SSZ_CONVERSION.md) · [native_ssz_c
 
 ### Tests
 
-Run the native SSZ test suite from the project root:
+Run the native SSZ test suite from the project root (preferred):
 ```bash
 make CONFIG=Debug test
 ```
@@ -153,6 +153,18 @@ To run from the real runtime environment (uses actual chars, stages, and .snd fi
 make CONFIG=Debug test_install
 ```
 
-This kills any stale test_file.exe process, copies the binary to install/, runs the tests, and counts PASS assertions. No files are deleted from `install/`.
+**Known limitation:** `test_install` links all engine objects including the BGM preloader thread. When `.snd` files are present in `install/`, the background thread's `[Memory]` output interleaves with test output and may crash before the full suite completes. For a clean run, use `make test` (runs from `build/` away from assets).
+
+To run in complete isolation (no asset interference):
+```bash
+export PATH=/c/x86devkit/bin:$PATH
+mkdir -p /tmp/test_isolated
+cd /tmp/test_isolated
+/path/to/build/Debug/test_file.exe
+```
+
+**Trace note:** The trace guard in `main/ssz_native/ssz_trace.hpp` uses `#if IKEMEN_ENABLE_PLUGIN_TRACE` (not `#ifdef`). Always pass an explicit value:
+- `IKEMEN_ENABLE_PLUGIN_TRACE=1` → trace enabled
+- `IKEMEN_ENABLE_PLUGIN_TRACE=0` or undefined → trace disabled
 
 The test suite covers 45+ SSZ modules with 379+ assertions across 55 test functions. All tests pass with 0 failures as of 2026-07-05.

@@ -75,9 +75,17 @@ struct ClsnHanteiData {
 	std::vector<Rect> clsn1;   // Set 1 world-space rects (e.g. projectile clsn1)
 	std::vector<Rect> clsn2;   // Set 2 world-space rects (e.g. character clsn2)
 
+	// ── Stored transform parameters (SSZ ClsnHantei fields) ──
+	// Set by set() and consumed by testRects() / hantei().
+	// xscl/yscl = scale factors, xofs/yofs = position offsets,
+	// facing = -1 (left) or 1 (right) — determines L/R flip.
+	float xscl1{}, yscl1{}, xofs1{}, yofs1{}; int facing1{1};
+	float xscl2{}, yscl2{}, xofs2{}, yofs2{}; int facing2{1};
+
 	void clear();
 
-	/// Original SSZ-compatible stub — stores params for future use.
+	/// SSZ-compatible parameter storage — stores scale, offset, and facing
+	/// for use by testRects() (equivalent to SSZ hantei()).
 	/// (xs, ys = scale; xo, yo = offset; lr = facing direction)
 	void set(float xs1, float ys1, float xo1, float yo1, int lr1,
 		float xs2, float ys2, float xo2, float yo2, int lr2);
@@ -96,6 +104,14 @@ struct ClsnHanteiData {
 	/// Check if any rect in clsn1 overlaps with any in clsn2 (AABB).
 	/// Returns true on first detected overlap, false if no overlap found.
 	bool testOverlap() const;
+
+	/// SSZ hantei() — test a single rect pair using stored transform params.
+	/// Applies facing-aware L/R swapping, scale, and offset, then checks
+	/// AABB overlap between the two transformed rects.
+	/// @param c1  First Rect (local/clsn1-space, typically attacker/projectile)
+	/// @param c2  Second Rect (local/clsn2-space, typically target)
+	/// @return    true if the two rects overlap after transform
+	bool testRects(const Rect& c1, const Rect& c2) const;
 
 	/// Static: AABB overlap test between two world-space rectangles.
 	static bool rectsOverlap(const Rect& a, const Rect& b);
@@ -405,6 +421,13 @@ struct CharData {
 	float life{1000.0f};
 	float lifeMax{1000.0f};
 	int power{};
+
+	// ── Bind state (for throws/grabs) ──
+	int bindTime{};            // SSZ: sysivar[iBINDTIME] — remaining bind frames, 0 = not bound
+	int bindToId{-1};          // SSZ: sysivar[iBINDTOID] — target character playerNo
+	float bindPosX{NAN};       // SSZ: sysfvar[fBINDPOSX] — X offset from target, NaN = no X bind
+	float bindPosY{NAN};       // SSZ: sysfvar[fBINDPOSY] — Y offset from target, NaN = no Y bind
+	int bindFacing{};          // SSZ: sysivar[iBINDFACING] — 0=no facing sync, 1=mirror, 2=opposite
 
 	// ── Attack / defence ──
 	float attackMul{1.0f};

@@ -21,6 +21,9 @@ inline constexpr double kStagePi = 3.14159265358979323846;
 
 namespace ikemen::ssz_native {
 
+// Forward declarations
+struct PalFXData; // defined in common_service.hpp
+
 // ── PlayerData ──
 // Maps to &.Player in stage.ssz. Player start positions and facing.
 struct PlayerData {
@@ -147,10 +150,8 @@ void stage_clear();
 void stage_reset();
 
 /// Access the module-global EnvShake state.
-EnvShakeData& stage_get_env_shake();
-
-/// Access the module-global bgPalFX (opaque PalFX reference).
-// com::PalFXData& stage_get_bg_palfx();  // deferred
+EnvShakeData& stage_get_env_shake();	/// Access the module-global bgPalFX for background palette effects.
+	PalFXData& stage_get_bg_palfx();
 
 /// Access the module-global bgmusic string.
 std::string& stage_get_bgmusic();

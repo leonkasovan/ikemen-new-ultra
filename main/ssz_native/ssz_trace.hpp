@@ -33,7 +33,7 @@
 #define TRACE_SDL   UINT32_C(64)
 #define TRACE_SYS   UINT32_C(128)
 
-#ifdef IKEMEN_ENABLE_PLUGIN_TRACE
+#if IKEMEN_ENABLE_PLUGIN_TRACE
 #include <cstdio>
 #ifndef IKEMEN_TRACE_MASK
 #define IKEMEN_TRACE_MASK UINT32_MAX  // all categories by default

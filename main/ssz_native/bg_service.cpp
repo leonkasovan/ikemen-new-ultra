@@ -6,6 +6,7 @@
 
 #include "bg_service.hpp"
 #include "common_service.hpp"
+#include "sdlplugin_service.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -279,12 +280,177 @@ void BackGroundData::setup() {
 }
 
 void BackGroundData::draw(float x, float y, float scl, float bgscl,
-	float localscl, float xscale, float yscale, float shakeY)
+	float localscl, float xscale, float yscale, float shakeY,
+	const PalFXData* fx)
 {
-	// Rendering deferred until sdlplugin is converted.
-	// The SSZ draw() method has complex parallax/window/zoom logic.
-	(void)x; (void)y; (void)scl; (void)bgscl;
-	(void)localscl; (void)xscale; (void)yscale; (void)shakeY;
+	// SSZ BackGround::draw() — parallax, zoom compensation, raster effects,
+	// window clipping, and sprite rendering.
+	if (!anim || !anim->spr) return;
+
+	const auto& cd = common_get_state();
+
+	// ── 1. Raster x-aspect ratio ──
+	// SSZ: xras = (rasterxbspeed - rasterxtspeed) / rasterxtspeed
+	float xras;
+	if (rasterxtspeed != 0.0f) {
+		xras = (rasterxbspeed - rasterxtspeed) / rasterxtspeed;
+	} else {
+		xras = 0.0f;
+	}
+	float xbs = xbscale;
+
+	// ── 2. Horizontal zoom compensation ──
+	// SSZ: dx = max(0.0, deltax * bgscl)
+	float dx = std::max(0.0f, deltax * bgscl);
+	// SSZ: sclx = max(0.0, scl + (1.0 - scl)*(1.0 - dx))
+	float sclx = std::max(0.0f, scl + (1.0f - scl) * (1.0f - dx));
+
+	if (sclx != 0.0f) {
+		// SSZ: xbs *= max(0.0, scl + (1.0-scl)*(1.0 - dx*(xbs/xtscale))) / sclx
+		float denom = 1.0f / sclx;
+		float xbsFactor;
+		if (xtscale != 0.0f) {
+			xbsFactor = std::max(0.0f,
+				scl + (1.0f - scl) * (1.0f - dx * (xbs / xtscale)));
+		} else {
+			xbsFactor = std::max(0.0f,
+				scl + (1.0f - scl) * (1.0f - dx));
+		}
+		xbs *= xbsFactor * denom;
+
+		// SSZ: tmp *= max(0.0, scl + (1.0-scl)*(1.0 - dx*(xras+1.0)))
+		//       xras -= tmp - 1.0
+		float tmp = denom * std::max(0.0f,
+			scl + (1.0f - scl) * (1.0f - dx * (xras + 1.0f)));
+		xras -= tmp - 1.0f;
+		xbs *= tmp;
+	}
+
+	// ── 3. Combined x/y scale ──
+	float lxscl = localscl * xscale;
+	sclx *= lxscl;
+
+	// SSZ: scly = max(0.0, scl + (1.0-scl)*(1.0 - max(0.0, deltay*bgscl))) * localscl
+	float dy = std::max(0.0f, deltay * bgscl);
+	float scly = std::max(0.0f,
+		scl + (1.0f - scl) * (1.0f - dy)) * localscl;
+
+	// ── 4. Background position ──
+	// SSZ: x2 = startx + xofs - (x/xscale + camstartx)*deltax + bga.xoffset
+	float x2 = startx + xofs
+		- ((x / xscale) + camstartx) * deltax
+		+ bga.xoffset;
+	// SSZ: y2 = starty - (y/yscale)*deltay + bga.yoffset
+	float y2 = starty
+		- (y / yscale) * deltay
+		+ bga.yoffset;
+
+	// ── 5. Grid snapping (non-zoom mode) ──
+	// SSZ: if !zoom, snap x2/y2 to bgscl grid under certain conditions
+	if (!cd.cam.zoom) {
+		if (rasterxbspeed == rasterxtspeed
+			&& bga.sinxlooptime <= 0
+			&& bga.sinxoffset == 0.0f)
+		{
+			x2 = std::floor(x2 / bgscl) * bgscl;
+		}
+		if (bga.sinylooptime <= 0 && bga.sinyoffset == 0.0f) {
+			y2 = std::floor(y2 / bgscl) * bgscl;
+		}
+	}
+
+	// ── 6. Y scale factor ──
+	// SSZ: ys = (100.0 - y * yscaledelta) * bgscl / yscalestart
+	float ys = (100.0f - y * yscaledelta) * bgscl / yscalestart;
+
+	// ── 7. Apply bgscl to position ──
+	x2 *= bgscl;
+	// SSZ: y2 = y2*bgscl + ((GameHeight - shakeY) / scly - 240.0) / yscale
+	if (scly != 0.0f && yscale != 0.0f) {
+		y2 = y2 * bgscl
+			+ ((static_cast<float>(cd.GameHeight) - shakeY) / scly - 240.0f)
+			/ yscale;
+	} else {
+		y2 = y2 * bgscl;
+	}
+	scly *= yscale;
+
+	// SSZ: lyscl = localscl * yscale (needed for both window clipping and raster x-add)
+	float lyscl = localscl * yscale;
+
+	// ── 8. Window clipping rect (SSZ: win_x/y/w/h → startrect) ──
+	// The SSZ computes wsclx/wscly with zoom/delta formula, then transforms
+	// the startrect into screen-space for the dest rect clipping.
+	// Default values (-32768, -32768, 65535, 65535) mean "no clipping" —
+	// in that case we pass nullptr and use the full screen.
+	const SdlRect* pClipRect = nullptr;
+	SdlRect clipRect;
+	bool hasWindowClip = !(win_x == -32768 && win_y == -32768
+		&& win_w == 65535 && win_h == 65535);
+	if (hasWindowClip) {
+		// SSZ: wsclx = max(0.0, scl + (1.0-scl)*(1.0 - max(0.0, windowdeltax*bgscl)))
+		//        * bgscl * lxscl
+		float wsclx = std::max(0.0f,
+			scl + (1.0f - scl) * (1.0f - std::max(0.0f, windowdeltax * bgscl)))
+			* bgscl * lxscl;
+		// SSZ: wscly = max(0.0, scl + (1.0-scl)*(1.0 - max(0.0, windowdeltay*bgscl)))
+		//        * bgscl * lyscl
+		float wscly = std::max(0.0f,
+			scl + (1.0f - scl) * (1.0f - std::max(0.0f, windowdeltay * bgscl)))
+			* bgscl * lyscl;
+
+		// SSZ: rect.x = floor((win_x - (x+camstartx)*windowdeltax) * WidthScale * wsclx)
+		clipRect.x = static_cast<int>(std::floor(
+			(static_cast<float>(win_x) - (x + camstartx) * windowdeltax)
+			* cd.WidthScale * wsclx));
+		// SSZ: rect.y = floor(((win_y - y*windowdeltay)*wscly - shakeY + (GameHeight-240))
+		//        * HeightScale)
+		clipRect.y = static_cast<int>(std::floor(
+			((static_cast<float>(win_y) - y * windowdeltay) * wscly
+				- shakeY + static_cast<float>(cd.GameHeight - 240))
+			* cd.HeightScale));
+		// SSZ: rect.w = ceil(win_w * WidthScale * wsclx)
+		clipRect.w = static_cast<int>(std::ceil(
+			static_cast<float>(win_w) * cd.WidthScale * wsclx));
+		// SSZ: rect.h = ceil(win_h * HeightScale * wscly)
+		clipRect.h = static_cast<int>(std::ceil(
+			static_cast<float>(win_h) * cd.HeightScale * wscly));
+
+		pClipRect = &clipRect;
+	}
+
+	// ── 9. Render via AnimData::draw() ──
+	// SSZ: anim.draw(rect=, x2, y2, sclx, scly, xtscale*bgscl, xbs*bgscl, ys,
+	//           xras * x2 / (ys*lyscl*(float)anim.spr.rct_h),
+	//           GameWidth/2.0, fx, true)
+	//
+	// Native mapping (signature differs from SSZ):
+	//   native: draw(alpha, x, y, xs, ys, xts, xbs, yss, rxadd, agl, trans, pal)
+	//   SSZ:    draw(rect=, x2, y2, sclx, scly, xtscale*bgscl, xbs*bgscl, ys,
+	//               rasterxadd, GameWidth/2.0, fx, oVer)
+
+	// Compute rasterxadd for native (rxadd parameter)
+	// SSZ: xras * x2 / (ys * lyscl * (float)anim.spr.rct_h)
+	// lyscl is already computed above (section 7) = localscl * yscale
+	float rasterxadd = 0.0f;
+	if (ys != 0.0f && lyscl != 0.0f && anim->spr->rct_h > 0) {
+		rasterxadd = xras * x2
+			/ (ys * lyscl * static_cast<float>(anim->spr->rct_h));
+	}
+
+	anim->draw(
+		256,                                      // alpha (full opacity)
+		x2, y2,                                   // position
+		sclx, scly,                               // base scales
+		xtscale * bgscl,                          // xts (x top scale)
+		xbs * bgscl,                              // xbs (x bottom scale)
+		ys,                                       // yss (y scale)
+		rasterxadd,                               // rxadd (raster x add)
+		static_cast<float>(cd.GameWidth) / 2.0f,  // agl (angle/rotation)
+		0,                                        // trans (blend mode, unused)
+		fx,                                       // pal (PalFX — from stage or null)
+		pClipRect                                 // clipRect (window clipping or null)
+	);
 }
 
 // =========================================================================

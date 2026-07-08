@@ -12,18 +12,31 @@ Build:
 2. Release : `make 2>&1 | tee build-release.log`
 
 Tests:
-- `make CONFIG=Debug test` — full native SSZ test suite (379+ assertions, 0 failures) — runs from project root
-- `make CONFIG=Debug test_install` — same tests run from the install/ runtime environment (uses real chars, stages, .snd files) — kills stale process, deploys binary, runs, counts PASS
+- `make CONFIG=Debug test` — full native SSZ test suite (379+ assertions across 55 functions, 0 failures) — runs from project root (preferred)
+- `make CONFIG=Debug test_install` — same tests run from the install/ runtime environment (uses real chars, stages, .snd files). **Known limitation:** the test binary links all engine objects including the BGM preloader thread; when run from `install/` with `.snd` files present, the background thread interleaves output and may crash. For a clean run, prefer `make test`.
 - `make CONFIG=Debug test_common` — utility functions
 - `make CONFIG=Debug test_command` — command loading (kfm.cmd)
 - `make CONFIG=Debug test_integration` — cross-module validation
 - `make CONFIG=Debug test_matchflow` — match state machine (13 tests, 0 failures)
 - `make test_sff|font|animation|action|stage CONFIG=Release` — interactive SDL2 tests
 
+To run tests in isolation (avoids any asset interference):
+```bash
+export PATH=/c/x86devkit/bin:$PATH
+mkdir -p /tmp/test_isolated
+cd /tmp/test_isolated
+/path/to/build/Debug/test_file.exe
+```
+
 Test results: `docs/native_test_results.txt`
 
 Runtime Trace Capture:
-Traces log every SSZ plugin ABI call with category filtering to reduce noise:
+Traces log every SSZ plugin ABI call with category filtering to reduce noise.
+
+**Important:** The trace guard in `main/ssz_native/ssz_trace.hpp` uses `#if IKEMEN_ENABLE_PLUGIN_TRACE` (not `#ifdef`). This means:
+- `IKEMEN_ENABLE_PLUGIN_TRACE=1` → trace enabled
+- `IKEMEN_ENABLE_PLUGIN_TRACE=0` or undefined → trace disabled
+- A plain `-DIKEMEN_ENABLE_PLUGIN_TRACE` (with no value) will **not** enable trace; always pass `=1` explicitly.
 
 ```powershell
 # Trace only SDL operations (render, input, display, BGM)
