@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "bg_service.hpp"
+
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -83,7 +85,7 @@ struct StageData {
 	// bgctrlList: %&.bg.BGCtrl[]  (background control list)
 	// bgctl:  &.bg.BGCTimeLine    (background control timeline)
 	// bgcdef: &.bg.BGCtrl         (default bgctrl)
-	// bga:    &.bg.BGAction       (background action state)
+	BGActionData bga;                           // Stage-level background action state (drives camera xOffset/yOffset)
 	// airFileMethods: &.sff.AirFileMethods
 
 	// ── Parsed fields ──

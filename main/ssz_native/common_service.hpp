@@ -93,8 +93,9 @@ float cam_base_scale(const CameraData& cam);
 /// Update camera runtime state (scale, zoff, screenX, screenY, position).
 /// SSZ: cam.update(scl, x, y) — called after round transitions and during
 /// the fight loop to sync camera computed fields with current position/scale.
-/// xOffset/yOffset depend on stage BGA data (stg.bga.xoffset/yoffset) which
-/// is not yet wired; they are stubbed to 0.0f.
+/// xOffset/yOffset use bgaXOffset/bgaYOffset from the camera struct, which
+/// are populated by StageData::action() each frame from the stage's
+/// BGActionData (sinusoidal background action offsets).
 void cam_update(CameraData& cam, const CommonData& cd, float scl, float x, float y);
 
 // Helper: compute camera ground level from stage zoffset

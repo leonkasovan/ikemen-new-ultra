@@ -474,9 +474,7 @@ LUA_DIR   = $(EXT)/lua-5.2.4
 LUA_SRCS  = $(addprefix $(LUA_DIR)/, lapi.c lauxlib.c lbaselib.c lbitlib.c lcode.c lcorolib.c lctype.c ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c liolib.c llex.c lmathlib.c lmem.c loadlib.c lobject.c lopcodes.c loslib.c lparser.c lstate.c lstring.c lstrlib.c ltable.c ltablib.c ltm.c lundump.c lvm.c lzio.c lfs.c \
               ffi/ffi.c ffi/call.c ffi/ctype.c ffi/parser.c \
               lpeg-1.1.0/lpcap.c lpeg-1.1.0/lpcode.c lpeg-1.1.0/lpcset.c lpeg-1.1.0/lpprint.c lpeg-1.1.0/lptree.c lpeg-1.1.0/lpvm.c)
-LUA_DEFS  = -DLUA_COMPAT_LOADSTRING -DLUA_COMPAT_MODULE \
-            -mno-sse3 -mno-ssse3 -mno-sse4.1 -mno-sse4.2 -mno-sse4 \
-            -mno-avx -mno-avx2 -mno-xop -mno-fma -mno-bmi -mno-bmi2
+LUA_DEFS  = -DLUA_COMPAT_LOADSTRING -DLUA_COMPAT_MODULE
 LUA_OBJS  = $(patsubst $(LUA_DIR)/%.c,$(BLD)/lua/%.o,$(LUA_SRCS))
 
 # ---- zlib ----
@@ -1091,9 +1089,10 @@ install: $(TARGET)
 	@echo "=== Installed to install/ ==="
 
 # ---- Fast unit test target (foundation modules only) ----
-# Tests only the pure C++ native services that don't need SDL, OpenGL,
-# audio, or video subsystems. Links only the essential plugin objects
-# and NO external libraries (except standard system libs).
+# Tests the pure C++ native services (file I/O, math, string, crypto,
+# stack, time, config, consts, shell, thread).  Links all external
+# libraries via ALL_LIBS because test objects include sdlplugin.o,
+# ogg.o, sound.o, etc. which have external dependencies.
 # Build time: ~seconds instead of minutes.
 TEST_FAST_OBJS = \
 	$(BLD)/test/test_fast.o \
@@ -1125,14 +1124,19 @@ TEST_FAST_OBJS = \
 TEST_FAST_BIN  = $(BLD)/test_fast.exe
 
 $(TEST_FAST_BIN): $(TEST_FAST_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FAST_OBJS) $(LIB_LUA) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FAST_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
 
 test-fast: $(TEST_FAST_BIN)
 	@echo "=== Fast unit tests (foundation modules only) ==="
 	$(TEST_FAST_BIN)
 	@echo "=== Fast unit tests complete ==="
 
-.PHONY: test-fast parity-test parity-test-real capture-vectors
+.PHONY: test-fast check parity-test parity-test-real capture-vectors
+
+# ---- check: run both fast foundation tests and full regression suite ----
+# Verifies that both test targets build and pass. Foundation tests run first
+# (fast feedback), then the full suite for comprehensive coverage.
+check: test-fast test
 
 # ---- Native Lua test (script/trigger/system_script modules) ----
 # Links full engine but only calls init + registration verification.

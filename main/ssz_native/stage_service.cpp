@@ -460,13 +460,33 @@ std::string StageData::load(const std::string& defPath) {
 }
 
 void StageData::action() {
+	SSZ_TRACE_CAT(TRACE_SYS, "StageData::action");
 	// envShake.next() is called each frame
 	g_env_shake.next();
 
-	// Background action stepping deferred until bg_service converts.
-	// SSZ: bgctl.step!self?(=);
-	//      bga.action();
-	//      for each bg: bg[i].bga.action(), if active bg[i].anim.action()
+	// Step stage-level BGA action (sinusoidal position/offset update)
+	// SSZ: bga.action();
+	bga.action();
+
+	// Step each background layer's BGA action and sprite animation
+	// SSZ: for each bg: bg[i].bga.action(), if active bg[i].anim.action()
+	{
+		auto& bgState = bg_get_state();
+		for (auto& bg : bgState.layers) {
+			bg.bga.action();
+			if (bg.active && bg.anim) {
+				bg.anim->action();
+			}
+		}
+	}
+
+	// Sync stage-level BGA offsets to camera for xOffset/yOffset computation
+	// SSZ: cam_update uses stg.bga.xoffset * localscl * xscale * scl
+	{
+		CommonData& cd = common_get_state();
+		cd.cam.bgaXOffset = bga.xoffset;
+		cd.cam.bgaYOffset = bga.yoffset;
+	}
 }
 
 void StageData::bgDraw(bool t, float x, float y, float scl) {
@@ -585,7 +605,7 @@ void StageData::reset() {
 	SSZ_TRACE_CAT(TRACE_SYS, "StageData::reset");
 	// EnvShake is reset between rounds by the caller (stage_reset()),
 	// which triggers g_env_shake.clear().
-	// bga.clear() deferred — bg_service types not yet defined.
+	bga.clear();
 	// bg: [void(i=){i.reset();}] deferred.
 	// bgctrlList: [void(i=){i.currenttime = 0;}] deferred.
 	// bgctl.clear(), then bgctl.add(bgctrlList[i]) for each in reverse — deferred.

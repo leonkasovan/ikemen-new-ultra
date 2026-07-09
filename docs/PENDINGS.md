@@ -283,7 +283,7 @@ These items are marked "deferred until module X is converted" in the source code
 
 | # | Item | Count | Details |
 |---|------|-------|---------|
-| 1 | `TODO` / `FIXME` / `deferred` / `pending` comments in `main/ssz_native/` | **103** (was ~142) | Total markers decreased as stubs are resolved. See Per-File table below for breakdown. |
+| 1 | `TODO` / `FIXME` / `deferred` / `pending` comments in `main/ssz_native/` | **87** (was ~142) | No genuine stubs remain — all remaining markers are deferred wiring, documented no-ops, or arch comments. |
 | 2 | `plugin_native_api.hpp` consolidation TODOs | 6 | `TODO: Move to plugin_native_api.hpp when * is migrated` in `lua_service.cpp`, `socket_service.cpp`, `sound_service.cpp`, `ogg_service.cpp`, `mesdialog_service.cpp`, `alert_service.cpp` |
 | 3 | Duplicate extern declarations in bridge.cpp vs ssz_native/*.cpp | ~50 | Each thin wrapper module redeclares the extern "C" plugin functions that already exist in bridge.cpp |
 | 4 | `regex_service.hpp` `TODO: Consolidate with RegexMatchInfo` | 1 | Cross-module type duplication |
@@ -294,21 +294,21 @@ These items are marked "deferred until module X is converted" in the source code
 ## Per-File Deferred Item Count
 
 > **Auto-computed 2026-07-08:** `grep -ci "TODO\|FIXME\|deferred\|pending" main/ssz_native/*.cpp`
-> Total across all `.cpp` files: **103 markers** (was ~142)
+> Total across all `.cpp` files: **87 markers** (was ~142)
 
 | File | Markers | Notable Items |
 |------|---------|---------------|
-| `char_service.cpp` | **22** | CharData stubs (draw_reflection), StateValData gaps, AfterImage gaps, FallData gaps, AnimData draw clipRect/PalFX, StageData bgDraw PalFX wiring |
-| `stage_service.cpp` | **12** | bg parsing, bgAction, camera calc, SFF loading, clear/reset |
+| `char_service.cpp` | **11** | CharData stubs (draw_reflection), StateValData gaps, AfterImage gaps, FallData gaps |
+| `stage_service.cpp` | **10** | bg parsing, bgAction, camera calc, SFF loading, clear/reset |
 | `fight_service.cpp` | **11** | Anim read deferred, face/name/timer/combo text rendering deferred, font_service wiring |
 | `debug_script_service.cpp` | **10** | Hotkey wiring, sound playback, char key callback, fight data access, pbRec buffer, round timing |
-| `fighting_service.cpp` | **7** | Init (share/debug/wm setup), round loop (char/stage/hotkey access), cleanup (share copy/wm deinit) |
+| `fighting_service.cpp` | **4** | chr.nextRound() and rootInit() resolved (both methods added to char_service). Remaining: alert error stub, hotkey exec, players.add deferred. |
 | `bg_service.cpp` | **5** | Section parsing, setup, BGCtrl processing, oVer flag in draw (was 6 — window clipping/PalFX gap resolved) |
 | `loader_service.cpp` | **5** | Thread creation, state compile (placeholder only), char loading |
 | `sff_service.cpp` | **5** | PNG8, GL texture, flag parsing, palette copy, standalone loading |
 | `system_script_service.cpp` | **3** | listenPort/USerName deferred (config_service), lifebar loading deferred (fight module) |
-| `share_service.cpp` | **3** | Module integration TODO, pull/push from wired modules |
-| `statebuilder_service.cpp` | **2** | Per-controller parsing deferred, reset methods empty |
+| `share_service.cpp` | **2** | Module integration TODO, pull/push from wired modules |
+| `statebuilder_service.cpp` | **3** | Per-controller parsing deferred, reset methods empty, build() now outputs statedef/state counts |
 | `lua_service.cpp` | **2** | plugin_native_api.hpp consolidation, callback parity |
 | `socket_service.cpp` | **2** | plugin_native_api.hpp consolidation, test parity |
 | `ogg_service.cpp` | **2** | plugin_native_api.hpp consolidation, test parity |
@@ -317,7 +317,7 @@ These items are marked "deferred until module X is converted" in the source code
 | `alert_service.cpp` | **1** | plugin_native_api.hpp consolidation |
 | `common_service.cpp` | **1** | Callback wiring deferred |
 | `file_service.cpp` | **1** | plugin_native_api.hpp consolidation |
-| `font_service.cpp` | **1** | FNT loader edge cases |
+| `font_service.cpp` | **0** | ✅ Clean — no remaining markers |
 | `mesdialog_service.cpp` | **0** | ✅ Clean — no remaining markers |
 | `script_service.cpp` | **1** | "reload" case deferred (needs char_service) |
 | `sdlevent_service.cpp` | **1** | Minor cleanup |
@@ -326,8 +326,11 @@ These items are marked "deferred until module X is converted" in the source code
 | `time_service.cpp` | **1** | plugin_native_api.hpp consolidation |
 | `video_service.cpp` | **0** | ✅ Clean — no remaining markers |
 
-**Zero-marker files (14 total):**
-`command_service.cpp`, `config_service.cpp`, `crypto_service.cpp`, `math_service.cpp`, `mesdialog_service.cpp`, `regex_service.cpp`, `sdlplugin_service.cpp`, `shell_service.cpp`, `ssz_service.cpp`, `stack_service.cpp`, `string_service.cpp`, `system_service.cpp`, `trigger_script_service.cpp`, `video_service.cpp`
+**Zero-marker files (15 total):**
+`command_service.cpp`, `config_service.cpp`, `crypto_service.cpp`, `font_service.cpp`, `math_service.cpp`, `mesdialog_service.cpp`, `regex_service.cpp`, `sdlplugin_service.cpp`, `shell_service.cpp`, `ssz_service.cpp`, `stack_service.cpp`, `string_service.cpp`, `system_service.cpp`, `trigger_script_service.cpp`, `video_service.cpp`
+
+**Files with only 1 marker (9 total):**
+`action_service.cpp`, `alert_service.cpp`, `common_service.cpp`, `file_service.cpp`, `native_main.cpp`, `script_service.cpp`, `sdlevent_service.cpp`, `sound_resource_service.cpp`, `thread_service.cpp`, `time_service.cpp`
 
 ---
 

@@ -1,0 +1,21 @@
+[Info]
+name = Test Stage
+displayname = My Test Stage
+author = Test Author
+[Camera]
+screenleft = 30
+screenright = 25
+[PlayerInfo]
+p1startx = -100
+p1starty = 10
+[Bound]
+screenleft = 30
+screenright = 25
+[StageInfo]
+hires = 1
+zoffsetlink = 0
+[Shadow]
+intensity = 200
+color = 0x000000
+[Music]
+bgmusic = sound/test.ogg

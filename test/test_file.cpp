@@ -2343,6 +2343,73 @@ static void test_stage_service()
     // L2: bgmusic accessor
     std::string& bgm = stage_get_bgmusic();
     TEST(L"stage_get_bgmusic returns ref", true);
+
+    // ---- BGActionData wiring tests (StageData::action / reset) ----
+
+    // L2: StageData::action() advances bga position with velocity
+    {
+        StageData sd_act;
+        sd_act.bga.vx = 2.0f;
+        sd_act.bga.vy = 3.0f;
+        sd_act.action();
+        TEST(L"StageData action advances bga.x", sd_act.bga.x == 2.0f);
+        TEST(L"StageData action advances bga.y", sd_act.bga.y == 3.0f);
+    }
+
+    // L2: StageData::action() syncs camera bgaXOffset/YOffset from bga.xoffset/yoffset
+    {
+        StageData sd_cam;
+        sd_cam.bga.sinxtime = 0;
+        sd_cam.bga.sinxlooptime = 0;
+        sd_cam.bga.sinytime = 0;
+        sd_cam.bga.sinylooptime = 0;
+        sd_cam.bga.x = 42.0f;
+        sd_cam.bga.y = 99.0f;
+        sd_cam.action();
+        // After action: xoffset = x + sinxoffset = 42 + 0 = 42
+        //               yoffset = y + sinyoffset = 99 + 0 = 99
+        CommonData& cd_sync = common_get_state();
+        TEST(L"StageData action syncs cam.bgaXOffset", cd_sync.cam.bgaXOffset == 42.0f);
+        TEST(L"StageData action syncs cam.bgaYOffset", cd_sync.cam.bgaYOffset == 99.0f);
+    }
+
+    // L2: StageData::reset() calls bga.clear()
+    {
+        StageData sd_reset;
+        sd_reset.bga.x = 100.0f;
+        sd_reset.bga.y = 200.0f;
+        sd_reset.bga.vx = 5.0f;
+        sd_reset.reset();
+        TEST(L"StageData reset clears bga.x", sd_reset.bga.x == 0.0f);
+        TEST(L"StageData reset clears bga.vx", sd_reset.bga.vx == 0.0f);
+    }
+
+    // L2: BGActionData action() computes xoffset = x + sinxoffset after velocity
+    {
+        BGActionData ba_off;
+        ba_off.x = 10.0f;
+        ba_off.vx = 1.0f;
+        ba_off.action();
+        // After action: x = 11, sinxlooptime=0 → sinxoffset=0, xoffset = 11 + 0 = 11
+        TEST(L"BGAction action xoffset with velocity",
+            std::abs(ba_off.xoffset - 11.0f) < 0.001f);
+    }
+
+    // L2: BGActionData action() with sine motion computes sinxoffset
+    {
+        BGActionData ba_sin;
+        ba_sin.xradius = 10.0f;
+        ba_sin.sinxtime = 0;
+        ba_sin.sinxlooptime = 360;
+        ba_sin.action();
+        // sin(0 * 2*PI / 360) = 0 → sinxoffset = 10 * 0 = 0
+        TEST(L"BGAction sinxoffset at t=0",
+            std::abs(ba_sin.sinxoffset - 0.0f) < 0.001f);
+        // Second frame: sin(1 * 2*PI / 360) ≈ sin(1°) ≈ 0.01745
+        ba_sin.action();
+        TEST(L"BGAction action sine advances sinxoffset at t=1",
+            ba_sin.sinxoffset > 0.0f && ba_sin.sinxtime == 2);
+    }
 }
 
 // ---- BG service tests (ssz_native::bg) ----

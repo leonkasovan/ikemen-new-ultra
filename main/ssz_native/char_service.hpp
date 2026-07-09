@@ -499,6 +499,8 @@ struct CharData {
 	void setXV(float xv);
 	void setYV(float yv);
 
+	void nextRound();
+	void rootInit();
 	void drawAnim();
 	void furimuki();
 	void posUpdateSub();

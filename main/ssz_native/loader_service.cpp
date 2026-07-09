@@ -73,7 +73,7 @@ bool loader_stage() {
 //
 // Current implementation:
 //   - Basic framework: returns 0 (no character needed) since
-//     select data is empty and char_service is a stub
+//     select data is empty and loader_chara not yet wired into char_service APIs
 //   - When wired, will handle team modes and character loading
 int loader_chara(int pn) {
 	const CommonData& cd = common_get_state();

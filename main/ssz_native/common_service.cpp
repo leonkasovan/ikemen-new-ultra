@@ -491,9 +491,9 @@ void cam_update(CameraData& cam, const CommonData& cd, float scl, float x, float
 		+ (1.0f - scl) * static_cast<float>(cd.GameHeight);
 
 	// `xOffset = stg.bga.xoffset * localscl * xscale * scl;
-	// bgaXOffset/bgaYOffset are set by the stage's background action system
-	// (BGActionData::action()) each frame. Until the background system is fully
-	// wired, they default to 0.0f — matching the previous stub behavior.
+	// bgaXOffset/bgaYOffset are set by StageData::action() each frame via
+	// BGActionData::action() on the stage-level BGA. The stage syncs its
+	// bga.xoffset/bga.yoffset to cam.bgaXOffset/bgaYOffset after each step.
 	cam.xOffset = cam.bgaXOffset * cam.stg.localscl * cam.stg.xscale * scl;
 	cam.yOffset = cam.bgaYOffset * cam.stg.localscl * cam.stg.yscale * scl;
 

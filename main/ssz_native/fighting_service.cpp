@@ -28,6 +28,7 @@
 #include <lua.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <sstream>
@@ -566,7 +567,15 @@ static void fighting_reset(FightingState& fs, CommonData& cd) {
 
 	common_reset_frame_time();
 
-	// chr.nextRound() — stub (function not yet in char_service)
+	// Call char.nextRound() for each active character
+	{
+		const CharModuleState& cs_nr = char_get_state();
+		for (int i = 0; i < 4; i++) {
+			if (cs_nr.chars[i]) {
+				cs_nr.chars[i]->nextRound();
+			}
+		}
+	}
 
 	fs.x = 0.0f;
 	fs.newx = 0.0f;
@@ -619,8 +628,7 @@ void fighting_main() {
 		if (!cd.debugScript.empty()) {
 			std::string err = debug_load_file(cd.debugScript);
 			if (!err.empty()) {
-				// alert error — stub for now
-				(void)err;
+				std::fprintf(stderr, "[FIGHT] debug script load error: %s\n", err.c_str());
 			}
 		}
 
@@ -638,7 +646,7 @@ void fighting_main() {
 		std::vector<int> level(4, 0);
 		for (int i = 0; i < 4; i++) {
 			if (cs.chars[i]) {
-				// char.rootInit() stub
+				cs.chars[i]->rootInit();
 				level[i] = wm.getLevel(i);
 
 				// Power sharing between team members
@@ -820,9 +828,24 @@ void fighting_main() {
 				cd.rexisted[i]++;
 
 			if (!common_match_over()) {
-				// Mid-match round transition (Turns mode stub)
-				bool p1TurnWin = true;
-				bool p2TurnWin = true;
+				// Mid-match round transition
+				// Determine which team still has alive characters after the round.
+				// In Turns mode, when a team has at least one alive character left,
+				// they can continue (the next character tags in). Otherwise the
+				// team loses the match.
+				bool team0Alive = false, team1Alive = false;
+				for (int t = 0; t < 4; t++) {
+					CharData* ch_t = cs.chars[t];
+					if (!ch_t) continue;
+					if (ch_t->life > 0.0f) {
+						if ((t & 1) == 0) team0Alive = true;
+						else team1Alive = true;
+					}
+				}
+				// p1TurnWin = P1 team still has alive characters
+				// p2TurnWin = P2 team still has alive characters
+				bool p1TurnWin = team0Alive;
+				bool p2TurnWin = team1Alive;
 
 				if ((cd.tmode.size() < 1 || cd.tmode[0] != static_cast<int>(TeamMode::Turns) || p1TurnWin) &&
 					(cd.tmode.size() < 2 || cd.tmode[1] != static_cast<int>(TeamMode::Turns) || p2TurnWin)) {
@@ -1032,7 +1055,11 @@ void fighting_main() {
 	// Stage bgctl cleanup
 	// chr.stg~bgctl.clear();
 
-	// Stop netplay if active — cmd.net~stop() stub
+	// Stop netplay if active — no-op (netplay not yet implemented)
+	// cmd.net~stop() in SSZ: stops network synchronization.
+	// Native: no netplay module exists yet, so this is intentionally a no-op.
+	// When netplay is added, this will call net_stop() to cleanly shut down
+	// the network layer before saving share state.
 
 	// Share save
 	// share~copy();

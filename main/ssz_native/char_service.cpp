@@ -2109,6 +2109,41 @@ void CharData::furimuki() {
 	}
 }
 
+void CharData::nextRound() {
+	// SSZ char.ssz: prepares character for a new round within the same match.
+	// Resets position, clears hit-by tracking, resets state machine to
+	// default standing state, and clears per-round flags.
+	posReset();
+	stVal.clear();
+	stateno = 0;
+	timeInState = 0;
+	hitPause = false;
+	hitPauseTime = 0;
+	ctrl = false;
+	blocking = false;
+	hitdef.setDefault();
+	palfx.clear2(1);
+	palfx.enable = false;
+	fallPending = false;
+	fallWasAirborne = false;
+}
+
+void CharData::rootInit() {
+	// SSZ char.ssz: match-start initialization for the root character.
+	// Runs once at the start of the match (not per-round).
+	// Sets up global character state including level-based life/power scaling
+	// and debug flags. The per-character power/life scaling from level[]
+	// is handled by fighting_main() init block, so this function handles
+	// character-specific root setup only.
+	//
+	// For the native implementation, this is intentionally minimal —
+	// character-level init already ran in load()/init(), and the remaining
+	// SSZ rootInit() logic (level-based power scaling, team life calc) is
+	// handled directly in fighting_main()'s initialization block.
+	stVal.clear();
+	hitdef.setDefault();
+}
+
 void CharData::posUpdateSub() {
 	posUpdate();
 }
