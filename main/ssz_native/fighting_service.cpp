@@ -367,10 +367,16 @@ static void fighting_draw_debug(float& y, const std::string& line, CommonData& c
 
 	// Character status info
 	if (!cd.debugScript.empty()) {
+		const CharModuleState& cs_stats = char_get_state();
 		for (int i = 0; i < 4; i++) {
-			// Check if slot has a character
-			// Stub: chr.chars access deferred
-			(void)i;
+			CharData* ch = (i < 4) ? cs_stats.chars[i] : nullptr;
+			if (!ch) continue;
+			std::string chInfo = "SLOT " + std::to_string(i)
+				+ ": " + ch->def
+				+ " LIFE=" + std::to_string(static_cast<int>(ch->life))
+				+ "/" + std::to_string(static_cast<int>(ch->lifeMax))
+				+ " POWER=" + std::to_string(ch->power);
+			fighting_put(y, chInfo, cd);
 		}
 	}
 
@@ -417,14 +423,34 @@ static void fighting_draw_debug(float& y, const std::string& line, CommonData& c
 	}
 
 	// Character info via Lua callbacks
-	for (int i = 0; i < 4; i++) {
-		// Check if slot has a character
-		// Stub: chr.chars access deferred
-		(void)i;
+	{
+		const CharModuleState& cs_lua = char_get_state();
+		for (int i = 0; i < 4; i++) {
+			CharData* ch = (i < 4) ? cs_lua.chars[i] : nullptr;
+			if (!ch) continue;
+			// Call Lua getCharInfo(i) callback if available
+			if (dscri.L) {
+				lua_getglobal(dscri.L, "getCharInfo");
+				if (lua_isfunction(dscri.L, -1)) {
+					lua_pushnumber(dscri.L, i);
+					if (lua_pcall(dscri.L, 1, 1, 0) == LUA_OK) {
+						if (lua_isstring(dscri.L, -1)) {
+							const char* info = lua_tostring(dscri.L, -1);
+							fighting_put(y, info ? info : "", cd);
+						}
+						lua_pop(dscri.L, 1);
+					} else {
+						lua_pop(dscri.L, 1); // pop error
+					}
+				} else {
+					lua_pop(dscri.L, 1); // pop nil
+				}
+			}
+		}
 	}
 
 	// Content info (char names and stage)
-	// Stub: chr.cgi[i].def access deferred
+	// cgi[i].def access deferred until char_service exposes it
 
 	// Debug command line
 	if (!cd.debugScript.empty()) {
@@ -526,14 +552,21 @@ static void fighting_reset(FightingState& fs, CommonData& cd) {
 	cd.timeover = false;
 
 	// Restore character state from saved vars
-	for (int i = 0; i < 4; i++) {
-		// Stub: chr.chars access deferred until char_service is wired
-		(void)i;
+	{
+		const CharModuleState& cs_rest = char_get_state();
+		for (int i = 0; i < 4; i++) {
+			CharData* ch = (i < 4) ? cs_rest.chars[i] : nullptr;
+			if (!ch) continue;
+			if (static_cast<size_t>(i) < fs.savLif.size())
+				ch->life = static_cast<float>(fs.savLif[i]);
+			if (static_cast<size_t>(i) < fs.savPow.size())
+				ch->power = fs.savPow[i];
+		}
 	}
 
 	common_reset_frame_time();
 
-	// chr.nextRound() — stub
+	// chr.nextRound() — stub (function not yet in char_service)
 
 	fs.x = 0.0f;
 	fs.newx = 0.0f;

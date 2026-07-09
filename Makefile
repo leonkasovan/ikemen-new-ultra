@@ -25,6 +25,18 @@ SHELL     = $(W64DEVKIT)/bin/sh.exe
 # Ensure w64devkit tools (as, ld) are in PATH for the compiler driver
 export PATH := $(W64DEVKIT)/bin:$(PATH)
 
+# ---- CCache support (optional) ----
+# If ccache is installed and in PATH, wrap the compilers automatically.
+# This dramatically speeds up repeated builds of unchanged sources.
+# Disable with: make CCACHE_DISABLE=1
+ifneq ($(CCACHE_DISABLE),1)
+  CCACHE := $(shell which ccache 2>/dev/null)
+  ifneq ($(CCACHE),)
+    CXX := ccache $(CXX)
+    CC  := ccache $(CC)
+  endif
+endif
+
 # ---- Directories ----
 ROOT       = .
 EXT        = $(ROOT)/external
@@ -903,10 +915,15 @@ $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
 
+$(BLD)/test/test_fast.o: $(TEST)/test_fast.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
+
 $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FILE_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
 
 test: $(TEST_FILE_BIN)
+	taskkill /f /im test_file.exe 2>nul || true
 	$(TEST_FILE_BIN)
 
 # Run the test binary from the install/ runtime environment.
@@ -1031,8 +1048,30 @@ native_manifest:
 	@echo "IKEMEN_NATIVE_CHAR_LIB           = $(IKEMEN_NATIVE_CHAR_LIB)"
 	@echo "=== To disable a module: make IKEMEN_NATIVE_<NAME>_LIB=0 ==="
 
+# ---- Overridable clean behaviour ----
+# By default `make clean` only removes application objects, preserving the
+# expensive-to-rebuild external library archives (.a).  Use `make distclean`
+# to remove *everything* including external libraries.
+CLEAN_EXTERNAL ?= 0
+
 clean:
+ifeq ($(CLEAN_EXTERNAL),1)
 	rm -rf $(BLD)
+else
+	rm -f $(TARGET)
+	rm -f $(TEST_FILE_BIN)
+	rm -f $(PARITY_TEST_BIN) $(PARITY_TEST_REAL_BIN) $(CAPTURE_VEC_BIN)
+	find $(BLD) -name '*.o' -delete
+	@echo "=== Clean: app objects removed (external libs preserved) ==="
+	@echo "=== Use 'make distclean' to remove external libraries too ==="
+endif
+
+distclean:
+	rm -rf $(BLD)
+	@echo "=== Full clean: everything removed ==="
+
+# Keep legacy full-clean behaviour when CLEAN_EXTERNAL is explicitly set to 1
+# (e.g. `make CLEAN_EXTERNAL=1 clean`).
 
 install: $(TARGET)
 	@if [ ! -d "install" ]; then \
@@ -1050,3 +1089,119 @@ install: $(TARGET)
 	cp -rf lua_script/script/ install/
 	cp -rf lua_script/save/ install/
 	@echo "=== Installed to install/ ==="
+
+# ---- Fast unit test target (foundation modules only) ----
+# Tests only the pure C++ native services that don't need SDL, OpenGL,
+# audio, or video subsystems. Links only the essential plugin objects
+# and NO external libraries (except standard system libs).
+# Build time: ~seconds instead of minutes.
+TEST_FAST_OBJS = \
+	$(BLD)/test/test_fast.o \
+	$(BLD)/main/file/file.o \
+	$(BLD)/main/math/math.o \
+	$(BLD)/main/thread/thread.o \
+	$(BLD)/main/time/time.o \
+	$(BLD)/main/socket/socket.o \
+	$(BLD)/main/sound/sound.o \
+	$(BLD)/main/ogg/ogg.o \
+	$(BLD)/main/mesdialog/mesdialog.o \
+	$(BLD)/main/alert/alert.o \
+	$(BLD)/main/shell/shell.o \
+	$(BLD)/main/lua/lua.o \
+	$(BLD)/main/ssz/ssz.o \
+	$(BLD)/main/sdlplugin/sdlplugin.o \
+	$(BLD)/main/ssz_native/file_service.o \
+	$(BLD)/main/ssz_native/math_service.o \
+	$(BLD)/main/ssz_native/string_service.o \
+	$(BLD)/main/ssz_native/crypto_service.o \
+	$(BLD)/main/ssz_native/stack_service.o \
+	$(BLD)/main/ssz_native/time_service.o \
+	$(BLD)/main/ssz_native/thread_service.o \
+	$(BLD)/main/ssz_native/alert_service.o \
+	$(BLD)/main/ssz_native/shell_service.o \
+	$(BLD)/main/ssz_native/regex_service.o \
+	$(BLD)/main/ssz_native/socket_service.o \
+	$(BLD)/main/ssz_native/config_service.o
+TEST_FAST_BIN  = $(BLD)/test_fast.exe
+
+$(TEST_FAST_BIN): $(TEST_FAST_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_FAST_OBJS) $(LIB_LUA) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
+
+test-fast: $(TEST_FAST_BIN)
+	@echo "=== Fast unit tests (foundation modules only) ==="
+	$(TEST_FAST_BIN)
+	@echo "=== Fast unit tests complete ==="
+
+.PHONY: test-fast parity-test parity-test-real capture-vectors
+
+# ---- Native Lua test (script/trigger/system_script modules) ----
+# Links full engine but only calls init + registration verification.
+# Avoids SDL-dependent gameplay code paths.
+TEST_NATIVE_LUA_OBJS = \
+	$(BLD)/test/test_native_lua.o \
+	$(BLD)/main/file/file.o \
+	$(BLD)/main/math/math.o \
+	$(BLD)/main/thread/thread.o \
+	$(BLD)/main/time/time.o \
+	$(BLD)/main/socket/socket.o \
+	$(BLD)/main/sound/sound.o \
+	$(BLD)/main/ogg/ogg.o \
+	$(BLD)/main/mesdialog/mesdialog.o \
+	$(BLD)/main/alert/alert.o \
+	$(BLD)/main/shell/shell.o \
+	$(BLD)/main/lua/lua.o \
+	$(BLD)/main/ssz/ssz.o \
+	$(BLD)/main/sdlplugin/sdlplugin.o \
+	$(BLD)/main/ssz_native/file_service.o \
+	$(BLD)/main/ssz_native/math_service.o \
+	$(BLD)/main/ssz_native/regex_service.o \
+	$(BLD)/main/ssz_native/socket_service.o \
+	$(BLD)/main/ssz_native/sound_service.o \
+	$(BLD)/main/ssz_native/ogg_service.o \
+	$(BLD)/main/ssz_native/mesdialog_service.o \
+	$(BLD)/main/ssz_native/string_service.o \
+	$(BLD)/main/ssz_native/crypto_service.o \
+	$(BLD)/main/ssz_native/alert_service.o \
+	$(BLD)/main/ssz_native/thread_service.o \
+	$(BLD)/main/ssz_native/time_service.o \
+	$(BLD)/main/ssz_native/shell_service.o \
+	$(BLD)/main/ssz_native/lua_service.o \
+	$(BLD)/main/ssz_native/share_service.o \
+	$(BLD)/main/ssz_native/debug_script_service.o \
+	$(BLD)/main/ssz_native/loader_service.o \
+	$(BLD)/main/ssz_native/common_service.o \
+	$(BLD)/main/ssz_native/trigger_script_service.o \
+	$(BLD)/main/ssz_native/script_service.o \
+	$(BLD)/main/ssz_native/system_script_service.o \
+	$(BLD)/main/ssz_native/statebuilder_service.o \
+	$(BLD)/main/ssz_native/sdlevent_service.o \
+	$(BLD)/main/ssz_native/sdlplugin_service.o \
+	$(BLD)/main/ssz_native/font_service.o \
+	$(BLD)/main/ssz_native/video_service.o \
+	$(BLD)/main/ssz_native/action_service.o \
+	$(BLD)/main/ssz_native/fighting_service.o \
+	$(BLD)/main/ssz_native/config_service.o \
+	$(BLD)/main/ssz_native/sound_resource_service.o \
+	$(BLD)/main/ssz_native/stack_service.o \
+	$(BLD)/main/ssz_native/ssz_service.o \
+	$(BLD)/main/ssz_native/system_service.o \
+	$(BLD)/main/ssz_native/stage_service.o \
+	$(BLD)/main/ssz_native/bg_service.o \
+	$(BLD)/main/ssz_native/sff_service.o \
+	$(BLD)/main/ssz_native/command_service.o \
+	$(BLD)/main/ssz_native/char_service.o \
+	$(BLD)/main/ssz_native/fight_service.o
+TEST_NATIVE_LUA_BIN = $(BLD)/test_native_lua.exe
+
+$(BLD)/test/test_native_lua.o: $(TEST)/test_native_lua.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
+
+$(TEST_NATIVE_LUA_BIN): $(TEST_NATIVE_LUA_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_NATIVE_LUA_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS) -Wl,--subsystem,console
+
+test-native-lua: $(TEST_NATIVE_LUA_BIN)
+	@echo "=== Native Lua module tests ==="
+	$(TEST_NATIVE_LUA_BIN)
+
+.PHONY: test-native-lua parity-test parity-test-real capture-vectors

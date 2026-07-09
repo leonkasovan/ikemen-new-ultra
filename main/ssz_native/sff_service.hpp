@@ -213,6 +213,9 @@ struct FrameMethods {
 // =========================================================================
 void sff_init();
 
+/// Access the module-global allPalFX (used by font rendering).
+PalFXData& sff_get_all_palfx();
+
 // Backward-compatible alias for existing test code.
 using SffState = SffData;
 

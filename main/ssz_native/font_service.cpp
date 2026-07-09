@@ -11,6 +11,7 @@
 #include "file_service.hpp"
 #include "common_service.hpp"
 #include "sdlplugin_service.hpp"
+#include "sff_service.hpp"
 #include "ssz_trace.hpp"
 
 #include <algorithm>
@@ -741,9 +742,14 @@ void FontData::drawText(float x, float y, float xscl, float yscl,
 		pal = mpl[0].img[bank].colorPallet;
 	}
 
-	// Apply palette FX (allPalFX — simplified: no sff_service linkage yet)
+	// Apply palette FX (allPalFX)
 	// SSZ: if(.sff.allPalFX~enable) pal = .sff.allPalFX~getFxPal(pal, false);
-	// TODO: Wire sff_service's allPalFX when palette effects are available
+	{
+		PalFXData& allFX = sff_get_all_palfx();
+		if (allFX.enable) {
+			pal = palfx_transform_palette(allFX, pal, false);
+		}
+	}
 
 	// ── Software renderer atlas-batch path ──
 	if (!fontAtlas.empty() && !txt.empty()) {
