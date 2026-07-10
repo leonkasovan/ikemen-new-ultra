@@ -298,6 +298,8 @@ extern "C" void SSZ_STDCALL GetCurrentDir(PluginUtil* pu, Reference* dir)
 // Socket wrappers — old ABI -> native C++
 // =========================================================================
 
+#if IKEMEN_NATIVE_SOCKET_LIB
+
 extern "C" void SSZ_STDCALL SocketClose(PluginUtil* pu, SOCKET *psoc)
 {
     SSZ_TRACE_CAT(TRACE_NET, "SocketClose");
@@ -361,9 +363,15 @@ extern "C" intptr_t SSZ_STDCALL SocketRecvAry(PluginUtil* pu, intptr_t size, Ref
     return SocketRecvAry(size, ary.atpos(), ary.len(), psoc);
 }
 
+#else
+// IKEMEN_NATIVE_SOCKET_LIB=0 — bridge wrappers not compiled; socket.ssz script used instead.
+#endif
+
 // =========================================================================
 // Lua wrappers — old ABI -> native C++
 // =========================================================================
+
+#if IKEMEN_NATIVE_LUA_LIB
 
 extern "C" void SSZ_STDCALL LuaInit(PluginUtil* pu, intptr_t refcopy, intptr_t refdest)
 {
@@ -509,6 +517,9 @@ extern "C" void SSZ_STDCALL ToRef(PluginUtil* pu, int32_t idx, DynamicRef* userd
     ToRef(idx, userdata, L);
 }
 
+n#else
+// IKEMEN_NATIVE_LUA_LIB=0 -- bridge wrappers not compiled; lua.ssz script used instead.
+#endif
 // =========================================================================
 // Mesdialog wrappers — old ABI -> native C++
 // =========================================================================
@@ -656,6 +667,7 @@ extern "C" void SSZ_STDCALL InputStr(PluginUtil* pu, Reference *pr, Reference ti
 }
 
 // =========================================================================
+n#if IKEMEN_NATIVE_SOUND_LIB
 // Sound wrappers — old ABI -> native C++
 // =========================================================================
 
@@ -700,10 +712,14 @@ extern "C" bool SSZ_STDCALL ClientSetBuffer(PluginUtil* pu, Reference src, Clien
     return ClientSetBuffer(
         (const float*)src.atpos(),
         src.len() / (intptr_t)sizeof(float),
+n#else
+// IKEMEN_NATIVE_SOUND_LIB=0 -- bridge wrappers not compiled; sound.ssz script used instead.
+#endif
         client);
 }
 
 // =========================================================================
+n#if IKEMEN_NATIVE_OGG_LIB
 // Ogg wrappers — old ABI -> native C++
 // =========================================================================
 
@@ -765,6 +781,9 @@ extern "C" intptr_t SSZ_STDCALL OggVorbisRead(PluginUtil* pu, Reference buffer, 
 extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVorbis* ov)
 {
     SSZ_TRACE_CAT(TRACE_OGG, "OggVorbisSeek");
+n#else
+// IKEMEN_NATIVE_OGG_LIB=0 -- bridge wrappers not compiled; ogg.ssz script used instead.
+#endif
     (void)pu;
     return OggVorbisSeek(time, ov);
 }
@@ -772,6 +791,8 @@ extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVor
 // =========================================================================
 // Regex wrappers — old ABI -> native C++
 // =========================================================================
+
+#if IKEMEN_NATIVE_REGEX_LIB
 
 extern "C" RNS::wregex* SSZ_STDCALL NewRegex(PluginUtil* pu, Reference* error, bool i, Reference ptn)
 {
@@ -826,6 +847,10 @@ extern "C" void SSZ_STDCALL RegexSearch(PluginUtil* pu, Reference* matches, Refe
     }
 }
 
+#else
+// IKEMEN_NATIVE_REGEX_LIB=0 — bridge wrappers not compiled; regex.ssz script used instead.
+#endif
+
 // =========================================================================
 // Shell wrappers — old ABI -> native C++
 // =========================================================================
@@ -850,12 +875,20 @@ extern "C" bool SSZ_STDCALL MoveTrash(PluginUtil* pu, Reference file)
 // Thread wrappers — old ABI -> native C++
 // =========================================================================
 
+#if IKEMEN_NATIVE_THREAD_LIB
+
 extern "C" void SSZ_STDCALL ThreadDelay(PluginUtil* pu, uint32_t ui)
 {
     SSZ_TRACE_CAT(TRACE_UTIL, "ThreadDelay");
     (void)pu;
     ThreadDelay(ui);
 }
+
+#else
+// When IKEMEN_NATIVE_THREAD_LIB=0, the bridge wrappers don't exist
+// and the thread_static.hpp stubs provide no-op registration. The
+// SSZ thread.ssz script is used instead.
+#endif
 
 // =========================================================================
 // Alert wrappers — old ABI -> native C++
@@ -873,6 +906,8 @@ extern "C" void SSZ_STDCALL Alert(PluginUtil* pu, Reference title, Reference mes
 // Time wrappers — old ABI -> native C++
 // =========================================================================
 
+#if IKEMEN_NATIVE_TIME_LIB
+
 extern "C" uint32_t SSZ_STDCALL TickCount(PluginUtil* pu)
 {
     SSZ_TRACE_CAT(TRACE_MATH, "TickCount");
@@ -887,9 +922,17 @@ extern "C" int64_t SSZ_STDCALL UnixTime(PluginUtil* pu)
     return UnixTime();
 }
 
+#else
+// When IKEMEN_NATIVE_TIME_LIB=0, the bridge wrappers don't exist
+// and the time_static.hpp stubs provide no-op registration. The
+// SSZ time.ssz script is used instead.
+#endif
+
 // =========================================================================
 // Math wrappers — old ABI -> native C++
 // =========================================================================
+
+#if IKEMEN_NATIVE_MATH_LIB
 
 extern "C" double SSZ_STDCALL Sin(PluginUtil* pu, double x)
 {
@@ -995,6 +1038,12 @@ extern "C" bool SSZ_STDCALL IsNaN(PluginUtil* pu, double x)
     (void)pu;
     return IsNaN(x);
 }
+
+#else
+// When IKEMEN_NATIVE_MATH_LIB=0, the bridge wrappers don't exist
+// and the math_static.hpp stubs provide no-op registration. The
+// SSZ math.ssz script is used instead.
+#endif
 
 // =========================================================================
 // SDL plugin wrappers — old ABI -> native C++
@@ -2231,4 +2280,476 @@ extern "C" bool SSZ_STDCALL SdleventEvent(PluginUtil* pu, int32_t fps)
 // When IKEMEN_NATIVE_SDLEVENT_LIB=0, the bridge wrappers don't exist
 // and the sdlevent_static.hpp stubs provide no-op registration. The
 // SSZ sdlevent.ssz script is used instead.
+#endif
+
+// =========================================================================
+// String wrappers — old ABI -> native C++
+// =========================================================================
+
+#if IKEMEN_NATIVE_STRING_LIB
+#include "ssz_native/string_service.hpp"
+
+extern "C" void SSZ_STDCALL string_trim(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_trim");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::trim(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_toLower(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_toLower");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::to_lower(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" bool SSZ_STDCALL string_equ(PluginUtil* pu, Reference str1, Reference str2)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_equ");
+    return ikemen::ssz_native::string_util::equ(
+        ikemen::ssz_bridge::refToWstring(pu, str1),
+        ikemen::ssz_bridge::refToWstring(pu, str2));
+}
+
+extern "C" intptr_t SSZ_STDCALL string_find(PluginUtil* pu, Reference ptn, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_find");
+    return ikemen::ssz_native::string_util::find(
+        ikemen::ssz_bridge::refToWstring(pu, ptn),
+        ikemen::ssz_bridge::refToWstring(pu, str));
+}
+
+extern "C" intptr_t SSZ_STDCALL string_cFind(PluginUtil* pu, Reference cclass, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_cFind");
+    return ikemen::ssz_native::string_util::c_find(
+        ikemen::ssz_bridge::refToWstring(pu, cclass),
+        ikemen::ssz_bridge::refToWstring(pu, str));
+}
+
+extern "C" bool SSZ_STDCALL string_cMatch(PluginUtil* pu, Reference cclass, wchar_t item)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_cMatch");
+    return ikemen::ssz_native::string_util::c_match(
+        ikemen::ssz_bridge::refToWstring(pu, cclass), item);
+}
+
+extern "C" void SSZ_STDCALL string_splitLines(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_splitLines");
+    std::vector<std::wstring> lines = ikemen::ssz_native::string_util::split_lines(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    ikemen::ssz_bridge::vectorToRefList(pu, out, lines);
+}
+
+extern "C" void SSZ_STDCALL string_split(PluginUtil* pu, Reference* out, Reference dlim, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_split");
+    std::vector<std::wstring> parts = ikemen::ssz_native::string_util::split(
+        ikemen::ssz_bridge::refToWstring(pu, dlim),
+        ikemen::ssz_bridge::refToWstring(pu, src));
+    ikemen::ssz_bridge::vectorToRefList(pu, out, parts);
+}
+
+extern "C" void SSZ_STDCALL string_join(PluginUtil* pu, Reference* out, Reference dlim, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_join");
+    pu->setSSZFunc();
+    // Convert Reference array of References to vector<wstring>
+    std::vector<std::wstring> parts;
+    intptr_t count = src.len() / (intptr_t)sizeof(Reference);
+    Reference* refs = (Reference*)src.atpos();
+    for (intptr_t i = 0; i < count; i++) {
+        parts.push_back(PluginUtil::refToWstr(refs[i]));
+    }
+    std::wstring result = ikemen::ssz_native::string_util::join(
+        ikemen::ssz_bridge::refToWstring(pu, dlim), parts);
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" int SSZ_STDCALL string_nextLine(PluginUtil* pu, intptr_t* idx, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_nextLine");
+    return ikemen::ssz_native::string_util::next_line(
+        *idx, ikemen::ssz_bridge::refToWstring(pu, str));
+}
+
+extern "C" void SSZ_STDCALL string_uToSo(PluginUtil* pu, Reference* out, uint64_t u)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_uToSo");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::to_octal(u);
+    out->releaseanddelete();
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_uToSx(PluginUtil* pu, Reference* out, uint64_t u)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_uToSx");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::to_hex_lower(u);
+    out->releaseanddelete();
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_uToSX(PluginUtil* pu, Reference* out, uint64_t u)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_uToSX");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::to_hex_upper(u);
+    out->releaseanddelete();
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_sToU8(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_sToU8");
+    pu->setSSZFunc();
+    std::vector<uint8_t> result = ikemen::ssz_native::string_util::to_utf8(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    ikemen::ssz_bridge::vectorToRefBytes(result, out);
+}
+
+extern "C" void SSZ_STDCALL string_u8ToS(PluginUtil* pu, Reference* out, Reference utf8)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_u8ToS");
+    pu->setSSZFunc();
+    std::vector<uint8_t> bytes(utf8.len());
+    if (utf8.len() > 0)
+        memcpy(bytes.data(), utf8.atpos(), utf8.len());
+    std::wstring result = ikemen::ssz_native::string_util::from_utf8(bytes);
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_percentEnc(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_percentEnc");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::percent_encode(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_percentDec(PluginUtil* pu, Reference* out, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_percentDec");
+    pu->setSSZFunc();
+    std::wstring result = ikemen::ssz_native::string_util::percent_decode(
+        ikemen::ssz_bridge::refToWstring(pu, str));
+    out->releaseanddelete();
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" wchar_t SSZ_STDCALL string_toLowerChar(PluginUtil* pu, wchar_t c)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_toLowerChar");
+    (void)pu;
+    return static_cast<wchar_t>(
+        ikemen::ssz_native::string_util::to_lower_char(static_cast<char>(c & 0x7f)));
+}
+
+// ── String-to-number template specializations ──
+
+extern "C" bool SSZ_STDCALL sToNumber_int(PluginUtil* pu, int32_t* d, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToNumber_int");
+    return ikemen::ssz_native::string_util::s_to_number(
+        *d, ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" bool SSZ_STDCALL sToNumber_long(PluginUtil* pu, int64_t* d, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToNumber_long");
+    return ikemen::ssz_native::string_util::s_to_number(
+        *d, ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" bool SSZ_STDCALL sToNumber_float(PluginUtil* pu, float* d, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToNumber_float");
+    return ikemen::ssz_native::string_util::s_to_number(
+        *d, ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" bool SSZ_STDCALL sToNumber_double(PluginUtil* pu, double* d, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToNumber_double");
+    return ikemen::ssz_native::string_util::s_to_number(
+        *d, ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" int32_t SSZ_STDCALL sToN_int(PluginUtil* pu, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToN_int");
+    return ikemen::ssz_native::string_util::s_to_n<int32_t>(
+        ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" int64_t SSZ_STDCALL sToN_long(PluginUtil* pu, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToN_long");
+    return ikemen::ssz_native::string_util::s_to_n<int64_t>(
+        ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+extern "C" double SSZ_STDCALL sToN_double(PluginUtil* pu, Reference s)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "sToN_double");
+    return ikemen::ssz_native::string_util::s_to_n<double>(
+        ikemen::ssz_bridge::refToWstring(pu, s));
+}
+
+// ── Array utility template specializations ──
+
+extern "C" void SSZ_STDCALL string_toHex(PluginUtil* pu, Reference* out, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_toHex");
+    pu->setSSZFunc();
+    out->releaseanddelete();
+
+    intptr_t bytes = src.len();
+    intptr_t count = src.count();
+    if (bytes <= 0 || count <= 0) return;
+
+    const uint8_t* data = (const uint8_t*)src.atpos();
+    intptr_t elsize = bytes / count;
+    if (elsize <= 0) return;
+
+    const wchar_t* hex = L"0123456789abcdef";
+    std::wstring result;
+
+    // Dispatch by element size to correctly interpret numeric values
+    switch (elsize) {
+    case 1: {
+        const auto* arr = (const uint8_t*)data;
+        for (intptr_t i = 0; i < count; i++) {
+            uint64_t v = arr[i];
+            for (int j = 4; j >= 0; j -= 4)
+                result += hex[(v >> j) & 0xf];
+        }
+        break;
+    }
+    case 2: {
+        const auto* arr = (const uint16_t*)data;
+        for (intptr_t i = 0; i < count; i++) {
+            uint64_t v = arr[i];
+            for (int j = 12; j >= 0; j -= 4)
+                result += hex[(v >> j) & 0xf];
+        }
+        break;
+    }
+    case 4: {
+        const auto* arr = (const uint32_t*)data;
+        for (intptr_t i = 0; i < count; i++) {
+            uint64_t v = arr[i];
+            for (int j = 28; j >= 0; j -= 4)
+                result += hex[(v >> j) & 0xf];
+        }
+        break;
+    }
+    case 8: {
+        const auto* arr = (const uint64_t*)data;
+        for (intptr_t i = 0; i < count; i++) {
+            uint64_t v = arr[i];
+            for (int j = 60; j >= 0; j -= 4)
+                result += hex[(v >> j) & 0xf];
+        }
+        break;
+    }
+    default:
+        // Fallback: treat as raw bytes, 2 hex chars per byte
+        for (intptr_t i = 0; i < bytes; i++) {
+            result += hex[data[i] >> 4];
+            result += hex[data[i] & 0xf];
+        }
+        break;
+    }
+
+    if (result.empty()) return;
+    pu->wstrToRef(*out, result);
+}
+
+extern "C" void SSZ_STDCALL string_toUbyte(PluginUtil* pu, Reference* out, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_toUbyte");
+    pu->setSSZFunc();
+    out->releaseanddelete();
+
+    intptr_t bytes = src.len();
+    if (bytes <= 0) return;
+
+    // toUbyte outputs the raw bytes in little-endian element order
+    // Simply copy all bytes
+    out->refnew(bytes, (intptr_t)sizeof(uint8_t));
+    if (bytes > 0)
+        memcpy(out->atpos(), src.atpos(), bytes);
+}
+
+extern "C" void SSZ_STDCALL string_copy(PluginUtil* pu, Reference* dist, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_copy");
+    pu->setSSZFunc();
+    intptr_t src_bytes = src.len();
+    intptr_t dist_bytes = dist->len();
+    intptr_t copy_bytes = (src_bytes < dist_bytes) ? src_bytes : dist_bytes;
+    if (copy_bytes > 0)
+        memcpy(dist->atpos(), src.atpos(), copy_bytes);
+}
+
+extern "C" void SSZ_STDCALL string_clone(PluginUtil* pu, Reference* out, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "string_clone");
+    pu->setSSZFunc();
+    out->releaseanddelete();
+    if (src.len() <= 0) return;
+    out->copy(src);
+}
+
+// ── Split-and-convert template specializations ──
+
+extern "C" void SSZ_STDCALL svToAry_int(PluginUtil* pu, Reference* out, Reference dlim, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "svToAry_int");
+    pu->setSSZFunc();
+    out->releaseanddelete();
+
+    std::vector<std::wstring> parts = ikemen::ssz_native::string_util::split(
+        ikemen::ssz_bridge::refToWstring(pu, dlim),
+        ikemen::ssz_bridge::refToWstring(pu, src));
+
+    intptr_t count = (intptr_t)parts.size();
+    if (count <= 0) return;
+
+    out->refnew(count, (intptr_t)sizeof(int32_t));
+    int32_t* data = (int32_t*)out->atpos();
+    for (intptr_t i = 0; i < count; i++)
+        data[i] = ikemen::ssz_native::string_util::s_to_n<int32_t>(parts[i]);
+}
+
+extern "C" void SSZ_STDCALL svToAry_double(PluginUtil* pu, Reference* out, Reference dlim, Reference src)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "svToAry_double");
+    pu->setSSZFunc();
+    out->releaseanddelete();
+
+    std::vector<std::wstring> parts = ikemen::ssz_native::string_util::split(
+        ikemen::ssz_bridge::refToWstring(pu, dlim),
+        ikemen::ssz_bridge::refToWstring(pu, src));
+
+    intptr_t count = (intptr_t)parts.size();
+    if (count <= 0) return;
+
+    out->refnew(count, (intptr_t)sizeof(double));
+    double* data = (double*)out->atpos();
+    for (intptr_t i = 0; i < count; i++)
+        data[i] = ikemen::ssz_native::string_util::s_to_n<double>(parts[i]);
+}
+
+// ── Format object (opaque handle-based) ──
+
+extern "C" void* SSZ_STDCALL Format_new(PluginUtil* pu)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_new");
+    (void)pu;
+    return new ikemen::ssz_native::string_util::Format();
+}
+
+extern "C" void SSZ_STDCALL Format_delete(PluginUtil* pu, void* fmt)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_delete");
+    (void)pu;
+    delete static_cast<ikemen::ssz_native::string_util::Format*>(fmt);
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_set(PluginUtil* pu, void* fmt, Reference format)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_set");
+    auto* f = static_cast<ikemen::ssz_native::string_util::Format*>(fmt);
+    std::wstring ws = ikemen::ssz_bridge::refToWstring(pu, format);
+    return static_cast<wchar_t>(f->set(ws));
+}
+
+extern "C" bool SSZ_STDCALL Format_isError(PluginUtil* pu, void* fmt)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_isError");
+    (void)pu;
+    return static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->isError();
+}
+
+extern "C" void SSZ_STDCALL Format_putSpace(PluginUtil* pu, void* fmt, int n)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_putSpace");
+    (void)pu;
+    static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->putSpace(n);
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_d(PluginUtil* pu, void* fmt, int64_t i)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_d");
+    (void)pu;
+    return static_cast<wchar_t>(
+        static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->d(i));
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_u(PluginUtil* pu, void* fmt, uint64_t u)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_u");
+    (void)pu;
+    return static_cast<wchar_t>(
+        static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->u(u));
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_f(PluginUtil* pu, void* fmt, double val)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_f");
+    (void)pu;
+    return static_cast<wchar_t>(
+        static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->f(val));
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_c(PluginUtil* pu, void* fmt, wchar_t ch)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_c");
+    (void)pu;
+    return static_cast<wchar_t>(
+        static_cast<ikemen::ssz_native::string_util::Format*>(fmt)->c(ch));
+}
+
+extern "C" wchar_t SSZ_STDCALL Format_s(PluginUtil* pu, void* fmt, Reference str)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_s");
+    auto* f = static_cast<ikemen::ssz_native::string_util::Format*>(fmt);
+    std::wstring ws = ikemen::ssz_bridge::refToWstring(pu, str);
+    return static_cast<wchar_t>(f->s(ws));
+}
+
+extern "C" void SSZ_STDCALL Format_getOut(PluginUtil* pu, void* fmt, Reference* out)
+{
+    SSZ_TRACE_CAT(TRACE_UTIL, "Format_getOut");
+    pu->setSSZFunc();
+    auto* f = static_cast<ikemen::ssz_native::string_util::Format*>(fmt);
+    out->releaseanddelete();
+    if (f->out.empty()) return;
+    pu->wstrToRef(*out, f->out);
+}
+
+#else
+// When IKEMEN_NATIVE_STRING_LIB=0, the bridge wrappers don't exist
+// and the string_static.hpp stubs provide no-op registration. The
+// SSZ string.ssz script is used instead.
 #endif

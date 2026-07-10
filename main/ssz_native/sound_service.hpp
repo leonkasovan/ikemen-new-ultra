@@ -1,5 +1,7 @@
 #pragma once
 
+#if IKEMEN_NATIVE_SOUND_LIB
+
 // sound_service.hpp — Native equivalent of ssz_script/lib/sound.ssz
 //
 // Provides:
@@ -55,3 +57,5 @@ private:
 };
 
 } // namespace ikemen::ssz_native::sound
+
+#endif // IKEMEN_NATIVE_SOUND_LIB

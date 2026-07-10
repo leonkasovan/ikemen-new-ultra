@@ -2,15 +2,15 @@
 //
 // math_static.hpp
 //
-// Statically register every function exported by math.cpp
+// Statically register every function exported by ssz_script/lib/math.ssz
 // so that the SSZ runtime resolves them without loading math.dll.
 //
-// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
-// See Makefile for flag docs.
+// When IKEMEN_NATIVE_MATH_LIB=1, native math functions replace the native
+// plugin calls (Sin, Cos, etc.). When 0, the SSZ script is used instead.
 
 #include "static_plugin_registry.hpp"
 
-// Always register — bridge functions are always compiled in bridge.cpp
+#if IKEMEN_NATIVE_MATH_LIB
 
 struct PluginUtil;
 
@@ -60,4 +60,12 @@ inline bool math_static_register()
 		sizeof(math_mapping) / sizeof(math_mapping[0]));
 }
 
+#else
 
+static inline bool math_static_register()
+{
+	// IKEMEN_NATIVE_MATH_LIB=0 — SSZ math.ssz script used instead.
+	return true;
+}
+
+#endif

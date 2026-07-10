@@ -5,8 +5,6 @@
 // Statically register every function exported by lua.cpp
 // so that the SSZ runtime resolves them without loading lua.dll.
 //
-// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
-//
 // HOW TO USE
 // ----------
 // 1.  #include this header in the translation unit that owns main().
@@ -18,7 +16,7 @@
 
 #include "static_plugin_registry.hpp"
 
-// Always register — bridge functions are always compiled in bridge.cpp
+#if IKEMEN_NATIVE_LUA_LIB
 
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
@@ -100,4 +98,11 @@ inline bool lua_static_register()
 		sizeof(lua_mapping) / sizeof(lua_mapping[0]));
 }
 
+#else
+static inline bool lua_static_register()
+{
+	// IKEMEN_NATIVE_LUA_LIB=0 — SSZ lua.ssz script used instead.
+	return true;
+}
+#endif
 

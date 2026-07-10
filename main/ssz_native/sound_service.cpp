@@ -1,5 +1,7 @@
 #include "sound_service.hpp"
 
+#if IKEMEN_NATIVE_SOUND_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -52,3 +54,5 @@ bool AudioClient::set_buffer(const float* buffer, intptr_t frames) {
 }
 
 } // namespace ikemen::ssz_native::sound
+
+#endif // IKEMEN_NATIVE_SOUND_LIB

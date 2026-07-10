@@ -24,17 +24,35 @@
 #include "ssz_native/plugin_native_api.hpp"
 #include "ssz_native/file_service.hpp"
 #include "ssz_native/math_service.hpp"
+#if IKEMEN_NATIVE_REGEX_LIB
 #include "ssz_native/regex_service.hpp"
+#endif
+#if IKEMEN_NATIVE_SOCKET_LIB
 #include "ssz_native/socket_service.hpp"
+#endif
+#if IKEMEN_NATIVE_SOUND_LIB
 #include "ssz_native/sound_service.hpp"
+#endif
+#if IKEMEN_NATIVE_STRING_LIB
 #include "ssz_native/string_service.hpp"
+#endif
+#if IKEMEN_NATIVE_OGG_LIB
 #include "ssz_native/ogg_service.hpp"
+#endif
 #include "ssz_native/mesdialog_service.hpp"
+#if IKEMEN_NATIVE_CRYPTO_LIB
 #include "ssz_native/crypto_service.hpp"
+#endif
+#if IKEMEN_NATIVE_THREAD_LIB
 #include "ssz_native/thread_service.hpp"
+#endif
+#if IKEMEN_NATIVE_TIME_LIB
 #include "ssz_native/time_service.hpp"
+#endif
 #include "ssz_native/shell_service.hpp"
+#if IKEMEN_NATIVE_LUA_LIB
 #include "ssz_native/lua_service.hpp"
+#endif
 #include "ssz_native/table_service.hpp"
 #include "ssz_native/share_service.hpp"
 #include "ssz_native/system_service.hpp"
@@ -4467,18 +4485,28 @@ int main()
     test_math();
     test_thread();
     test_math_service();
+#if IKEMEN_NATIVE_STRING_LIB
     test_string_service();
     test_format_service();
+#endif
     test_thread_service();
+#if IKEMEN_NATIVE_TIME_LIB
     test_time_service();
+#endif
     test_table_service();
     test_consts_service();
     test_alert_service();
+#if IKEMEN_NATIVE_CRYPTO_LIB
     test_crypto_service();
+#endif
     test_shell_service();
     test_stack_service();
+#if IKEMEN_NATIVE_REGEX_LIB
     test_regex_service();
+#endif
+#if IKEMEN_NATIVE_SOCKET_LIB
     test_socket_service();
+#endif
     test_command_service();
     test_stage_service();
     test_sff_service();
@@ -4509,7 +4537,9 @@ int main()
     // SEH handler protects LuaState tests (self-move can crash on some CPUs)
     PVOID seh_handle = AddVectoredExceptionHandler(1, (PVECTORED_EXCEPTION_HANDLER)seh_handler);
     if (setjmp(seh_jmpbuf) == 0) {
+#if IKEMEN_NATIVE_LUA_LIB
         test_lua_service();
+#endif
     } else {
         std::wcout << L"  Lua service test skipped after crash" << std::endl;
     }

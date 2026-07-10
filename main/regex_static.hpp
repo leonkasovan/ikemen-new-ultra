@@ -4,12 +4,8 @@
 //
 // Statically register every function exported by regex.cpp
 // so that the SSZ runtime resolves them without loading regex.dll.
-//
-// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
-
-// Always register — bridge functions are always compiled in bridge.cpp
 
 #ifdef _WIN32
 #include <regex>
@@ -18,6 +14,8 @@
 #include <boost/regex.hpp>
 #define RNS boost
 #endif
+
+#if IKEMEN_NATIVE_REGEX_LIB
 
 struct PluginUtil;
 struct Reference;
@@ -43,5 +41,13 @@ inline bool regex_static_register()
 		regex_mapping,
 		sizeof(regex_mapping) / sizeof(regex_mapping[0]));
 }
+
+#else
+static inline bool regex_static_register()
+{
+	// IKEMEN_NATIVE_REGEX_LIB=0 — SSZ regex.ssz script used instead.
+	return true;
+}
+#endif
 
 

@@ -9,6 +9,8 @@
 // (main/alert/alert.cpp). The native plugin handles platform-specific
 // dialog display (MessageBox on Windows, stderr on Linux).
 
+#if IKEMEN_NATIVE_ALERT_LIB
+
 #include <string>
 
 namespace ikemen::ssz_native::alert {
@@ -17,3 +19,5 @@ namespace ikemen::ssz_native::alert {
 void alert(const std::wstring& title, const std::wstring& message);
 
 } // namespace ikemen::ssz_native::alert
+
+#endif // IKEMEN_NATIVE_ALERT_LIB

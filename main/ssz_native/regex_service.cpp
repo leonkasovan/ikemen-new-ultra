@@ -4,6 +4,8 @@
 
 #include "regex_service.hpp"
 
+#if IKEMEN_NATIVE_REGEX_LIB
+
 #ifdef _WIN32
 #define SSZ_REGEX_NS std
 #else
@@ -112,3 +114,5 @@ std::pair<Regex, std::wstring> compile(const std::wstring& pattern, bool case_in
 } // namespace ikemen::ssz_native::regex
 
 #undef SSZ_REGEX_NS
+
+#endif // IKEMEN_NATIVE_REGEX_LIB

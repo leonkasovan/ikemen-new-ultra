@@ -1,5 +1,7 @@
 #include "thread_service.hpp"
 
+#if IKEMEN_NATIVE_THREAD_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -16,3 +18,5 @@ void delay(uint32_t ms) {
 }
 
 } // namespace ikemen::ssz_native::thread
+
+#endif // IKEMEN_NATIVE_THREAD_LIB

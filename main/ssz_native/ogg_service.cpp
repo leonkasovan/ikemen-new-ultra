@@ -1,5 +1,7 @@
 #include "ogg_service.hpp"
 
+#if IKEMEN_NATIVE_OGG_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -67,3 +69,5 @@ int32_t OggVorbisHandle::seek(double time) {
 }
 
 } // namespace ikemen::ssz_native::ogg
+
+#endif // IKEMEN_NATIVE_OGG_LIB

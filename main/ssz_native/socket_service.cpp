@@ -1,5 +1,7 @@
 #include "socket_service.hpp"
 
+#if IKEMEN_NATIVE_SOCKET_LIB
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -78,3 +80,5 @@ intptr_t SocketHandle::send_array(intptr_t elem_size, const void* data, intptr_t
 }
 
 } // namespace ikemen::ssz_native::socket
+
+#endif // IKEMEN_NATIVE_SOCKET_LIB

@@ -1,5 +1,7 @@
 #include "time_service.hpp"
 
+#if IKEMEN_NATIVE_TIME_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -21,3 +23,5 @@ int64_t unix_time() {
 }
 
 } // namespace ikemen::ssz_native::time_util
+
+#endif // IKEMEN_NATIVE_TIME_LIB

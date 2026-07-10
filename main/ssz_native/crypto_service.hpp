@@ -8,6 +8,11 @@
 //
 // Design note: Both functions are pure algorithm implementations with no SSZ
 // plugin dependency. They are reimplemented natively via standard C++.
+//
+// When IKEMEN_NATIVE_CRYPTO_LIB=0, this entire header becomes a no-op
+// and ssz_script/lib/... is used instead.
+
+#if IKEMEN_NATIVE_CRYPTO_LIB
 
 #include <cstdint>
 #include <string>
@@ -68,3 +73,5 @@ std::vector<uint8_t> md5_hash(const std::vector<uint8_t>& data);
 std::string md5_hex(const std::vector<uint8_t>& data);
 
 } // namespace ikemen::ssz_native::crypto
+
+#endif // IKEMEN_NATIVE_CRYPTO_LIB

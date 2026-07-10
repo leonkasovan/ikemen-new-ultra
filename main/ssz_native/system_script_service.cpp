@@ -26,9 +26,13 @@
 #include "sdlplugin_service.hpp"
 #include "mesdialog_service.hpp"
 #include "math_service.hpp"
+#if IKEMEN_NATIVE_STRING_LIB
 #include "string_service.hpp"
+#endif
 #include "shell_service.hpp"
+#if IKEMEN_NATIVE_THREAD_LIB
 #include "thread_service.hpp"
+#endif
 #include "ssz_trace.hpp"
 
 // Lua C API
@@ -1173,7 +1177,9 @@ static int lua_setSuaveMode(lua_State* L) {
 static int lua_sleep(lua_State* L) {
 	SSZ_TRACE_CAT(TRACE_SYS, "system::sleep");
 	double ms = lua_tonumber(L, 1);
+	#if IKEMEN_NATIVE_THREAD_LIB
 	thread::delay(static_cast<uint32_t>(ms));
+	#endif
 	return 0;
 }
 

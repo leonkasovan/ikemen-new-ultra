@@ -1,5 +1,7 @@
 #pragma once
 
+#if IKEMEN_NATIVE_OGG_LIB
+
 // ogg_service.hpp — Native equivalent of ssz_script/lib/alpha/ogg.ssz
 //
 // Provides:
@@ -64,3 +66,5 @@ private:
 };
 
 } // namespace ikemen::ssz_native::ogg
+
+#endif // IKEMEN_NATIVE_OGG_LIB

@@ -4,12 +4,10 @@
 //
 // Statically registers every function exported by ogg.cpp
 // so that the SSZ runtime resolves them without loading ogg.dll.
-//
-// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
 
 #include "static_plugin_registry.hpp"
 
-// Always register — bridge functions are always compiled in bridge.cpp
+#if IKEMEN_NATIVE_OGG_LIB
 
 // -----------------------------------------------------------------------
 // Forward-declare types needed in function signatures.
@@ -61,4 +59,11 @@ inline bool ogg_static_register()
 		sizeof(ogg_mapping) / sizeof(ogg_mapping[0]));
 }
 
+#else
+static inline bool ogg_static_register()
+{
+	// IKEMEN_NATIVE_OGG_LIB=0 — SSZ ogg.ssz script used instead.
+	return true;
+}
+#endif
 

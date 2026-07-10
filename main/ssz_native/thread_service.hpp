@@ -9,6 +9,8 @@
 // (main/thread/thread.cpp). The native plugin calls Sleep() on Windows
 // or usleep() on Linux.
 
+#if IKEMEN_NATIVE_THREAD_LIB
+
 #include <cstdint>
 
 namespace ikemen::ssz_native::thread {
@@ -17,3 +19,5 @@ namespace ikemen::ssz_native::thread {
 void delay(uint32_t ms);
 
 } // namespace ikemen::ssz_native::thread
+
+#endif // IKEMEN_NATIVE_THREAD_LIB

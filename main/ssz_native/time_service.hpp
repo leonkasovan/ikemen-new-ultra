@@ -10,6 +10,8 @@
 // (main/time/time.cpp). The native plugin calls timeGetTime() on Windows
 // or clock_gettime() on Linux.
 
+#if IKEMEN_NATIVE_TIME_LIB
+
 #include <cstdint>
 
 namespace ikemen::ssz_native::time_util {
@@ -21,3 +23,5 @@ uint32_t tick_count();
 int64_t unix_time();
 
 } // namespace ikemen::ssz_native::time_util
+
+#endif // IKEMEN_NATIVE_TIME_LIB

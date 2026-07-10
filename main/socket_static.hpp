@@ -5,21 +5,19 @@
 // Statically register every function exported by socket.cpp
 // so that the SSZ runtime resolves them without loading socket.dll.
 //
-// REGISTRATION IS UNCONDITIONAL — bridge functions are always compiled.
-//
 // IMPORTANT: On Windows, <winsock2.h> must be included BEFORE
 //            <windows.h> (which sszdef.h pulls in).  Make sure
 //            main.cpp includes <winsock2.h> before sszdef.h.
 
 #include "static_plugin_registry.hpp"
 
-// Always register — bridge functions are always compiled in bridge.cpp
-
 #ifdef _WIN32
 #include <winsock2.h>
 #else
 typedef int SOCKET;
 #endif
+
+#if IKEMEN_NATIVE_SOCKET_LIB
 
 struct PluginUtil;
 struct Reference;
@@ -55,5 +53,13 @@ inline bool socket_static_register()
 		socket_mapping,
 		sizeof(socket_mapping) / sizeof(socket_mapping[0]));
 }
+
+#else
+static inline bool socket_static_register()
+{
+	// IKEMEN_NATIVE_SOCKET_LIB=0 — SSZ socket.ssz script used instead.
+	return true;
+}
+#endif
 
 

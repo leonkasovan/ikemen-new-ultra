@@ -1,5 +1,7 @@
 #include "alert_service.hpp"
 
+#if IKEMEN_NATIVE_ALERT_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -17,3 +19,5 @@ void alert(const std::wstring& title, const std::wstring& message) {
 }
 
 } // namespace ikemen::ssz_native::alert
+
+#endif // IKEMEN_NATIVE_ALERT_LIB

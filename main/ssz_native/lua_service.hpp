@@ -1,5 +1,7 @@
 #pragma once
 
+#if IKEMEN_NATIVE_LUA_LIB
+
 // lua_service.hpp — Native equivalent of ssz_script/lib/alpha/lua.ssz
 //
 // Provides:
@@ -64,3 +66,5 @@ private:
 };
 
 } // namespace ikemen::ssz_native::lua
+
+#endif // IKEMEN_NATIVE_LUA_LIB

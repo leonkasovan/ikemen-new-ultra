@@ -1,6 +1,8 @@
 #include "lua_service.hpp"
 #include "ssz_trace.hpp"
 
+#if IKEMEN_NATIVE_LUA_LIB
+
 #ifndef SSZ_STDCALL
 #define SSZ_STDCALL __stdcall
 #endif
@@ -118,3 +120,5 @@ std::string LuaState::to_string(int32_t idx) {
 }
 
 } // namespace ikemen::ssz_native::lua
+
+#endif // IKEMEN_NATIVE_LUA_LIB

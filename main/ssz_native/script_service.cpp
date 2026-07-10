@@ -22,7 +22,9 @@
 #include "sdlevent_service.hpp"
 #include "shell_service.hpp"
 #include "sound_resource_service.hpp"
+#if IKEMEN_NATIVE_STRING_LIB
 #include "string_service.hpp"
+#endif
 #include "video_service.hpp"
 #include "ssz_trace.hpp"
 

@@ -26,13 +26,25 @@
 // Foundation native service headers (no SDL-dependent modules, no Lua, no char)
 #include "ssz_native/file_service.hpp"
 #include "ssz_native/math_service.hpp"
+#if IKEMEN_NATIVE_REGEX_LIB
 #include "ssz_native/regex_service.hpp"
+#endif
+#if IKEMEN_NATIVE_SOCKET_LIB
 #include "ssz_native/socket_service.hpp"
+#endif
+#if IKEMEN_NATIVE_STRING_LIB
 #include "ssz_native/string_service.hpp"
+#endif
 #include "ssz_native/mesdialog_service.hpp"
+#if IKEMEN_NATIVE_CRYPTO_LIB
 #include "ssz_native/crypto_service.hpp"
+#endif
+#if IKEMEN_NATIVE_THREAD_LIB
 #include "ssz_native/thread_service.hpp"
+#endif
+#if IKEMEN_NATIVE_TIME_LIB
 #include "ssz_native/time_service.hpp"
+#endif
 #include "ssz_native/shell_service.hpp"
 #include "ssz_native/common_service.hpp"
 #include "ssz_native/config_service.hpp"
@@ -454,10 +466,16 @@ int main()
     test_math();
     test_thread();
     test_math_service();
+#if IKEMEN_NATIVE_STRING_LIB
     test_string_service();
+#endif
     test_stack_service();
+#if IKEMEN_NATIVE_CRYPTO_LIB
     test_crypto_service();
+#endif
+#if IKEMEN_NATIVE_TIME_LIB
     test_time_service();
+#endif
     test_config_service();
     test_consts_service();
     test_shell_service();

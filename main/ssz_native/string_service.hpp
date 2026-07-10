@@ -12,6 +12,11 @@
 // standard library rather than the SSZ native plugin. The SSZ string library
 // is pure SSZ script with no native plugin calls. Bypassing the SSZ runtime
 // is therefore natural — there is no plugin layer to call through.
+//
+// When IKEMEN_NATIVE_STRING_LIB=0, this entire header becomes a no-op
+// and ssz_script/lib/string.ssz is used instead.
+
+#if IKEMEN_NATIVE_STRING_LIB
 
 #include <cstdint>
 #include <cstring>
@@ -216,3 +221,5 @@ std::wstring percent_encode(const std::wstring& str);
 std::wstring percent_decode(const std::wstring& str);
 
 } // namespace ikemen::ssz_native::string_util
+
+#endif // IKEMEN_NATIVE_STRING_LIB

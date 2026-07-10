@@ -22,7 +22,9 @@
 #include "font_service.hpp"
 #include "mesdialog_service.hpp"
 #include "file_service.hpp"
+#if IKEMEN_NATIVE_STRING_LIB
 #include "string_service.hpp"
+#endif
 #include "math_service.hpp"
 
 #include <lua.hpp>

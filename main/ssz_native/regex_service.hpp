@@ -1,5 +1,7 @@
 #pragma once
 
+#if IKEMEN_NATIVE_REGEX_LIB
+
 // regex_service.hpp — Native equivalent of ssz_script/lib/regex.ssz
 //
 // Provides:
@@ -90,3 +92,5 @@ std::pair<Regex, std::wstring> compile(const std::wstring& pattern, bool case_in
 } // namespace ikemen::ssz_native::regex
 
 #undef SSZ_REGEX_NS
+
+#endif // IKEMEN_NATIVE_REGEX_LIB

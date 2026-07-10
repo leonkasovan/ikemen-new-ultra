@@ -40,6 +40,7 @@
 #include "statebuilder_static.hpp"
 #include "thread_static.hpp"
 #include "time_static.hpp"
+#include "string_static.hpp"
 #include "video_static.hpp"
 
 #if IKEMEN_NATIVE_CONFIG_LIB
@@ -513,6 +514,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!time_static_register()) {
 		LOG_INFO("Ikemen", "Failed to register Time functions");
+		return 1;
+	}
+	if (!string_static_register()) {
+		LOG_INFO("Ikemen", "Failed to register String functions");
 		return 1;
 	}
 	if (!video_static_register()) {

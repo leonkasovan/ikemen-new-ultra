@@ -1,5 +1,7 @@
 #include "string_service.hpp"
 
+#if IKEMEN_NATIVE_STRING_LIB
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -583,3 +585,5 @@ char Format::s(const std::wstring& str) {
 }
 
 } // namespace ikemen::ssz_native::string_util
+
+#endif // IKEMEN_NATIVE_STRING_LIB

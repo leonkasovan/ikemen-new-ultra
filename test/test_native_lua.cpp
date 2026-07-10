@@ -19,7 +19,9 @@
 #include "ssz_native/trigger_script_service.hpp"
 #include "ssz_native/system_script_service.hpp"
 #include "ssz_native/common_service.hpp"
+#if IKEMEN_NATIVE_LUA_LIB
 #include "ssz_native/lua_service.hpp"
+#endif
 #include <lua.hpp>
 
 // NewState() is declared in plugin_native_api.hpp and defined in lua.cpp

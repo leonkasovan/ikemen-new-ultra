@@ -1,5 +1,7 @@
 #include "crypto_service.hpp"
 
+#if IKEMEN_NATIVE_CRYPTO_LIB
+
 #include <array>
 #include <cstring>
 
@@ -241,3 +243,5 @@ std::string md5_hex(const std::vector<uint8_t>& data) {
 }
 
 } // namespace ikemen::ssz_native::crypto
+
+#endif // IKEMEN_NATIVE_CRYPTO_LIB

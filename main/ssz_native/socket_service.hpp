@@ -1,5 +1,7 @@
 #pragma once
 
+#if IKEMEN_NATIVE_SOCKET_LIB
+
 // socket_service.hpp — Native equivalent of ssz_script/lib/socket.ssz
 //
 // Provides:
@@ -74,3 +76,5 @@ private:
 };
 
 } // namespace ikemen::ssz_native::socket
+
+#endif // IKEMEN_NATIVE_SOCKET_LIB
