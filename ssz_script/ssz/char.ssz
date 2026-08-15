@@ -7419,6 +7419,7 @@ public void draw(float x, float y, float scl)
       winner.new[-1] = .cgi[.com.win+2].displayname;
     }
   }
+  .ssz.profBegin(:"script:draw:faceSetup":);
   ^^/char names.new(#.chars);
   ^^&.com.PalFX facefx.new(#.chars);
   loop{index i = 0; while; do:
@@ -7435,6 +7436,7 @@ public void draw(float x, float y, float scl)
     }
     i++;
   while i < #names:}
+  .ssz.profEnd(:"script:draw:faceSetup":);
   int ob = .com.brightness;
   .com.brightness = 256 >> (int)(.super > 0 && .superdarken != 0);
   float bgx = x / .stg~localscl, bgy = y / .stg~localscl;
@@ -7457,12 +7459,16 @@ public void draw(float x, float y, float scl)
     }
   else:
     if(.stg~debugbg) .com.screenFill(0x00ff00ff);
+    .ssz.profBegin(:"script:draw:bg":);
     .stg~bgDraw(false, bgx, bgy, scl);
+    .ssz.profEnd(:"script:draw:bg":);
   comm:
+    .ssz.profBegin(:"script:draw:shadows":);
     if(!.gs(.gsGLOBALNOSHADOW)){
       if(.stg~reflection > 0) .drawReflection(x, y, scl*.com.cam.baseScale());
       .drawShadowList(x, y, scl * .com.cam.baseScale());
     }
+    .ssz.profEnd(:"script:draw:shadows":);
     {
       float off = .stage.envShake.getOffset();
       float yofs =
@@ -7515,19 +7521,39 @@ public void draw(float x, float y, float scl)
         fade(rect=, 255);
       }
     }
+    .ssz.profBegin(:"script:draw:fighters":);
     .fight~draw(0, lpl, names, .gs(.gsNOBARDISPLAY), facefx, .superplayer);
+    .ssz.profEnd(:"script:draw:fighters":);
+    .ssz.profBegin(:"script:draw:overlay":);
     .fight~ro.draw(0, .ko, winner);
+    .ssz.profEnd(:"script:draw:overlay":);
   }
   if(.envcol_time != 0) .com.screenFill(ecol);
   if(.envcol_time == 0 || .envcol_under != 0){
+    .ssz.profBegin(:"script:draw:anims":);
     .drawAnimList(.anims=, x, y, scl*.com.cam.baseScale());
-    if(.envcol_time == 0 && !.gs(.gsNOFG)) .stg~bgDraw(true, bgx, bgy, scl);
+    .ssz.profEnd(:"script:draw:anims":);
+    if(.envcol_time == 0 && !.gs(.gsNOFG)){
+      .ssz.profBegin(:"script:draw:fg":);
+      .stg~bgDraw(true, bgx, bgy, scl);
+      .ssz.profEnd(:"script:draw:fg":);
+    }
   }
+  .ssz.profBegin(:"script:draw:fighters":);
   .fight~draw(1, lpl, names, .gs(.gsNOBARDISPLAY), facefx, .superplayer);
+  .ssz.profEnd(:"script:draw:fighters":);
+  .ssz.profBegin(:"script:draw:overlay":);
   .fight~ro.draw(1, .ko, winner);
+  .ssz.profEnd(:"script:draw:overlay":);
+  .ssz.profBegin(:"script:draw:anims":);
   .drawAnimList(.topanims=, x, y, scl*.com.cam.baseScale());
+  .ssz.profEnd(:"script:draw:anims":);
+  .ssz.profBegin(:"script:draw:fighters":);
   .fight~draw(2, lpl, names, .gs(.gsNOBARDISPLAY), facefx, .superplayer);
+  .ssz.profEnd(:"script:draw:fighters":);
+  .ssz.profBegin(:"script:draw:overlay":);
   .fight~ro.draw(2, .ko, winner);
+  .ssz.profEnd(:"script:draw:overlay":);
   void fade(.com.scrrect.self rect=, int alpha)
   {
     .com.rectFill(

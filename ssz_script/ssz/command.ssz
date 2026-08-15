@@ -2,6 +2,7 @@ lib cfg = "../save/config.ssz";
 
 //Load "lib/" Scripts
 lib al = <alert.ssz>;
+lib ssz = <ssz.ssz>;
 lib consts = <consts.ssz>;
 lib file = <file.ssz>;
 lib m = <math.ssz>;
@@ -846,21 +847,26 @@ public ^&PlaybackInput pbRec;
 
 public bool update()
 {
+  .ssz.profBegin(:"script:cmdUpdate":);
+  bool result;
   branch{
   cond #.replay > 0:
     .se.event(.anyHardButton() ? 240 : 60);
-    ret .replay~update();
+    result = .replay~update();
   cond #.net > 0:
     .se.event(60);
-    ret .net~update();
+    result = .net~update();
   cond #.pbRec > 0 && .com.sysControls == 0:
     .se.event(60);
-    ret .pbRec~update();
+    result = .pbRec~update();
   cond #.pbRep > 0:
     .se.event(60);
-    ret .pbRep~update();
+    result = .pbRep~update();
+  else:
+    result = .se.event(60);
   }
-  ret .se.event(60);
+  .ssz.profEnd(:"script:cmdUpdate":);
+  ret result;
 }
 
 public bool synchronize()

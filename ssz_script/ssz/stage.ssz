@@ -651,6 +651,7 @@ public &Stage
   }
   public void bgDraw(bool t, float x, float y, float scl)
   {
+    .ssz.profBegin(:"script:bgDraw:setup":);
     float bgscl = `hires ? 0.5 : 1.0;
     float yofs = .envShake.getOffset();
     float posx = x, posy = y;
@@ -704,6 +705,8 @@ public &Stage
             + 160.0 * (float).com.cam.stg.localh)
           / (float).com.cam.stg.localw + .com.cam.stg.drawOffsetY)
         / 480.0);
+    .ssz.profEnd(:"script:bgDraw:setup":);
+    .ssz.profBegin(:"script:bgDraw:layers":);
     loop{index i = 0; while; do:
       if(`bg[i].visible && `bg[i].toplayer == t && #`bg[i].anim.spr > 0){
         `bg[i].draw(
@@ -711,6 +714,7 @@ public &Stage
       }
       i++;
     while i < #`bg:}
+    .ssz.profEnd(:"script:bgDraw:layers":);
   }
   public void clear()
   {

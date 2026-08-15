@@ -4,6 +4,7 @@ lib cfg = "../save/config.ssz";
 lib al = <alert.ssz>;
 lib file = <file.ssz>;
 lib m = <math.ssz>;
+lib ssz = <ssz.ssz>;
 lib s = <string.ssz>;
 lib tbl = <table.ssz>;
 
@@ -507,6 +508,7 @@ void game()
     .com.step = false;
     .dscri.roundResetFlg = false;
     .dscri.reloadFlg = false;
+    .ssz.profBegin(:"script:hotkeys":);
     loop{index i = 0; while; do:
       if(.se.eventKeys[i].down){
         ^^/char scri = .com.hotkeys.get(.com.eventKeyHash(.se.eventKeys[i]));
@@ -520,6 +522,7 @@ void game()
 		cond .cmd.startButton(1) && !.s.equ(.com.gameMode,"demo") && .com.pauseMenu != 2: .dscri.L.runString("togglePauseMenu(1)");
 		cond .cmd.startButton(2) && !.s.equ(.com.gameMode,"demo") && .com.pauseMenu != 1 && .com.com[1] == 0: .dscri.L.runString("togglePauseMenu(2)");
     }
+    .ssz.profEnd(:"script:hotkeys":);
     if(.dscri.roundResetFlg){
 	  reset();
 	}
@@ -527,6 +530,7 @@ void game()
       .mes.SetSharedString(:"reload":);
       ret;
     }
+    .ssz.profBegin(:"script:roundCheck":);
     if(.chr.roundOver() && !.s.equ(.com.gameMode,"practice")) branch{
       .com.round++;
       loop{index i = 0; while; do:
@@ -587,7 +591,9 @@ void game()
       while i < #.com.tmode:}
       break, break;
     }
+    .ssz.profEnd(:"script:roundCheck":);
     if(.chr.roundOver() && .s.equ(.com.gameMode, "practice")) reset();
+    .ssz.profBegin(:"script:camMath":);
 	if(.com.turbo < 1.0) sclmul **= .com.turbo;
     scl = .com.cam.scaleBound(scl * sclmul);
     tmp = ((float).com.GameWidth/2.0) / scl;
@@ -601,6 +607,8 @@ void game()
       .m.min!float?(x + l + tmp)<, .m.max!float?(x + r - tmp)<, newx;
     if(!.com.cam.zoom) x = .m.ceil(x*4.0 - 0.5)/4.0;
     y = .com.cam.yBound(scl, newy);
+    .ssz.profEnd(:"script:camMath":);
+    .ssz.profBegin(:"script:stageAction":);
     if(
       .com.tickFrame() && !.chr.timestop && (.chr.super <= 0 || .chr.superpausebg == 0)
       && (.chr.pause <= 0 || .chr.pausebg == 0)) 
@@ -608,17 +616,23 @@ void game()
       .chr.stg~action();
       stagetime++;
     }
+    .ssz.profEnd(:"script:stageAction":);
     newx = x;
     newy = y;
+    .ssz.profBegin(:"script:charAction":);
     sclmul = .chr.action(newx=, newy=, l=, r=, scl);
+    .ssz.profEnd(:"script:charAction":);
     debugInput();
+    .ssz.profBegin(:"script:frameAdvance":);
     if(!.com.addFrameTime(.com.turbo)){
       if(!.se.eventUpdate()) break, while;
       break, do;
     }
+    .ssz.profEnd(:"script:frameAdvance":);
 	if(.cmd.startButton(.com.pauseMenu)) pmSt = true;
     if(.se.esc) pmEsc = true;
     if(.se.fskip) while;
+    .ssz.profBegin(:"script:draw":);
     {
       float dx = x, dy = y, dscl = scl;
       if(
@@ -633,9 +647,12 @@ void game()
       }
       .chr.draw(dx, dy, dscl);
     }
+    .ssz.profEnd(:"script:draw":);
 //LOOP FUNCTION
+	.ssz.profBegin(:"script:luaLoop":);
 	.dscri.L.getGlobal("loop");
 	if(!.dscri.L.pcall(0, 1)) ret;
+	.ssz.profEnd(:"script:luaLoop":);
 //
 	//if(!.s.equ(.com.gameMode,"demo")) {
 		drawPauseMenu(pmSt, pmEsc);

@@ -3,6 +3,7 @@ lib cfg = "../save/config.ssz";
 //Load "lib/" Scripts
 lib m = <math.ssz>;
 lib s = <string.ssz>;
+lib ssz = <ssz.ssz>;
 
 //Load "lib/alpha/" Scripts
 lib sdl = <alpha/sdlplugin.ssz>;
@@ -414,6 +415,7 @@ public &BackGround
     float x, float y, float scl, ^&.com.PalFX fx,
     float bgscl, float localscl, float xscale, float yscale, float shakeY)
   {
+    .ssz.profBegin(:"script:bgDraw:layer":);
     float xras = (`rasterxbspeed-`rasterxtspeed) / `rasterxtspeed;
     float xbs = `xbscale;
     float dx = .m.max!float?(0.0, `deltax*bgscl);
@@ -474,6 +476,7 @@ public &BackGround
       rect=, x2, y2, sclx, scly, `xtscale*bgscl, xbs*bgscl, ys,
       xras * x2 / (#ys*lyscl*(float)`anim.spr~rct.h),
       (float).com.GameWidth/2.0, fx, true);
+    .ssz.profEnd(:"script:bgDraw:layer":);
   }
 }
 
