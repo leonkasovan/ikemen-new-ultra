@@ -71,9 +71,6 @@ GLOBAL_INC += -I $(EXT)/freetype-2.10.4/include
 GLOBAL_INC += -I $(EXT)/lua-5.2.4
 GLOBAL_INC += -I $(EXT)/libogg-1.3.6/include
 GLOBAL_INC += -I $(EXT)/libvorbis-1.3.7/include
-GLOBAL_INC += -I $(EXT)/portaudio/include
-GLOBAL_INC += -I $(EXT)/portaudio/src/common
-GLOBAL_INC += -I $(EXT)/portaudio/src/os/win
 GLOBAL_INC += -I $(EXT)/mpg123-1.25.6/src
 GLOBAL_INC += -I $(EXT)/mpg123-1.25.6/src/compat
 GLOBAL_INC += -I $(EXT)/mpg123-1.25.6/src/libmpg123
@@ -399,17 +396,6 @@ WEBP_SRCS = $(addprefix $(WEBP_DIR)/src/, \
   dec/quant_dec.c dec/tree_dec.c dec/vp8_dec.c dec/vp8l_dec.c dec/webp_dec.c)
 WEBP_OBJS = $(patsubst $(WEBP_DIR)/src/%.c,$(BLD)/webp/%.o,$(WEBP_SRCS))
 
-# ---- PortAudio ----
-PA_DIR  = $(EXT)/portaudio
-PA_SRCS = $(addprefix $(PA_DIR)/src/, \
-  common/pa_allocation.c common/pa_converters.c common/pa_cpuload.c \
-  common/pa_debugprint.c common/pa_dither.c common/pa_front.c common/pa_process.c \
-  common/pa_ringbuffer.c common/pa_stream.c common/pa_trace.c \
-  hostapi/wasapi/pa_win_wasapi.c os/win/pa_win_coinitialize.c \
-  os/win/pa_win_hostapis.c os/win/pa_win_util.c os/win/pa_win_waveformat.c)
-PA_DEFS  = -DPA_USE_WASAPI
-PA_OBJS  = $(patsubst $(PA_DIR)/src/%.c,$(BLD)/pa/%.o,$(PA_SRCS))
-
 # ---- mpg123 ----
 MPG_DIR  = $(EXT)/mpg123-1.25.6
 MPG_SRCS = $(addprefix $(MPG_DIR)/src/, \
@@ -518,14 +504,13 @@ LIB_GLEW    = $(BLD)/libglew.a
 LIB_FT      = $(BLD)/libft.a
 LIB_JPEG    = $(BLD)/libjpeg.a
 LIB_WEBP    = $(BLD)/libwebp.a
-LIB_PA      = $(BLD)/libpa.a
 LIB_MPG123  = $(BLD)/libmpg123.a
 LIB_OPUS    = $(BLD)/libopus.a
 LIB_OPUSF   = $(BLD)/libopusf.a
 LIB_MODPLUG = $(BLD)/libmodplug.a
 LIB_FLAC    = $(BLD)/libflac.a
 ALL_LIBS    = $(LIB_SDL2) $(LIB_SDL2IMG) $(LIB_SDL2TTF) $(LIB_SDL2MIX) \
-              $(LIB_LUA) $(LIB_GLEW) $(LIB_PA) $(LIB_MPG123) \
+              $(LIB_LUA) $(LIB_GLEW) $(LIB_MPG123) \
               $(LIB_OPUSF) $(LIB_MODPLUG) $(LIB_JPEG) $(LIB_WEBP) \
               $(LIB_VORBIS) $(LIB_FLAC) $(LIB_OPUS) $(LIB_FT) $(LIB_PNG) \
               $(LIB_ZLIB) $(LIB_OGG)
@@ -569,9 +554,7 @@ $(LIB_JPEG):    $(JPEG_OBJS)
 $(LIB_WEBP):    $(WEBP_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
-$(LIB_PA):      $(PA_OBJS)
-	@mkdir -p $(dir $@)
-	$(AR) $(ARFLAGS) $@ $^
+
 $(LIB_MPG123):  $(MPG_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
@@ -673,11 +656,6 @@ $(BLD)/jpeg/%.o: $(JPEG_DIR)/%.c
 $(BLD)/webp/%.o: $(WEBP_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DWEBP_DISABLE_SSE2 -c -o $@ $<
-
-# ---- PortAudio (C) ----
-$(BLD)/pa/%.o: $(PA_DIR)/src/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(PA_DEFS) -c -o $@ $<
 
 # ---- mpg123 (C) ----
 $(BLD)/mpg123/%.o: $(MPG_DIR)/src/%.c
