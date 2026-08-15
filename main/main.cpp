@@ -5,6 +5,7 @@
 #include "sszdef.h"
 #include "commandline.hpp"
 #include "mem_profiler.hpp"
+#include "time_profiler.hpp"
 #include "ssz_static.hpp"
 #include "lua_static.hpp"
 #include "mesdialog_static.hpp"
@@ -43,6 +44,7 @@ static void SafePrintRanking()
 	{
 		g_memRankingPrinted = true;
 		MemPrintRanking();
+		TimePrintRanking();
 	}
 }
 

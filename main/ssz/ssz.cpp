@@ -73,9 +73,13 @@ void* (SSZ_STDCALL* sszrefnewfunc)(intptr_t) = MemoryKakuho;
 void (SSZ_STDCALL* sszrefdeletefunc)(void*) = MemoryKaihou;
 
 #include "mem_profiler.hpp"
+#include "time_profiler.hpp"
 
 // Memory profiling event log — single definition for the extern in mem_profiler.hpp
 std::vector<MemorySnapshot> g_memEvents;
+
+// Time profiling accumulators — single definition for the extern in time_profiler.hpp
+std::vector<TimeSample> g_timeSamples;
 
 #include "typeid.h"
 
@@ -685,17 +689,54 @@ extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
 	}
 }
 
+// =========================================================================
+// ProfBegin / ProfEnd  –  time profile markers callable from SSZ
+//
+// Usage in SSZ (mirrors MemMarkBefore/MemMarkAfter):
+//   plugin void ProfBegin(:^/char:) = <dll/ssz.dll>;
+//   plugin void ProfEnd(:^/char:)   = <dll/ssz.dll>;
+//
+//   ProfBegin("FIGHT_LOOP");
+//   ... hot section ...
+//   ProfEnd("FIGHT_LOOP");
+//
+// Elapsed time accumulates into the same g_timeSamples report that
+// TimePrintRanking() prints at exit. Tags are ASCII labels.
+// =========================================================================
+
+static std::unordered_map<std::wstring, std::chrono::steady_clock::time_point> g_profStartMap;
+
+extern "C" void SSZ_STDCALL ProfBegin(PluginUtil* pu, Reference tag)
+{
+	g_profStartMap[pu->refToWstr(tag)] = std::chrono::steady_clock::now();
+}
+
+extern "C" void SSZ_STDCALL ProfEnd(PluginUtil* pu, Reference tag)
+{
+	std::wstring wtag = pu->refToWstr(tag);
+	auto it = g_profStartMap.find(wtag);
+	if (it == g_profStartMap.end()) return;
+	double ms = (double)std::chrono::duration_cast<std::chrono::microseconds>(
+		std::chrono::steady_clock::now() - it->second).count() / 1000.0;
+	g_profStartMap.erase(it);
+	TimeAccumulateMs(toNarrow(wtag).c_str(), ms);
+}
+
 bool SSZ_STDCALL Run(const std::wstring& scriptPath)
 {
 	LOG_DEBUG("SSZ", "Run() called, starting compilation...");
 	CompilerState cs;
-	auto error = cs.compile(scriptPath);
-	LOG_DEBUG("SSZ", "Compilation finished, error size=%zu", (size_t)error.size());
-	if(error.size() > 0){
-		printf("Error Message\n%ls\n\n", error.c_str());
-		return false;
+	{
+		TIME_SCOPE(ssz_compile);
+		auto error = cs.compile(scriptPath);
+		LOG_DEBUG("SSZ", "Compilation finished, error size=%zu", (size_t)error.size());
+		if(error.size() > 0){
+			printf("Error Message\n%ls\n\n", error.c_str());
+			return false;
+		}
 	}
 	LOG_DEBUG("SSZ", "Running compiled script...");
+	TIME_SCOPE(ssz_run);
 	return cs.run();
 }
 

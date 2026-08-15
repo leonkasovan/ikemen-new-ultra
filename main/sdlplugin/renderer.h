@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <windows.h>
 
+#include "time_profiler.hpp"
+
 // ---------------------------------------------------------------------------
 // Renderer type enumeration
 // ---------------------------------------------------------------------------
@@ -255,6 +257,19 @@ inline void perfFrameEnd(PerfCounters& pc, uint32_t currentTick)
 	pc.totalFrames++;
 	pc.totalDrawCalls += pc.drawCalls;
 	pc.fpsFrameCount++;
+
+	// Session-wide accumulators for the exit-time ranking report
+	// (script time = frame time minus accounted render+flip time)
+	double totalRenderMs = (pc.spriteTimeUs + pc.shadowTimeUs + pc.fillTimeUs) / 1000.0;
+	double flipMs        = pc.flipTimeUs / 1000.0;
+	double scriptMs      = (double)pc.lastFrameTimeMs - totalRenderMs - flipMs;
+	if (scriptMs < 0.0) scriptMs = 0.0;
+	TimeAccumulateMs("frame:total", pc.lastFrameTimeMs);
+	TimeAccumulateMs("frame:script(SSZ+logic)", scriptMs);
+	TimeAccumulateMs("frame:render:sprites", pc.spriteTimeUs / 1000.0);
+	TimeAccumulateMs("frame:render:shadows", pc.shadowTimeUs / 1000.0);
+	TimeAccumulateMs("frame:render:fills", pc.fillTimeUs / 1000.0);
+	TimeAccumulateMs("frame:flip", flipMs);
 
 	// Update FPS every second using SDL_GetTicks (low precision but sufficient)
 	uint32_t elapsed = currentTick - pc.fpsLastTick;

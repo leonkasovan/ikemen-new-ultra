@@ -2190,20 +2190,19 @@ void SSZ_STDCALL Flip()
 	QueryPerformanceCounter(&flipT1);
 	g_perfCounters.flipTimeUs = qpcElapsedUs(flipT0, flipT1, g_perfCounters.qpcFreq);
 
-	// End current frame perf tracking (includes flip time)
-	if (g_perfMonitorEnabled)
+	// End current frame perf tracking (includes flip time); always tracked so
+	// the exit-time TIME USAGE RANKING report accumulates, print only when
+	// the perf monitor is enabled (avoids log spam by default)
 	{
 		uint32_t now = SDL_GetTicks();
 		perfFrameEnd(g_perfCounters, now);
-		perfPrintFrame(g_perfCounters, g_rendererInfo);
+		if (g_perfMonitorEnabled)
+			perfPrintFrame(g_perfCounters, g_rendererInfo);
 	}
 
 	// Begin next frame perf tracking
-	if (g_perfMonitorEnabled)
-	{
-		g_perfCounters.frameStartTick = SDL_GetTicks();
-		perfFrameBegin(g_perfCounters);
-	}
+	g_perfCounters.frameStartTick = SDL_GetTicks();
+	perfFrameBegin(g_perfCounters);
 }
 
 intptr_t SSZ_STDCALL AllocSurface(int32_t h, int32_t w)
@@ -5443,12 +5442,13 @@ void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 
 void SSZ_STDCALL GlSwapBuffers()
 {
-	// End previous frame perf tracking
-	if (g_perfMonitorEnabled)
+	// End previous frame perf tracking (always tracked; print only when
+	// the perf monitor is enabled)
 	{
 		uint32_t now = SDL_GetTicks();
 		perfFrameEnd(g_perfCounters, now);
-		perfPrintFrame(g_perfCounters, g_rendererInfo);
+		if (g_perfMonitorEnabled)
+			perfPrintFrame(g_perfCounters, g_rendererInfo);
 	}
 
 	SDL_GL_SwapWindow(g_window);
@@ -5462,11 +5462,8 @@ void SSZ_STDCALL GlSwapBuffers()
 	glMatrixMode(GL_MODELVIEW);
 	g_orthoProjectionSet = true;
 	// Begin next frame perf tracking
-	if (g_perfMonitorEnabled)
-	{
-		g_perfCounters.frameStartTick = SDL_GetTicks();
-		perfFrameBegin(g_perfCounters);
-	}
+	g_perfCounters.frameStartTick = SDL_GetTicks();
+	perfFrameBegin(g_perfCounters);
 }
 
 bool SSZ_STDCALL InitMugenGl()
