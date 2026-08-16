@@ -480,6 +480,9 @@ static void SSZException(uint8_t* adr)
 	}
 	mes[idx] = L('\0');
 	MessageBoxW(nullptr, mes, g_dtitle, MB_OK | MB_ICONERROR);
+	// Mirror the crash report to stderr so headless runs capture it in the log.
+	fprintf(stderr, "%ls\n%ls\n", g_dtitle, mes);
+	fflush(stderr);
 }
 #endif
 
