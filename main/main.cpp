@@ -44,6 +44,7 @@ static void SafePrintRanking()
 	{
 		g_memRankingPrinted = true;
 		MemPrintRanking();
+		MemPrintProcess();
 		TimePrintRanking();
 	}
 }
@@ -328,6 +329,7 @@ static int updateStageInSelectDef(const char* fname)
 int main(int argc, char *argv[]) {
 	AddVectoredExceptionHandler(1, MemProfilerVEH);
 	atexit(SafePrintRanking);
+	MemMarkProcess("PROCESS-START");
 	setlocale(LC_CTYPE, "en_US.UTF-8");
 	CommandLineString<WCHR> cmdline;
 #ifdef _WIN32
@@ -407,6 +409,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");
+	MemMarkProcess("PLUGINS-REGISTERED");
 
 	updateCharInSelectDef("data/select.def");
 	updateStageInSelectDef("data/select.def");
@@ -414,6 +417,7 @@ int main(int argc, char *argv[]) {
 	// ── SSZ JIT boot path ──────────────────────────────────────────
 	// Run() compiles and executes via the native ABI.
 	LOG_DEBUG("SSZ", "Starting Run()...");
+	MemMarkProcess("PRE-COMPILE");
 	if (!Run(scriptPath)) {
 		LOG_INFO("Ikemen", "Script failed");
 		LOG_DEBUG("SSZ", "Run() FAILED");

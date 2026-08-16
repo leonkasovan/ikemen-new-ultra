@@ -3,11 +3,13 @@ math.randomseed(os.time())
 
 -- Engine API (required)
 require("script.common")
+procMemMark("LUA-COMMON")
 
 -- Debug / match / lifebar (required by engine)
 loadDebugFont(fontDebug)
 setDebugScript("script/match.lua")
 loadLifebar(fightDef)
+procMemMark("LUA-MATCH-LOADED")
 
 -- Populate t_selChars / t_selStages from select.def
 -- Try full loader.lua first (rich character/stage metadata), fall back to minimal inline parser
@@ -76,11 +78,14 @@ setCom(1, 4)            -- P1 CPU (difficulty 4)
 setCom(2, 4)            -- P2 CPU (difficulty 4)
 
 -- Start match session
+procMemMark("LUA-PRE-SELECT")
 selectStart()
 selectChar(1, player1, 1)
 selectChar(2, player2, 1)
 setStage(stageNo)
 selectStage(stageNo)
+procMemMark("LUA-SELECT-DONE")
 
 -- Run until match ends
 winner = game()
+procMemMark("LUA-GAME-DONE")

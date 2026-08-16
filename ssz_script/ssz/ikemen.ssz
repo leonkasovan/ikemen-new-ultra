@@ -67,6 +67,24 @@ void scGame(&.lua.State L=, int re=)
   L.pushNumber((double).match());
 }
 
+void procMemMark(&.lua.State L=, int re=)
+{
+  re = 0;
+  if(L.isString(1)) .ssz.procMemMark(L.toString(1));
+}
+
+void memMarkBefore(&.lua.State L=, int re=)
+{
+  re = 0;
+  if(L.isString(1)) .ssz.memMarkBefore(L.toString(1));
+}
+
+void memMarkAfter(&.lua.State L=, int re=)
+{
+  re = 0;
+  if(L.isString(1)) .ssz.memMarkAfter(L.toString(1));
+}
+
 bool init(&.lua.State L=)
 {
   .sc.init(L=);
@@ -74,6 +92,9 @@ bool init(&.lua.State L=)
   L.register("selectStart", .selectStart);
   L.register("game", .scGame);
   L.register("sszReload", .sszReload);
+  L.register("procMemMark", .procMemMark);
+  L.register("memMarkBefore", .memMarkBefore);
+  L.register("memMarkAfter", .memMarkAfter);
   ret true;
 }
 
@@ -146,7 +167,11 @@ int game()
       share~stt = 0;
     }
     .mes.SetSharedString(:ss:);
+    .ssz.procMemMark("MATCH-START");
+    .ssz.memMarkBefore("MATCH-RUN");
     bool b = .ld.sszc~run();
+    .ssz.memMarkAfter("MATCH-RUN");
+    .ssz.procMemMark("MATCH-END");
     share~push();
     bool w1 = .com.p1wins >= .com.p1mw;
     bool w2 = .com.p2wins >= .com.p2mw;
@@ -207,6 +232,7 @@ void main()
     .error!.self?("Initialization Failed.");
     ret;
   }
+  .ssz.procMemMark("POST-INIT");
 /?/*.cfg.Renderer != 0:
   if(!.sdl.InitMugenGl(::)){
     .error!.self?("Renderer Initialization Failed, set Renderer to 0 (SDL2) in save/config.ssz");
@@ -231,6 +257,7 @@ void main()
     ^/char err = L.toString(-1);
     if(!.s.equ(err[#err-10..-1], "<game end>")) .error!self?(err);
   }
+  .ssz.procMemMark("POST-SYSTEM-LOAD");
   .ssz.memMarkAfter("EXIT");
 }
 

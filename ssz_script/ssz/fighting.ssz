@@ -334,6 +334,9 @@ void game()
     sdr.p = .s.sToN!index?(sss[1]);
     sdr.copyToRef!&.sha.Share?(share=);
     share~push();
+    .ssz.procMemMark("FIGHT-SETUP-START");
+    .ssz.memMarkBefore("FIGHT-SETUP");
+    .ssz.memMarkBefore("SETUP-LUA");
     ^/char err;
     //if(#.com.debugScript > 0 && #.cmd.net == 0){ //Don't load match.lua script during online
     if(#.com.debugScript > 0){ //Load match.lua script during online
@@ -342,6 +345,8 @@ void game()
     }
     stagetime = share~stt;
     .cmd.synchronize();
+    .ssz.memMarkAfter("SETUP-LUA");
+    .ssz.memMarkBefore("SETUP-CHARS");
     .wm.init();
     ^int level.new(#.chr.chars);
     loop{index i = 0; while; do:
@@ -488,11 +493,15 @@ void game()
     continue:
       i++;
     while i < #.chr.chars:}
+    .ssz.memMarkAfter("SETUP-CHARS");
+    .ssz.memMarkBefore("SETUP-STAGE");
     .chr.stg~reset();//reset here due to bgctrl (manipulating types that can be referenced cyclically)
     loop{int i = 0; while; do:
       .chr.stg~action();
       i++;
     while i < stagetime:}
+    .ssz.memMarkAfter("SETUP-STAGE");
+    .ssz.memMarkBefore("SETUP-RESET");
 	.com.sysControls = 0; //Fight
     .com.gameState = 1;
     //if(.com.round == 1) .snd.bgm~play(.chr.stg~bgmusic);
@@ -504,6 +513,9 @@ void game()
     oldp2wins = .com.p2wins;
     olddraws = .com.draws;
     reset();
+    .ssz.memMarkAfter("SETUP-RESET");
+    .ssz.memMarkAfter("FIGHT-SETUP");
+    .ssz.procMemMark("FIGHT-SETUP-DONE");
   do:
     .com.step = false;
     .dscri.roundResetFlg = false;

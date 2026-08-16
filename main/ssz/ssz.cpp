@@ -25,6 +25,50 @@ static LockSingler g_KaihouStopMutex;
 // Byte-level allocation counters (declared extern in sszdef.h)
 volatile int64_t g_allocBytes = 0;
 volatile int64_t g_freeBytes  = 0;
+volatile int64_t g_peakLiveBytes = 0;
+
+// JIT output volume counters (declared extern in sszdef.h, incremented in
+// jitcompiler.hpp)
+volatile int64_t g_jitCodeBytes = 0;
+volatile int64_t g_jitDataBytes = 0;
+
+// Allocation-size histogram (power-of-2 buckets) — cumulative counts/bytes
+// per size class, printed at exit to characterise what dominates the SSZ heap.
+static const int MEM_HIST_BITS = 26; // buckets up to 64 MB per allocation
+static volatile int64_t g_memHistCount[MEM_HIST_BITS];
+static volatile int64_t g_memHistBytes[MEM_HIST_BITS];
+
+static inline void MemHistAdd(intptr_t size)
+{
+	int b = 0;
+	for (intptr_t s = size; s > 1; s >>= 1) b++;
+	if (b >= MEM_HIST_BITS) b = MEM_HIST_BITS - 1;
+	g_memHistCount[b]++;
+	g_memHistBytes[b] += size;
+}
+
+// Printed from MemPrintRanking() at exit — cumulative alloc volume per size
+// class (allocs are NOT subtracted on free; this characterises what the heap
+// churns, not what is live).
+void MemPrintHistogram()
+{
+	LOG_INFO("Memory", "==== SSZ ALLOC-SIZE HISTOGRAM (cumulative, bytes/count) ====");
+	for (int b = 0; b < MEM_HIST_BITS; b++)
+	{
+		if (g_memHistCount[b] == 0) continue;
+		int64_t lo = (int64_t)1 << b;
+		int64_t hi = ((int64_t)1 << (b + 1)) - 1;
+		if (b == 0) lo = 1;
+		LOG_INFO("Memory", "  %9lld - %9lld : %12.2f MB   %10lld allocs  (%6.2f %%)",
+			(long long)lo, (long long)hi,
+			(double)g_memHistBytes[b] / 1048576.0,
+			(long long)g_memHistCount[b],
+			g_allocBytes > 0
+				? (double)g_memHistBytes[b] * 100.0 / (double)g_allocBytes : 0.0);
+	}
+	LOG_INFO("Memory", "  total allocs        : %12.2f MB",
+		(double)g_allocBytes / 1048576.0);
+}
 
 // =========================================================================
 // MemoryKakuho  –  allocate + track bytes
@@ -37,6 +81,9 @@ static void* SSZ_STDCALL MemoryKakuho(intptr_t size)
 	intptr_t* p = (intptr_t*)new int8_t[size + sizeof(intptr_t)];
 	p[0] = size;
 	g_allocBytes += size;
+	if (g_allocBytes - g_freeBytes > g_peakLiveBytes)
+		g_peakLiveBytes = g_allocBytes - g_freeBytes;
+	MemHistAdd(size);
 	// LOG_DEBUG("Memory", "ALLOC ptr=%p size=%lld", p + 1, (long long)size);
 	return p + 1;
 }
@@ -52,6 +99,8 @@ static void SSZ_STDCALL MemoryKaihou(void* p)
 	intptr_t* realPtr = ((intptr_t*)p) - 1;
 	intptr_t size = realPtr[0];
 	g_freeBytes += size;
+	if (g_allocBytes - g_freeBytes > g_peakLiveBytes)
+		g_peakLiveBytes = g_allocBytes - g_freeBytes;
 	// LOG_DEBUG("Memory", "FREE  ptr=%p size=%lld", p, (long long)size);
 	// NOTE: g_KaihouStopCount check is inside the lock to prevent a TOCTOU
 	// race: another thread (GC thread) could change g_KaihouStopCount between
@@ -77,6 +126,11 @@ void (SSZ_STDCALL* sszrefdeletefunc)(void*) = MemoryKaihou;
 
 // Memory profiling event log — single definition for the extern in mem_profiler.hpp
 std::vector<MemorySnapshot> g_memEvents;
+
+// Process-wide memory timeline / milestones — single definitions for the
+// externs in mem_profiler.hpp
+std::vector<ProcessMemSample>    g_memTimeline;
+std::vector<ProcessMemMilestone> g_memMilestones;
 
 // Time profiling accumulators — single definition for the extern in time_profiler.hpp
 std::vector<TimeSample> g_timeSamples;
@@ -681,12 +735,29 @@ extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
 		g_memBeforeMap.erase(it);
 		MemRecord(tagA.c_str(), before, mem);
 		LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (delta=%+lld)",
-			tagA.c_str(), (unsigned long long)mem,
+		tagA.c_str(), (unsigned long long)mem,
 			(long long)(int64_t)(mem - before));
 	} else {
 		LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (WARNING: no matching BEFORE)",
 			tagA.c_str(), (unsigned long long)mem);
 	}
+}
+
+// =========================================================================
+// ProcMemMark  –  process-memory milestone marker callable from SSZ
+//
+// Usage in SSZ (same pattern as MemMarkBefore/MemMarkAfter):
+//   plugin void ProcMemMark(:^/char:) = <dll/ssz.dll>;
+//   ProcMemMark("STAGE-LOADED");
+//
+// Records the current process working set / private bytes (what Task
+// Manager shows) as a named milestone in the PROCESS MEMORY report.
+// =========================================================================
+extern "C" void SSZ_STDCALL ProcMemMark(PluginUtil* pu, Reference tag)
+{
+	std::string tagA = toNarrow(pu->refToWstr(tag));
+	MemMarkProcess(tagA.c_str());
+	LOG_DEBUG("Memory", "[%s] process mark", tagA.c_str());
 }
 
 // =========================================================================

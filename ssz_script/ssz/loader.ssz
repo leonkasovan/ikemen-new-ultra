@@ -10,6 +10,9 @@ lib lua = <alpha/lua.ssz>;
 lib se = <alpha/sdlevent.ssz>;
 lib sdl = <alpha/sdlplugin.ssz>;
 
+//Load "lib/" Scripts
+lib ssz = <ssz.ssz>;
+
 //Load "script/ssz/" Scripts
 lib chr = "char.ssz";
 lib com = "common.ssz";
@@ -200,6 +203,7 @@ void load()
     ret `codeDone && `stageDone && `allCharDone();
   }
   loop{while; do:
+    .ssz.memMarkBefore("LOAD-CHAR");
     loop{index i = 0; while; do:
       if(!charDone[i]){
         int foo = .chara(i);
@@ -213,6 +217,7 @@ void load()
       }
       i++;
     while i < #charDone:}
+    .ssz.memMarkAfter("LOAD-CHAR");
     if(
       !charDone[2] && #.sc.syst.selinf.p[0].selchr > 0
       && .com.tmode[0] != (int).com.TeamMode::Simul) loop
@@ -240,11 +245,14 @@ void load()
       i += 2;
     while i < #.chr.chars:}
     if(!codeDone && allCharDone()){
+      .ssz.memMarkBefore("LOAD-COMPILE");
       if(!.stateCompile()){
         .state = .State::Error;
         ret;
       }
+      .ssz.memMarkAfter("LOAD-COMPILE");
       codeDone = true;
+      .ssz.procMemMark("CHAR-CODE-COMPILED");
     }
     if(!stageDone && .sc.syst.selinf.sel.selectedStageNo >= 0){
       if(!.stage()){
@@ -252,11 +260,13 @@ void load()
         ret;
       }
       stageDone = true;
+      .ssz.procMemMark("STAGE-LOADED");
     }
     .th.sleep(0d10);
     if(.se.end) .state = .State::Cancel;
     if(.state == .State::Cancel) ret;
   while !allDone():}
+  .ssz.procMemMark("MATCH-LOADED");
   .state = .State::Complete;
 }
 

@@ -13,6 +13,7 @@ luaModulesPath = { --Lua External Modules Folder Paths
 }
 
 --Sprite Data
+memMarkBefore("SP-SFF")
 sprFade = sffNew("data/fade.sff") --load fade sprites
 sprSys = sffNew("data/system.sff") --load screenpack/menu MUGEN sprites
 sprIkemen = sffNew("data/ikemen.sff") --load screenpack/menu IKEMEN sprites
@@ -22,6 +23,7 @@ group is organized based on controller type (0=Keyboard, 1=XBOX Gamepad, 2=PS3 G
 index is organized based on controller key/button id returned by SDL functions [getInputKeyboard(), getInputID()]
 ]]
 sprInputHints = sffNew("data/inputhints.sff")
+memMarkAfter("SP-SFF")
 keyboardInputHintsScaleX = 0.7
 keyboardInputHintsScaleY = 0.7
 --
@@ -29,10 +31,12 @@ gamepadInputHintsScaleX = 0.7
 gamepadInputHintsScaleY = 0.7
 
 --Sound Data (Sound effects [SFX] do not interrupt music/bgm)
+memMarkBefore("SP-SND")
 sndSys = sndNew("data/system.snd")
 sndIkemen = sndNew("data/ikemen.snd")
 sndTower = sndNew("data/tower.snd")
 sndAnncr = sndNew("data/charSnd/announcer.snd")
+memMarkAfter("SP-SND")
 
 --Music Data (ONLY MP3 and OGG formats are Supported)
 bgmNothing = " .mp3"
@@ -59,6 +63,7 @@ bgmTourneyChampion = "sound/system/Champion.mp3"
 bgmAbyss = "sound/system/Abyss.mp3"
 
 --Font Data (At the moments only FNT Format is Supported)
+memMarkBefore("SP-FONT")
 fontDebug = "font/14x14.fnt"
 padFnt = fontNew("font/f-pad.fnt")
 survNumFnt = fontNew("font/survival_nums.fnt")
@@ -93,6 +98,7 @@ font22 = fontNew("font/extra/ssf2x_s.fnt")
 font23 = fontNew("font/extra/ssf2x_sL.fnt")
 font24 = fontNew("font/extra/ssf2x_vL.fnt")
 font30 = fontNew("font/extra/F-.fnt")
+memMarkAfter("SP-FONT")
 
 --Storyboard Data (Optional)
 storyboardLogo = "storyboards/logo.def"
@@ -293,6 +299,7 @@ Description: Draw text on screen.
 --; LOADING GAME SCREENPACK DEFINITION
 --;===========================================================
 --Loading Text
+memMarkBefore("SP-TXT")
 txt_loading = createTextImg(font1, 0, -1, "", 310, 230)
 
 --;===========================================================
@@ -4740,3 +4747,4 @@ CABLE DORADO 2
 CD2
 
 ]]
+memMarkAfter("SP-TXT")

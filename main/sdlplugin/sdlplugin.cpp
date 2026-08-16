@@ -2198,6 +2198,10 @@ void SSZ_STDCALL Flip()
 		perfFrameEnd(g_perfCounters, now);
 		if (g_perfMonitorEnabled)
 			perfPrintFrame(g_perfCounters, g_rendererInfo);
+		// Process-memory timeline sample ~once per second (what Task Manager
+		// shows): working set + private bytes, peak tracked, printed at exit.
+		if (g_perfCounters.totalFrames % 60 == 0)
+			MemSampleProcess(g_perfCounters.totalFrames, now);
 	}
 
 	// Begin next frame perf tracking

@@ -19,6 +19,7 @@ class CompilerState;	extern "C"
 	bool           SSZ_STDCALL CompilerRun(PluginUtil*, CompilerState*);
 	void           SSZ_STDCALL MemMarkBefore(PluginUtil*, Reference);
 	void           SSZ_STDCALL MemMarkAfter(PluginUtil*, Reference);
+	void           SSZ_STDCALL ProcMemMark(PluginUtil*, Reference);
 	void           SSZ_STDCALL ProfBegin(PluginUtil*, Reference);
 	void           SSZ_STDCALL ProfEnd(PluginUtil*, Reference);
 }
@@ -35,6 +36,7 @@ inline bool ssz_static_register()
 		{ "CompilerRun",         (void*)CompilerRun         },
 		{ "MemMarkBefore",       (void*)MemMarkBefore       },
 		{ "MemMarkAfter",        (void*)MemMarkAfter        },
+		{ "ProcMemMark",         (void*)ProcMemMark         },
 		{ "ProfBegin",           (void*)ProfBegin           },
 		{ "ProfEnd",             (void*)ProfEnd             },
 	};

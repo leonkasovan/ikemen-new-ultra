@@ -1,7 +1,14 @@
 --This file is loaded when a match starts. Here, all CNS triggers defined in trigger-script.ssz will be usable.
 inMatch = true
+--Memory profiling: split match.lua top-level into common.lua re-load / pause.lua / rest
+memMarkBefore("ML-COMMON")
 assert(loadfile("script/common.lua"))() --Load stuff shared with main menu (options data, screenpack assets, functions, etc..)
+memMarkAfter("ML-COMMON")
+memMarkBefore("ML-PAUSE")
 require("script.pause")
+memMarkAfter("ML-PAUSE")
+memMarkBefore("ML-REST")
+local mlRestDone = false
 
 --[[Load External Lua Modules FOR MATCH
 To load a lua file as an external module during match:
@@ -1274,6 +1281,15 @@ function loop() --The code for this function should be thought of as if it were 
 		exitMatch()
 		return
 	end
+	--Memory profiling: bracket each roundstate phase (0=intro/VS, 1=prefight, 2=fight, 3=KO, 4=roundend, 5=matchover)
+	if lastMemRS == nil then lastMemRS = -1 end
+	local rs = roundstate()
+	if rs ~= lastMemRS then
+		if lastMemRS >= 0 then memMarkAfter("RS-"..lastMemRS) end
+		memMarkBefore("RS-"..rs)
+		procMemMark("RS-"..rs)
+		lastMemRS = rs
+	end
 	f_actionsCheck()
 --During Demo Mode
 	if getGameMode() == "demo" then
@@ -1517,4 +1533,15 @@ function loop() --The code for this function should be thought of as if it were 
 		end
 		f_attractCredits(318, 238, -1)
 	end
+	--Memory profiling: flush the open roundstate pair once the match is decided
+	if matchover() and lastMemRS ~= nil and lastMemRS >= 0 then
+		memMarkAfter("RS-"..lastMemRS)
+		lastMemRS = -1
+	end
+end
+
+--Memory profiling: close ML-REST once (first loop() call happens after full load)
+if not mlRestDone then
+	memMarkAfter("ML-REST")
+	mlRestDone = true
 end

@@ -5,6 +5,7 @@ lib al = <alert.ssz>;
 lib m = <math.ssz>;
 lib sh = <shell.ssz>;
 lib s = <string.ssz>;
+lib ssz = <ssz.ssz>;
 
 //Load "lib/alpha/" Scripts
 lib lua = <alpha/lua.ssz>;
@@ -252,11 +253,51 @@ void clear(&.lua.State L=, int re=)
 
 public &.lua.State L;
 
+// Memory-profiling hooks (same pattern as ssz.ssz lib, but registered on the
+// debug-script Lua state so match.lua can call them):
+void memMarkBefore(&.lua.State L=, int re=)
+{
+  re = 0;
+  plugin void MemMarkBefore(:^/char:) = <dll/ssz.dll>;
+  if(L.isString(1)){
+    ^/char tag = L.toString(1);
+    MemMarkBefore(:tag:);
+  }
+}
+
+void memMarkAfter(&.lua.State L=, int re=)
+{
+  re = 0;
+  plugin void MemMarkAfter(:^/char:) = <dll/ssz.dll>;
+  if(L.isString(1)){
+    ^/char tag = L.toString(1);
+    MemMarkAfter(:tag:);
+  }
+}
+
+void procMemMark(&.lua.State L=, int re=)
+{
+  re = 0;
+  plugin void ProcMemMark(:^/char:) = <dll/ssz.dll>;
+  if(L.isString(1)){
+    ^/char tag = L.toString(1);
+    ProcMemMark(:tag:);
+  }
+}
+
 public ^/char loadFile(^/char file)
 {
+  // The match runs on a FRESH Lua state (separate from the menu's main state).
+  // match.lua re-loads common.lua/screenpack.lua here, but the SFF/SND caches
+  // in the ssz.dll plugin (SffV2Cache/SndCache) share the heavy `^ubyte` pixel
+  // and sample arrays with the boot copy, so the ~57 MB duplicate is avoided.
+  .ssz.memMarkBefore("DSCRI-REGISTER");
   .sc.init(.L=);//Load all functions registered in script.ssz
   .tscri.registerFunction(.L=); //Load all functions registered in trigger-script.ssz
   .sscri.init(.L=); //Load all functions registered in system-script.ssz
+  .L.register("memMarkBefore", .memMarkBefore);
+  .L.register("memMarkAfter", .memMarkAfter);
+  .L.register("procMemMark", .procMemMark);
   .L.register("puts", .puts);
   .L.register("setLife", .setLife);
   .L.register("setLifeMax", .setLifeMax);
@@ -282,10 +323,14 @@ public ^/char loadFile(^/char file)
   .L.register("setTime", .setTime);
   .L.register("clear", .clear);
   .L.register("sszReload", .sszReload);
+  .ssz.memMarkAfter("DSCRI-REGISTER");
+  .ssz.memMarkBefore("DSCRI-RUNFILE");
   if(!.L.runFile(file)){
+    .ssz.memMarkAfter("DSCRI-RUNFILE");
     ^/char err = .L.toString(-1);
     ret err;
   }
+  .ssz.memMarkAfter("DSCRI-RUNFILE");
   ret "";
 }
 

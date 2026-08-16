@@ -8852,6 +8852,7 @@ public:
 			ttl += l;
 			root->stat->literalsize[i] = l;
 		}
+		g_jitDataBytes += ttl;
 		{
 			std::vector<std::basic_string<int8_t>> dummy;
 			root->stat->literallist.swap(dummy);
@@ -8862,6 +8863,7 @@ public:
 				nullptr, bin.code.size(), MEM_RESERVE | MEM_COMMIT,
 				PAGE_READWRITE);
 		if(vmemory != nullptr){
+			g_jitCodeBytes += bin.code.size();
 			bin.PBackpatch(bin.cadrpbp, (intptr_t)vmemory);
 			bin.MBackpatch(bin.cadrmbp, (intptr_t)vmemory);
 			memcpy(vmemory, bin.code.data(), bin.code.size());

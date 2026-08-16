@@ -172,6 +172,12 @@ extern void (SSZ_STDCALL *sszrefdeletefunc)(void*);
 extern volatile int64_t g_allocBytes;
 extern volatile int64_t g_freeBytes;
 
+// JIT output volume counters (incremented in jitcompiler.hpp, printed by the
+// memory profiler): total x86 machine code VirtualAlloc'd, and total bytes of
+// per-function literal/global data (gre) kept resident.
+extern volatile int64_t g_jitCodeBytes;
+extern volatile int64_t g_jitDataBytes;
+
 // =========================================================================
 // Unified logging macros
 // =========================================================================

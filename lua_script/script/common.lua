@@ -60,6 +60,7 @@ end
 --ltn12 = require("ltn12")
 --htmlparser = require("htmlparser") --Load htmlparser library
 --curl = require("cURL") --Load Lua-cURL library (https requests are not supported yet in Windows XP)
+memMarkBefore("CL-DATA")
 lfs = require("lfs") --Load LuaFileSystem library
 --ffi = require("ffi") --Load Foreign Function Interface library
 --Load JSON library
@@ -120,6 +121,7 @@ p2Dat = json.decode(f_fileRead(saveP2Path))
 
 --Data loading from abyss_sav.json
 abyssDat = json.decode(f_fileRead(saveAbyssPath))
+memMarkAfter("CL-DATA")
 --;===========================================================
 --; COMMON FUNCTIONS DEFINITION
 --;===========================================================
@@ -997,6 +999,7 @@ function setCommand(c)
 	commandAdd(c, 'sd', '/s, D')
 end
 
+memMarkBefore("CL-CMDS")
 p1Cmd = commandNew()
 setCommand(p1Cmd)
 
@@ -1004,6 +1007,7 @@ p2Cmd = commandNew()
 setCommand(p2Cmd)
 
 setSysCtrl(10) --Load Menu Controls from config.ssz
+memMarkAfter("CL-CMDS")
 
 --Reset Menu Controls
 function f_resetMenuInputs()
@@ -3623,8 +3627,12 @@ function f_loadLuaMods(bool)
 	end
 end
 if data.debugLog then f_printTable(_VERSION, 'save/debug/LuaVersion.log') end
+memMarkBefore("CL-SCREENPACK")
 require("script.screenpack") --Load screenpack assets
+memMarkAfter("CL-SCREENPACK")
+memMarkBefore("CL-OPTIONS")
 require("script.options") --Load options script
+memMarkAfter("CL-OPTIONS")
 --;===========================================================
 --; DISCORD RICH PRESENCE API
 --;===========================================================

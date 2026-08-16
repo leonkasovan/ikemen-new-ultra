@@ -10,6 +10,12 @@ public void memMarkAfter(^/char label)
   MemMarkAfter(:label:);
 }
 
+public void procMemMark(^/char label)
+{
+  plugin void ProcMemMark(:^/char:) = <dll/ssz.dll>;
+  ProcMemMark(:label:);
+}
+
 public void profBegin(^/char label)
 {
   plugin void ProfBegin(:^/char:) = <dll/ssz.dll>;
