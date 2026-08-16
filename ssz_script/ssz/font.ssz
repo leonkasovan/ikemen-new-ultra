@@ -15,6 +15,7 @@ lib sdl = <alpha/sdlplugin.ssz>;
 //Load "script/ssz/" Scripts
 lib com = "common.ssz";
 lib sff = "sff.ssz";
+lib ssz = <ssz.ssz>;
 
 
 public &Font
@@ -40,8 +41,18 @@ public &Font
   int fontAtlasStride = 0;
   public ^/char loadFile(^/char filename)
   {
-  if(.s.equ(.s.toLower(filename[#filename-4 .. -1]), ".fnt")) ret `loadFontV1(filename);
-  ret `loadFontV2(filename);
+    // Memory profiling: per-font SSZ heap delta (atlas + per-char glyph copies)
+    ^/char memTag = "FONTV1:" + filename;
+    .ssz.memMarkBefore(:memTag:);
+    ^/char e = "";
+    branch{
+    cond .s.equ(.s.toLower(filename[#filename-4 .. -1]), ".fnt"):
+      e = `loadFontV1(filename);
+    else:
+      e = `loadFontV2(filename);
+    }
+    .ssz.memMarkAfter(:memTag:);
+    ret e;
   }
   public ^/char loadFontV1(^/char filename)
   {:<-
