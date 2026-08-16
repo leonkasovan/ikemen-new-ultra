@@ -262,10 +262,21 @@ public &Sprite
     `setPxl(px);
     ret "";
   }
-  public ^/char readV2(&.file.File f=, long ofs, uint dsz)
+  public ^/char readV2(
+    &.file.File f=, long ofs, uint dsz, bool useCache, ^/char cacheKey)
   {
+    // Shared decoded-pixel cache: the menu and the match each build a
+    // screenpack, so reusing the `^ubyte` pixel buffers (built-in type,
+    // safe across compilations) avoids re-reading + re-decoding ikemen.sff
+    // and re-allocating ~40 MB for the second copy.
+    plugin bool SffV2CacheGet(:^/char, int, int, ^ubyte=:) = <dll/ssz.dll>;
+    plugin void SffV2CachePut(:^/char, int, int, ^ubyte:) = <dll/ssz.dll>;
     f.seek(ofs+4, .file.Seek::SET);
     ^ubyte px;
+    if(useCache && SffV2CacheGet(:cacheKey, `imageGroup, `imageNumber, px=:)){
+      `setPxl(px);
+      ret "";
+    }
     if(`rle < 0) switch(-`rle){
       if(-`rle <= 4){
         px.new((index)dsz-4);
@@ -293,6 +304,9 @@ public &Sprite
       ret "unknown format";
     }
     `setPxl(px);
+    /?/*.cfg.Renderer == 0:
+    if(useCache) SffV2CachePut(:cacheKey, `imageGroup, `imageNumber, px:);
+    /*?*/
     ret "";
   }
   public void setPxl(^ubyte px)
@@ -505,7 +519,7 @@ public &Sprite
           > 0) ret error;
       case 0d2:
 	    // .al.alert!self?(fn+" need memory="+''size);
-        if(#`readV2(f=, (long)misc, size)=>error > 0) ret error;
+        if(#`readV2(f=, (long)misc, size, false, "")=>error > 0) ret error;
       }
       if(`imageGroup == ig && `imageNumber == in) break;
       dummy.new(1);
@@ -763,7 +777,7 @@ public &Sff
             > 0) ret error;
         case 0d2:
 		  // .al.alert!self?(filename+" need memory="+''size);
-          if(#spriteList[i].readV2(f=, (long)misc, size)=>error > 0){
+          if(#spriteList[i].readV2(f=, (long)misc, size, !chr, filename)=>error > 0){
             ret error;
           }
         }

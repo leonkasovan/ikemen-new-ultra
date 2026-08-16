@@ -2691,7 +2691,7 @@ public &Char
     if(
       #.cgi[`playerno].sound > 0
       && #.com.loadFile(def, .cgi[`playerno].sound=)=>error <,
-      [^/char(^/char f){ret .cgi[`playerno].sn~loadFile(f);}] > 0)
+      [^/char(^/char f){ret .cgi[`playerno].sn~loadFile(f, false);}] > 0)
     {
       .ssz.memMarkAfter(:memTag:);
       ret def + "[Sound(.snd)]"\r\n + error;

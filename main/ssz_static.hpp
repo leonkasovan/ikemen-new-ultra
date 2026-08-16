@@ -20,6 +20,10 @@ class CompilerState;	extern "C"
 	void           SSZ_STDCALL MemMarkBefore(PluginUtil*, Reference);
 	void           SSZ_STDCALL MemMarkAfter(PluginUtil*, Reference);
 	void           SSZ_STDCALL ProcMemMark(PluginUtil*, Reference);
+	bool           SSZ_STDCALL SffV2CacheGet(PluginUtil*, Reference*, int32_t, int32_t, Reference);
+	void           SSZ_STDCALL SffV2CachePut(PluginUtil*, Reference, int32_t, int32_t, Reference);
+	bool           SSZ_STDCALL SndCacheGet(PluginUtil*, Reference*, int32_t, int32_t, Reference);
+	void           SSZ_STDCALL SndCachePut(PluginUtil*, Reference, int32_t, int32_t, Reference);
 	void           SSZ_STDCALL ProfBegin(PluginUtil*, Reference);
 	void           SSZ_STDCALL ProfEnd(PluginUtil*, Reference);
 }
@@ -37,6 +41,10 @@ inline bool ssz_static_register()
 		{ "MemMarkBefore",       (void*)MemMarkBefore       },
 		{ "MemMarkAfter",        (void*)MemMarkAfter        },
 		{ "ProcMemMark",         (void*)ProcMemMark         },
+		{ "SffV2CacheGet",       (void*)SffV2CacheGet       },
+		{ "SffV2CachePut",       (void*)SffV2CachePut       },
+		{ "SndCacheGet",         (void*)SndCacheGet         },
+		{ "SndCachePut",         (void*)SndCachePut         },
 		{ "ProfBegin",           (void*)ProfBegin           },
 		{ "ProfEnd",             (void*)ProfEnd             },
 	};

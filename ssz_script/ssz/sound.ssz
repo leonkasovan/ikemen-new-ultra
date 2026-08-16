@@ -38,8 +38,13 @@ public &Snd
   {
     `soundTable.clear();
   }
-  public ^/char loadFile(^/char filename)
+  public ^/char loadFile(^/char filename, bool useCache)
   {
+    // Shared sample cache: the menu and the match each build their own
+    // screenpack, so the four menu SNDs (~10 MB of `^ubyte` samples) get
+    // read twice. Cache the sample arrays (built-in type, safe across
+    // compilations). Only screenpack SNDs pass useCache=true (script.ssz
+    // sndNew); char SNDs pass false so per-match rosters don't accumulate.
     ^/char error;
     &.file.File f;
     if(!f.open(filename, "rb")) ret .com.FileOpenError;
@@ -48,6 +53,8 @@ public &Snd
     uint numberOfSounds;
     ^/char wav(&.Wave wav=)
     {
+      plugin bool SndCacheGet(:^/char, int, int, ^ubyte=:) = <dll/ssz.dll>;
+      plugin void SndCachePut(:^/char, int, int, ^ubyte:)  = <dll/ssz.dll>;
       uint riffSize = 0x0, fmtSize = 0x0, dataSize = 0x0, musi;
       ubyte ub;
       loop{index i = 0; %char s; do:
@@ -98,8 +105,13 @@ public &Snd
           wav.bytesPerSample >>= 0x3;
         cond .s.equ(s, "data"):
           dataSize = size;
-          wav.wav.new((index)dataSize);
-          `f.readAry!ubyte?(wav.wav);
+          if(
+            !(`useCache && SndCacheGet(:`filename, wav.num.group, wav.num.number, wav.wav=:)))
+          {
+            wav.wav.new((index)dataSize);
+            `f.readAry!ubyte?(wav.wav);
+            if(`useCache) SndCachePut(:`filename, wav.num.group, wav.num.number, wav.wav:);
+          }
         }
         ofs += (long)size + 8;
         `f.seek(ofs, .file.Seek::SET);

@@ -3286,14 +3286,14 @@ public &Fight
     `sn.new(1);
     if(
       #`snd > 0 && #.com.loadFile(def, `snd=)=>error <,
-      [^/char(^/char f){ret `sn~loadFile(f);}] > 0) {
+      [^/char(^/char f){ret `sn~loadFile(f, false);}] > 0) {
       .ssz.memMarkAfter(:memTag:);
       ret def + ":"\r\n + error;
       }
     `fsn.new(1);
     if(
       #`common_snd > 0 && #.com.loadFile(def, `common_snd=)=>error<,
-      [^/char(^/char f){ret `fsn~loadFile(f);}] > 0) {
+      [^/char(^/char f){ret `fsn~loadFile(f, false);}] > 0) {
       .ssz.memMarkAfter(:memTag:);
       ret def + ":"\r\n + error;
       }

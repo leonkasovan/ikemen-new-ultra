@@ -761,6 +761,96 @@ extern "C" void SSZ_STDCALL ProcMemMark(PluginUtil* pu, Reference tag)
 }
 
 // =========================================================================
+// SffV2CacheGet / SffV2CachePut  –  decoded SFFv2 sprite pixel cache
+//
+// The menu (main Lua state / main SSZ compilation) and the match (debug Lua
+// state / separate fighting compilation) each build their own screenpack.
+// Sprite pixels are `^ubyte` arrays — a built-in type with a global type ID —
+// so they can be shared between the two compilations even though the Sff/
+// Sprite container objects cannot. Caching the decoded pixels here avoids
+// re-reading + re-decoding ikemen.sff and re-allocating ~40 MB of pixel
+// buffers for the second copy.
+//
+// Scope: only screenpack SFFs (loaded with chr==false) are cached. Character
+// SFFs are loaded fresh per match and must NOT be pinned here — the cache
+// lives for the whole process, so caching them would grow without bound
+// across matches with rotating rosters.
+//
+// Usage in SSZ (sff.ssz::Sprite::readV2):
+//   plugin bool SffV2CacheGet(:^/char, int, int, ^ubyte=:) = <dll/ssz.dll>;
+//   plugin void SffV2CachePut(:^/char, int, int, ^ubyte:)  = <dll/ssz.dll>;
+//   if(SffV2CacheGet(cacheKey, `imageGroup, `imageNumber, px=)) default;
+// =========================================================================
+static std::unordered_map<std::wstring, Reference> g_sffV2Cache;
+
+static std::wstring sffV2CacheKey(
+	const std::wstring& file, int32_t group, int32_t item)
+{
+	std::wstring key = file;
+	key += L":";
+	key += std::to_wstring(group);
+	key += L":";
+	key += std::to_wstring(item);
+	return key;
+}
+
+// NOTE: the SSZ plugin ABI passes arguments REVERSED — the C++ signature must
+// list the SSZ-declared parameters in reverse order (see Pcall/RunFile in
+// bridge.cpp). SSZ: SffV2CacheGet(:^/char, int, int, ^ubyte=:)  (file, group,
+// item, pxl) arrives as (pu, pxl, item, group, file).
+extern "C" bool SSZ_STDCALL SffV2CacheGet(
+	PluginUtil* pu, Reference* pxl, int32_t item, int32_t group, Reference file)
+{
+	if (!pxl) return false;
+	std::wstring key = sffV2CacheKey(pu->refToWstr(file), group, item);
+	auto it = g_sffV2Cache.find(key);
+	if (it == g_sffV2Cache.end()) return false;
+	pxl->copy(it->second); // bumps refcount so the caller's ref keeps it alive
+	return true;
+}
+
+extern "C" void SSZ_STDCALL SffV2CachePut(
+	PluginUtil* pu, Reference pxl, int32_t item, int32_t group, Reference file)
+{
+	if (pxl.null()) return;
+	std::wstring key = sffV2CacheKey(pu->refToWstr(file), group, item);
+	Reference& slot = g_sffV2Cache[key];
+	if (HeapObj* old = slot.copy(pxl)) old->delet(); // free replaced entry
+}
+
+// =========================================================================
+// SndCacheGet / SndCachePut  –  SND sample cache (same idea as SffV2Cache)
+//
+// The menu and the match each build their own screenpack, so the four menu
+// SND files (system/ikemen/tower/announcer, ~10 MB of `^ubyte` samples) are
+// read twice. Samples are a built-in type and safe to share across the two
+// SSZ compilations, so we cache them keyed by file+group+number.
+//
+// Scope: only screenpack SNDs pass useCache=true (script.ssz sndNew). Char
+// SNDs (char.ssz) pass false — they are reloaded per match and must not be
+// pinned here or the cache would grow across matches with rotating rosters.
+// =========================================================================
+extern "C" bool SSZ_STDCALL SndCacheGet(
+	PluginUtil* pu, Reference* wav, int32_t number, int32_t group, Reference file)
+{
+	if (!wav) return false;
+	std::wstring key = L"SND:" + sffV2CacheKey(pu->refToWstr(file), group, number);
+	auto it = g_sffV2Cache.find(key);
+	if (it == g_sffV2Cache.end()) return false;
+	wav->copy(it->second);
+	return true;
+}
+
+extern "C" void SSZ_STDCALL SndCachePut(
+	PluginUtil* pu, Reference wav, int32_t number, int32_t group, Reference file)
+{
+	if (wav.null()) return;
+	std::wstring key = L"SND:" + sffV2CacheKey(pu->refToWstr(file), group, number);
+	Reference& slot = g_sffV2Cache[key];
+	if (HeapObj* old = slot.copy(wav)) old->delet();
+}
+
+// =========================================================================
 // ProfBegin / ProfEnd  –  time profile markers callable from SSZ
 //
 // Usage in SSZ (mirrors MemMarkBefore/MemMarkAfter):

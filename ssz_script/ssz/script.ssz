@@ -117,7 +117,7 @@ public &Snd
   public bool load(^/char file)
   {
     `snd.new(1);
-    ret #`snd~loadFile(file) == 0;
+    ret #`snd~loadFile(file, true) == 0;
   }
   public bool play(int g, int n)
   {
