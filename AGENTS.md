@@ -159,8 +159,46 @@ methods), `file` (`ssz_script/lib/file.cpp` — the module functions and the
 `&File` methods), `regex` (`ssz_script/lib/regex.cpp` — the `&Regex`
 methods), `sound` (`ssz_script/lib/sound.cpp` — the `&Client` methods),
 `ssz` (`ssz_script/lib/ssz.cpp` — memMarkBefore/memMarkAfter/run and the
-`&Compiler` methods), and `socket` (`ssz_script/lib/socket.cpp` — the
-non-template `&Socket` methods).
+`&Compiler` methods), `socket` (`ssz_script/lib/socket.cpp` — the
+non-template `&Socket` methods), and `table` (`ssz_script/lib/table.cpp` —
+the concrete `hash` function, delegated from `table.ssz`).
+
+### Why the template libraries (`stack`, `table`, `alert`) stay in SSZ
+
+The remaining SSZ libraries are template-bound and **cannot** be ported to
+native code. This was investigated and verified empirically:
+
+- **`alert.ssz`** is a 3-line wrapper whose only use of `_t` is
+  `typeid(_t)` — a compile-time constant. The plugin call itself is fully
+  concrete; there is no runtime logic to move to C++.
+- **`stack.ssz`** (`&Stack<_t>`/`&Node<_t>`) and **`table.ssz`**
+  (`&NameTable<_t>`/`&IntTable<int_t,_t>`) are pure template data
+  structures: their *fields* are template-typed (`^_t data`, `&Table!_t,
+  node_t? t`) and their methods take delegate parameters
+  (`each`/`forEach`/`operate`), so no concrete core exists to extract.
+- **Native `_t` signatures don't work.** Registering a native function with
+  `_t` in its signature string (encoding `TYPE_TOKEN` in the plugin type)
+  compiles the module, but every call site fails with a generic
+  "Compilation Error.": `KansuuKata`/`TokenToTypeId` in the JIT have no
+  `TYPE_TOKEN` resolution, and a native module's henshuu are synthesized
+  once at import — never re-parsed per instantiation.
+- **`^null` (DYNREF) can't store data.** DYNREF params/returns work as
+  *transients* in native calls (a concrete ref converts via `refToDref`),
+  but `^null` locals and `^null` struct fields both fail to compile — the
+  JIT has no way to hold a DynamicRef in a frame slot. So a native
+  stack/table core holding generic `DynamicRef` data is impossible too.
+
+How templates *do* work in SSZ: when a template body is instantiated
+(`probe!int?`), the concrete function's body is **re-parsed from source**
+with the template param bound as `TYPE_TOKEN + <concrete type>`
+(`BlockOpen`/`MakeTree` in `sourcetree.hpp`, ~line 5999). That is why the
+`socket` templates (`send<_t>`/`recv<_t>`/…) work — their `plugin`
+declarations sit *inside* the template body and are re-parsed per
+instantiation with `_t` bound, then resolved through the static plugin
+registry. The native-lib registry has no equivalent re-parse.
+
+`consts.ssz` is also intentionally left in SSZ — it is pure type-system
+sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
 ### Struct-method delegation (the `&X` pattern)
 

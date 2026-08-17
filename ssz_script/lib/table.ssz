@@ -1,15 +1,13 @@
 lib consts = <consts.ssz>;
 lib s = <string.ssz>;
+// The concrete `hash` function is implemented in C++ at
+// ssz_script/lib/table.cpp and delegated below.  The NameTable/IntTable
+// template structs and intHash<_t> are template-bound and stay in SSZ.
+lib t = <table>;
 
 public uint hash(^/char str)
 {
-  uint h = 0x0;
-  loop{index i = 0; while; do:
-    h += (uint)i ^ (uint)str[i];
-    i++;
-  while i < #str:
-  }
-  ret h;
+  ret .t.hash(str);
 }
 
 public &NameTable<_t>
