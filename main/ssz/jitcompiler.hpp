@@ -5135,6 +5135,34 @@ class JITer
 				pjtr->bin.setReg0StackAddress(idx);
 				pjtr->bin.push();
 				pjtr->bin.PluginCall((void*)ty.back());
+				// Reference-typed returns: the callee returns a pointer to a heap
+				// Reference in EAX (null for a null/empty result).  A temp
+				// reference on the SSZ stack is three dwords — EAX=HeapObj*
+				// (Reference.pointer), EDX=position, ECX=length — so unpack the
+				// returned struct's fields, zeroing them for the null case.
+				if(ktype.id == TMPREF_TYPEID){
+					pjtr->bin.PushReg(BinaryCode::EAX);
+					pjtr->bin.CmpImm(0, false);
+					pjtr->bin.NEqual();
+					intptr_t nonNull = pjtr->bin.TrueJump(0);
+					pjtr->bin.XorRegReg(BinaryCode::EDX, BinaryCode::EDX);
+					pjtr->bin.XorRegReg(BinaryCode::ECX, BinaryCode::ECX);
+					pjtr->bin.PopReg(BinaryCode::EAX);
+					intptr_t refDone = pjtr->bin.Jump(0);
+					*(intptr_t*)(pjtr->bin.code.data()+nonNull) +=
+						pjtr->bin.code.size();
+					pjtr->bin.PopReg(BinaryCode::EAX);
+					// load length/position first (EAX is the base), then the
+					// HeapObj* pointer field into EAX itself
+					pjtr->bin.MovRegSIB(
+						BinaryCode::ECX, pjtr->bin.SIB(0, BinaryCode::ESP, BinaryCode::EAX), 8);
+					pjtr->bin.MovRegSIB(
+						BinaryCode::EDX, pjtr->bin.SIB(0, BinaryCode::ESP, BinaryCode::EAX), 4);
+					pjtr->bin.MovRegSIB(
+						BinaryCode::EAX, pjtr->bin.SIB(0, BinaryCode::ESP, BinaryCode::EAX), 0);
+					*(intptr_t*)(pjtr->bin.code.data()+refDone) +=
+						pjtr->bin.code.size();
+				}
 				if(
 					!KansuunoatonoTmprf(
 						stree, ktype, idx,
@@ -5142,6 +5170,10 @@ class JITer
 				{
 					return false;
 				}
+				// Push a reference-typed result onto the SSZ stack (no-op for
+				// scalars) — the temp ref value travels in EAX/EDX/ECX and is
+				// only materialized here, mirroring the funclist call path.
+				PushTmpRef(ktype);
 				ktype.memberObj = false;
 				return true;
 			}

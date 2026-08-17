@@ -114,6 +114,14 @@ ABI notes (all proven by the plugin bridges in `main/ssz/bridge.cpp`):
   an 8-byte slot with unspecified high bits — declare them `int32_t`/
   `uint32_t`/`float`, never `int64_t` (which would read garbage).
 - Strings arrive as `Reference`; convert with `ikemen::ssz_bridge::refToWstring`.
+- **String/array returns** (`^char`/`^/char`/`^ubyte`): return the address of a
+  heap-allocated `Reference` (`sszrefnewfunc(sizeof(Reference))` + `init()`, then
+  `PluginUtil::wstrToRef` for strings or `refnew(size,1)`+`memcpy` for byte
+  arrays), or `0` for a null/empty result.  The JIT unpacks the returned
+  struct's fields (pointer/position/length) into the temp-ref registers — see
+  the TMPREF-return handling in the native-lib plugin branch of
+  `jitcompiler.hpp` (`Hensuu`).  String params arrive reversed like everything
+  else, so `find(ptn, str)` becomes `StrLibFind(pu, str, ptn)`.
 
 A native library may also expose **module variables** (`NativeVariable`): they
 are registered as ordinary SSZ module variables (e.g. `"public int"` for a
@@ -131,9 +139,12 @@ variable is for SSZ-side interface parity.
    `.ssz` aside (e.g. `time.ssz.bak`) for comparison.
 
 Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
-(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`), and the
+(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`), the
 `math` PRNG core (`ssz_script/lib/math.cpp` — consumed via delegation from
-`math.ssz`, which keeps the template functions in SSZ).
+`math.ssz`, which keeps the template functions in SSZ), and the `string`
+plain-function core (`ssz_script/lib/string.cpp` — consumed via delegation
+from `string.ssz`, which keeps the templates, list-returning functions, and
+`&Format` in SSZ).
 
 ---
 

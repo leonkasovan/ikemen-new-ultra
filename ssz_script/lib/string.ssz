@@ -1,20 +1,17 @@
 lib m = <math.ssz>;
+// Native core — the plain functions (uToSo/equ/toLower/nextLine/trim/find/
+// cFind/sToU8/u8ToS/percentEnc/percentDec) are implemented in C++ at
+// ssz_script/lib/string.cpp.  The template functions (uToSxX/sToNumber/
+// sToN/svToAry/cMatch/copy/clone/each/toHex/toUbyte), the list-returning
+// functions (split/join/splitLines), the private char helpers (hex/heX/
+// toLowerChar), and the &Format struct stay in SSZ.
+lib sn = <string>;
 
 const ^/char blank = (char)[' ', '\t', '\r', '\n'];
 
 public ^char uToSo(ulong uinte)
 {
-  uint shift = 0d63;
-  loop{while; do:
-    shift -= 0d3;
-  while shift != 0x0 && uinte >> shift == 0x0:}
-  %char buf;
-  loop{continue; do:
-    shift -= 0d3;
-  continue:
-    buf .= '0' + (char)(uinte >> shift & 0x7);
-  while shift != 0x0:}
-  ret buf;
+  ret .sn.uToSo(uinte);
 }
 
 char hex(uint u)
@@ -120,14 +117,7 @@ public ..svToAry<_t>(^/char dlim, ^/char v) ^_t
 
 public bool equ(^/char str1, ^/char str2)
 {
-  index l = #str1;
-  if(l != #str2) ret false;
-  loop{index i = 0; while; do:
-    if(str1[i] != str2[i]) ret false;
-    i++;
-  while i < l:
-  }
-  ret true;
+  ret .sn.equ(str1, str2);
 }
 
 public char toLowerChar(char c)
@@ -137,32 +127,12 @@ public char toLowerChar(char c)
 
 public ^char toLower(^/char str)
 {
-  ^char lstr;
-  lstr.new(#str);
-  loop{index i = 0; while; do:
-    lstr[i] = .toLowerChar(str[i]);
-    i++;
-  while i < #str:
-  }
-  ret lstr;
+  ret .sn.toLower(str);
 }
 
 public int nextLine(index i=, ^/char str)
 {
-  loop{while; do:
-    branch{
-    cond str[i] == '\n':
-      ret 1;
-    cond str[i] == '\r':
-      if(i+1 < #str && str[i+1] == '\n'){
-        i++;
-        ret 2;
-      }
-    break:
-      i++;
-    }
-  while i < #str:}
-  ret 0;
+  ret .sn.nextLine(i, str);
 }
 
 public %^/char splitLines(^/char str)
@@ -177,18 +147,7 @@ public %^/char splitLines(^/char str)
 
 public ^/char trim(^/char str)
 {
-  index s, e;
-  loop{s = 0; while; do:
-    if(!.cMatch!char?(.blank, str[s])) break;
-    s++;
-  while s < #str:
-  }
-  loop{e = #str; while; do:
-    if(!.cMatch!char?(.blank, str[e-1])) break;
-    e--;
-  while e > 0:
-  }
-  ret str[s..e];
+  ret .sn.trim(str);
 }
 
 public %^/char split(^/char dlim, ^/char src)
@@ -229,12 +188,7 @@ public %char join(^/char dlim, ^/^/char src)
 
 public index find(^/char ptn, ^/char str)
 {
-  loop{index i = 0; while; do:
-    if(.equ(str[i..i+#ptn], ptn)) ret i;
-    i++;
-  while i < #str:
-  }
-  ret -1;
+  ret .sn.find(ptn, str);
 }
 
 public bool cMatch<_t>(^/_t cclass, _t item)
@@ -250,12 +204,7 @@ public bool cMatch<_t>(^/_t cclass, _t item)
 
 public index cFind(^/char cclass, ^/char str)
 {
-  loop{index i = 0; while; do:
-    if(.cMatch!char?(cclass, str[i])) ret i;
-    i++;
-  while i < #str:
-  }
-  ret -1;
+  ret .sn.cFind(cclass, str);
 }
 
 public void copy<_t>(^_t dist, ^/_t src)
@@ -319,156 +268,22 @@ public ^ubyte toUbyte<_t>(^/_t src)//little endian
 
 public ^ubyte sToU8(^/char s)
 {
-  %ubyte utf8;
-  loop{
-    index i = 0;
-    uint c;
-    while;
-  do:
-    c = (uint)s[i];
-    if((c >> 0d10) == 0x36 && ((uint)s[i+1] >> 0d10) == 0x37){
-      c = ((c&0x3ff) << 0d10 | ((uint)s[++i]&0x3ff)) + 0x10000;
-    }
-    branch{
-    cond c <     0x80:
-      utf8 .= c;
-    cond c <    0x800:
-      utf8 .= (c>>0d6) | 0b11000000;
-      utf8 .= (c&0x3f) | 0b10000000;
-    cond c <  0x10000:
-      utf8 .= (c>>0d12)     | 0b11100000;
-      utf8 .= (c>>0d6&0x3f) | 0b10000000;
-      utf8 .= (c&0x3f)      | 0b10000000;
-    else:
-      utf8 .= (c>>0d18)      | 0b11110000;
-      utf8 .= (c>>0d12&0x3f) | 0b10000000;
-      utf8 .= (c>>0d6&0x3f)  | 0b10000000;
-      utf8 .= (c&0x3f)       | 0b10000000;
-    }
-    i++;
-  while i < #s:
-  }
-  ret utf8;
+  ret .sn.sToU8(s);
 }
 
 public ^char u8ToS(^/ubyte utf8)
 {
-  %char s;
-  loop{
-    index i = 0;
-    uint c;
-    while;
-  do:
-    c = utf8[i];
-    branch{
-    cond c < 0xc0:
-    cond c < 0xe0:
-      c &= 0x1f;
-      c = c<<0d6 | (utf8[++i]&0x3f);
-    cond c < 0xf0:
-      c &= 0xf;
-      c = c<<0d6 | (utf8[++i]&0x3f);
-      c = c<<0d6 | (utf8[++i]&0x3f);
-    cond c < 0xf8:
-      c &= 0x7;
-      c = c<<0d6 | (utf8[++i]&0x3f);
-      c = c<<0d6 | (utf8[++i]&0x3f);
-      c = c<<0d6 | (utf8[++i]&0x3f);
-    }
-    branch{
-    cond c < 0x10000:
-      s .= (char)c;
-    else:
-      c -= 0x10000;
-      s .= (char)(((c>>0d10)&0x3ff) | 0xd800);
-      s .= (char)((c&0x3ff)         | 0xdc00);
-    }
-    i++;
-  while i < #utf8:
-  }
-  ret s;
+  ret .sn.u8ToS(utf8);
 }
 
 public ^char percentEnc(^/char str)
 {
-  %char s;
-  void enc(ubyte u)
-  {
-    `s .= '%';
-    char tmp = (char)(u >> 0d4);
-    `s .= tmp < (char)0d10 ? '0' + tmp : 'A' + tmp - (char)0d10;
-    tmp = (char)(u & 0xf);
-    `s .= tmp < (char)0d10 ? '0' + tmp : 'A' + tmp - (char)0d10;
-  }
-  loop{
-    index i = 0;
-    ^/ubyte utf8 = .sToU8(str);
-    while;
-  do:
-    switch((char)utf8[i]){
-    case
-      'A','B','C','D','E','F','G','H','I','J','K','L','M',
-      'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
-      'a','b','c','d','e','f','g','h','i','j','k','l','m',
-      'n','o','p','q','r','s','t','u','v','w','x','y','z',
-      '0','1','2','3','4','5','6','7','8','9',
-      '-','.','_','~'
-      :
-      s .= (char)utf8[i];
-    default:
-      enc(utf8[i]);
-    }
-    i++;
-  while i < #utf8:
-  }
-  ret s;
+  ret .sn.percentEnc(str);
 }
 
 public ^char percentDec(^/char str)
 {
-  %char s;
-  ubyte dec(index i=)
-  {
-    ubyte ub = 0x0;
-    loop{
-      ubyte n = 0x4;
-      continue;
-    do:
-      n -= 0x4;
-    continue:
-      branch{
-        char c = `str[i++];
-      cond c >= '0' && c <= '9':
-        ub |= (ubyte)(c - '0') << n;
-      cond c >= 'A' && c <= 'F':
-        ub |= (ubyte)(c - 'A') + 0d10 << n;
-      cond c >= 'a' && c <= 'f':
-        ub |= (ubyte)(c - 'a') + 0d10 << n;
-      }
-    while n > 0x0:
-    }
-    ret ub;
-  }
-  loop{
-    index i = 0, foo = 0;
-    %ubyte utf8;
-    while;
-  do:
-    branch{
-    cond str[i] == '%':
-      i++;
-      utf8 .= dec(i=);
-    else:
-      if(#utf8 > 0){
-        s .= .u8ToS(utf8);
-        utf8.new(0);
-      }
-      s .= str[i++];
-    }
-  while i < #str:
-    if(#utf8 > 0) s .= .u8ToS(utf8);
-  }
-  ret s;
+  ret .sn.percentDec(str);
 }
 
 public &Format
