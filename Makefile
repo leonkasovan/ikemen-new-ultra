@@ -128,7 +128,8 @@ MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 # `lib name = <name>` resolves without a .ssz file.
 NATIVE_LIB_SRCS = \
   ssz_script/lib/time.cpp \
-  ssz_script/lib/shell.cpp
+  ssz_script/lib/shell.cpp \
+  ssz_script/lib/thread.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 

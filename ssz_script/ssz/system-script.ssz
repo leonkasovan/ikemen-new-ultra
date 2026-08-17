@@ -20,7 +20,7 @@ lib sc = "script.ssz";
 lib sff = "sff.ssz";
 lib snd = "sound.ssz";
 lib sys = "system.ssz";
-lib th = <thread.ssz>;
+lib th = <thread>;
 lib vid = "video.ssz";
 
 

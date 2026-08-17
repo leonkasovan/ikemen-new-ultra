@@ -115,7 +115,7 @@ syntax.
    `.ssz` aside (e.g. `time.ssz.bak`) for comparison.
 
 Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
-(`ssz_script/lib/shell.cpp`).
+(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`).
 
 ---
 

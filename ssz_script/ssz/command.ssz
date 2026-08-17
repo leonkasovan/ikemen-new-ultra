@@ -8,7 +8,7 @@ lib m = <math.ssz>;
 lib soc = <socket.ssz>;
 lib str = <string.ssz>;
 lib tbl = <table.ssz>;
-lib th = <thread.ssz>;
+lib th = <thread>;
 
 //Load "lib/alpha/" Scripts
 lib mes = <alpha/mesdialog.ssz>;

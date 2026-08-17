@@ -23,6 +23,7 @@
 // Native (C++) SSZ libraries (e.g. ssz_script/lib/time.cpp).
 extern "C" bool time_lib_register();
 extern "C" bool shell_lib_register();
+extern "C" bool thread_lib_register();
 
 
 #include <stdio.h>
@@ -419,6 +420,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!shell_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'shell'");
+		return 1;
+	}
+	if (!thread_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'thread'");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");

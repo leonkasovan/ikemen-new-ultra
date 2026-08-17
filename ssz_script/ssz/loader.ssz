@@ -3,7 +3,7 @@ lib cfg = "../save/config.ssz";
 //Load "lib/" Scripts
 lib m = <math.ssz>;
 lib s = <string.ssz>;
-lib th = <thread.ssz>;
+lib th = <thread>;
 
 //Load "lib/alpha/" Scripts
 lib lua = <alpha/lua.ssz>;
