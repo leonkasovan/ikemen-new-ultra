@@ -67,7 +67,7 @@ public ..decBase64<_t>(^/char b64) ^_t
   cond typesize(_t) == 1:
     ub = .b64.decB64(b64);
     loop{index i = 0; while; do:
-      buf .= (_t)ub[i];
+      buf .= (*_t)ub[i];
       i++;
     while i < #ub:}
     ret buf;

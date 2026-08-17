@@ -200,12 +200,14 @@ registry. The native-lib registry has no equivalent re-parse.
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
-**Known broken function:** `decBase64<_t>` in `base64.ssz` fails to
-compile at template instantiation (`*_t x = (*_t)0;` in the bit-packing
-fallback, line ~70).  This is a pre-existing bug carried over from the
-original `base64.ssz` — the game never uses base64, so it was never
-noticed.  Only the working surface (`encBase64<_t>`, `uintToB64Char`,
-`b64CharToUint`) is covered by tests.
+**`(_t)` vs `(*_t)` casts in templates (fixed bug):** the byte-sized branch
+of `decBase64<_t>` originally used a bare `(_t)ub[i]` cast, which fails at
+template instantiation — the JIT re-parses template bodies per
+instantiation but has no resolution for bare `(_t)` casts applied to a
+value of a *different* concrete type (`(_t)` casts only work on
+`TYPE_TOKEN`-typed values).  `(*_t)` casts work universally.  The fix was
+one character (`(_t)ub[i]` → `(*_t)ub[i]`, `ssz_script/lib/base64.ssz`);
+all four element types now round-trip (`ubyte`, `byte`, `short`, `int`).
 
 ### Regression test suite
 
@@ -219,7 +221,7 @@ conversions, each comparing its output against a frozen reference
 | `arcfourtest` | `arcfour` | RFC 6229 vectors (`Key`/`Plaintext`, `Secret`/`Attack at dawn`), streaming == one-shot |
 | `regextest` | `regex` | match groups, no-match, invalid pattern |
 | `filetest` | `file` | save/load/copy/move/remove, dirs, int write/readAry round trip |
-| `basetest` | `base64` | `encBase64` of `hello`/`Man`/`Ma`, char<->uint helpers |
+| `basetest` | `base64` | `encBase64` of `hello`/`Man`/`Ma`, char<->uint helpers, `decBase64` round-trips (ubyte/short/int) |
 | `mathtest` | `math` | seeded PRNG sequence (deterministic LCG), sqrt/floor/ceil/isnan/isinf |
 | `tabletest` | `table` | `hash` values matching the original SSZ algorithm |
 | `timetest` | `time` | unixTime range, tickCount monotonic |

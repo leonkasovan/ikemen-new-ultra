@@ -1,11 +1,13 @@
-// Base64 regression test — native byte core + encBase64 template
+// Base64 regression test — native byte core + encBase64/decBase64 templates
 // (ssz_script/lib/base64.cpp).
 //   "hello" -> aGVsbG8=
 //   "Man"   -> TWFu
 //   "Ma"    -> TWE=
-// Note: decBase64<_t> is NOT exercised — its SSZ bit-packing fallback
-// (`*_t x = (*_t)0;`) fails to compile at template instantiation, a
-// pre-existing bug from the original base64.ssz (see AGENTS.md).
+// Note: decBase64<_t>'s byte path had a pre-existing compile bug — a bare
+// `(_t)ub[i]` cast in the byte-sized branch, which fails at template
+// instantiation (the JIT has no per-instantiation resolution for bare `(_t)`
+// casts; `(*_t)` works). Fixed by using `(*_t)ub[i]`. Round-trips below
+// verify enc -> dec across byte, short, and int element types.
 lib f = <file.ssz>;
 lib s = <string.ssz>;
 lib b = <base64.ssz>;
@@ -21,4 +23,37 @@ r = r + "|";
 r = r + .s.uToSx((ulong)(.b.uintToB64Char(0d0) == 'A'));
 r = r + "|";
 r = r + .s.uToSx((ulong)(.b.b64CharToUint('A') == 0d0));
+r = r + "|";
+// ubyte round trip: "hello" -> aGVsbG8= -> 68 65 6c 6c 6f
+^ubyte ub = .b.decBase64!ubyte?(.b.encBase64!ubyte?(.s.sToU8("hello")));
+r = r + .s.uToSx((ulong)#ub);
+r = r + "|";
+if(#ub > 0){
+  r = r + .s.uToSx((ulong)ub[0]);
+  r = r + .s.uToSx((ulong)ub[1]);
+  r = r + .s.uToSx((ulong)ub[2]);
+  r = r + .s.uToSx((ulong)ub[3]);
+  r = r + .s.uToSx((ulong)ub[4]);
+}
+r = r + "|";
+// short round trip (wide path): 0x1234 0x5678 -> EjRWeA== -> 1234 5678
+%short sh;
+sh .= (short)0x1234;
+sh .= (short)0x5678;
+^short d3 = .b.decBase64!short?(.b.encBase64!short?(sh));
+r = r + .s.uToSx((ulong)#d3);
+r = r + "|";
+if(#d3 > 0){
+  r = r + .s.uToSx((ulong)d3[0]);
+  r = r + "|";
+  r = r + .s.uToSx((ulong)d3[1]);
+}
+r = r + "|";
+// int round trip (wide path): 0x12345678 -> EjRWeA== -> 12345678
+%int vi;
+vi .= (int)0x12345678;
+^int d4 = .b.decBase64!int?(.b.encBase64!int?(vi));
+r = r + .s.uToSx((ulong)#d4);
+r = r + "|";
+if(#d4 > 0) r = r + .s.uToSx((ulong)d4[0]);
 .f.saveAsciiText("basetest_out.txt", r);
