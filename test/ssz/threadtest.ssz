@@ -1,0 +1,13 @@
+// Thread regression test — native sleep (ssz_script/lib/thread.cpp).
+// sleep(150) must take at least 150ms (tickCount is 1ms-resolution).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib t = <time>;
+lib th = <thread>;
+
+^/char r = "";
+uint t0 = .t.tickCount();
+.th.sleep(0d150);
+uint t1 = .t.tickCount();
+r = r + .s.uToSx((ulong)(t1 - t0 >= 0d150));
+.f.saveAsciiText("threadtest_out.txt", r);

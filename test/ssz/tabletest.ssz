@@ -1,0 +1,17 @@
+// Table regression test — native hash (ssz_script/lib/table.cpp).
+// Values match the original SSZ algorithm (h += i ^ str[i]) exactly.
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib tbl = <table.ssz>;
+
+^/char r = "";
+r = r + .s.uToSx((ulong).tbl.hash(""));        // 0
+r = r + "|";
+r = r + .s.uToSx((ulong).tbl.hash("a"));       // 0x61 = 97
+r = r + "|";
+r = r + .s.uToSx((ulong).tbl.hash("ab"));      // 0xc4 = 196
+r = r + "|";
+r = r + .s.uToSx((ulong).tbl.hash("hello"));   // 0x214 = 532
+r = r + "|";
+r = r + .s.uToSx((ulong).tbl.hash("The quick brown fox"));  // 0x736 = 1846
+.f.saveAsciiText("tabletest_out.txt", r);

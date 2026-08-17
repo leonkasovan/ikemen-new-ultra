@@ -1,0 +1,50 @@
+// File regression test — native module functions + &File methods
+// (ssz_script/lib/file.cpp; all file names are namespaced with "ft_").
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+
+^/char r = "";
+// save/load round trip
+r = r + .s.uToSx((ulong).f.saveAsciiText("ft_tmp.txt", "hello file lib"));
+r = r + "|";
+r = r + .s.uToSx((ulong)(.s.equ(.f.loadAsciiText("ft_tmp.txt"), "hello file lib")));
+r = r + "|";
+// copy + move + remove
+r = r + .s.uToSx((ulong).f.copy("ft_tmp.txt", "ft_cpy.txt", false));
+r = r + "|";
+r = r + .s.uToSx((ulong).f.move("ft_cpy.txt", "ft_mv.txt"));
+r = r + "|";
+r = r + .s.uToSx((ulong).f.remove("ft_mv.txt"));
+r = r + "|";
+// dirs
+r = r + .s.uToSx((ulong).f.createDir("ft_dir"));
+r = r + "|";
+r = r + .s.uToSx((ulong)(#.f.findDir("ft_dir") >= 0));
+r = r + "|";
+r = r + .s.uToSx((ulong).f.removeDir("ft_dir"));
+r = r + "|";
+// binary write + readAry round trip
+&.f.File wf;
+r = r + .s.uToSx((ulong)wf.open("ft_bin.bin", "wb"));
+r = r + "|";
+^int vals.new(2);
+vals[0] = 7;
+vals[1] = 42;
+loop{index i = 0; while; do:
+  wf.write!int?(vals[i]=);
+  i++;
+while i < #vals:}
+wf.close();
+&.f.File rf;
+rf.open("ft_bin.bin", "rb");
+^int back.new(2);
+rf.readAry!int?(back);
+rf.close();
+r = r + .s.uToSx((ulong)(back[0] == 7 && back[1] == 42));
+r = r + "|";
+// current dir non-empty
+^/char cwd = .f.getCurrentDir();
+r = r + .s.uToSx((ulong)(#cwd > 0));
+.f.remove("ft_tmp.txt");
+.f.remove("ft_bin.bin");
+.f.saveAsciiText("filetest_out.txt", r);

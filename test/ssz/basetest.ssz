@@ -1,0 +1,24 @@
+// Base64 regression test — native byte core + encBase64 template
+// (ssz_script/lib/base64.cpp).
+//   "hello" -> aGVsbG8=
+//   "Man"   -> TWFu
+//   "Ma"    -> TWE=
+// Note: decBase64<_t> is NOT exercised — its SSZ bit-packing fallback
+// (`*_t x = (*_t)0;`) fails to compile at template instantiation, a
+// pre-existing bug from the original base64.ssz (see AGENTS.md).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib b = <base64.ssz>;
+
+^/char r = "";
+r = r + .b.encBase64!ubyte?(.s.sToU8("hello"));
+r = r + "|";
+r = r + .b.encBase64!ubyte?(.s.sToU8("Man"));
+r = r + "|";
+r = r + .b.encBase64!ubyte?(.s.sToU8("Ma"));
+r = r + "|";
+// char<->uint helper round trip: 0->'A', 'A'->0
+r = r + .s.uToSx((ulong)(.b.uintToB64Char(0d0) == 'A'));
+r = r + "|";
+r = r + .s.uToSx((ulong)(.b.b64CharToUint('A') == 0d0));
+.f.saveAsciiText("basetest_out.txt", r);

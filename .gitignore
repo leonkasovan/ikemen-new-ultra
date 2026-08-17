@@ -16,3 +16,4 @@ opencode.*
 .vscode/*
 install/*
 build/*
+test/work/

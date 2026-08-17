@@ -1,0 +1,17 @@
+// Sound regression smoke test — native &Client methods
+// (ssz_script/lib/sound.cpp).  The start/bufferReady/stop/setBuffer return
+// values depend on the host audio device, so this asserts only that every
+// method resolves and completes without crashing.
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib so = <sound.ssz>;
+
+^/char r = "";
+&.so.Client c;
+bool st = c.start();
+bool br = c.bufferReady();
+bool sp = c.stop();
+^/float buf = (float)[ 0.0, 0.0, 0.0, 0.0 ];
+bool sb = c.setBuffer(buf);
+r = "1";
+.f.saveAsciiText("soundtest_out.txt", r);

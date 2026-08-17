@@ -1,0 +1,24 @@
+// Socket regression test — non-template &Socket methods
+// (ssz_script/lib/socket.cpp).  Deterministic parts only: connecting to
+// nothing must fail gracefully, and listening on a local port must work.
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib so = <socket.ssz>;
+
+^/char r = "";
+&.so.Socket skt;
+r = r + .s.uToSx((ulong)skt.isOpen());
+r = r + "|";
+bool cc = skt.connect("127.0.0.1", "39999", 100, true);   // nothing listening
+r = r + .s.uToSx((ulong)cc);
+r = r + "|";
+r = r + .s.uToSx((ulong)skt.isOpen());
+r = r + "|";
+skt.close();
+r = r + .s.uToSx((ulong)skt.isOpen());
+r = r + "|";
+bool lk = skt.listen("39998", 1, true);
+r = r + .s.uToSx((ulong)lk);
+r = r + "|";
+skt.close();
+.f.saveAsciiText("sockettest_out.txt", r);

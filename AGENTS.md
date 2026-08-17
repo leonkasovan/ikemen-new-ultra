@@ -200,6 +200,48 @@ registry. The native-lib registry has no equivalent re-parse.
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
+**Known broken function:** `decBase64<_t>` in `base64.ssz` fails to
+compile at template instantiation (`*_t x = (*_t)0;` in the bit-packing
+fallback, line ~70).  This is a pre-existing bug carried over from the
+original `base64.ssz` — the game never uses base64, so it was never
+noticed.  Only the working surface (`encBase64<_t>`, `uintToB64Char`,
+`b64CharToUint`) is covered by tests.
+
+### Regression test suite
+
+`test/ssz/` holds permanent SSZ regression tests for the native library
+conversions, each comparing its output against a frozen reference
+(`test/ssz/<name>.expected`):
+
+| Test | Library | Reference |
+|---|---|---|
+| `md5test` | `md5` | RFC 1321 vectors (empty, `"abc"`, fox phrase), streaming == one-shot |
+| `arcfourtest` | `arcfour` | RFC 6229 vectors (`Key`/`Plaintext`, `Secret`/`Attack at dawn`), streaming == one-shot |
+| `regextest` | `regex` | match groups, no-match, invalid pattern |
+| `filetest` | `file` | save/load/copy/move/remove, dirs, int write/readAry round trip |
+| `basetest` | `base64` | `encBase64` of `hello`/`Man`/`Ma`, char<->uint helpers |
+| `mathtest` | `math` | seeded PRNG sequence (deterministic LCG), sqrt/floor/ceil/isnan/isinf |
+| `tabletest` | `table` | `hash` values matching the original SSZ algorithm |
+| `timetest` | `time` | unixTime range, tickCount monotonic |
+| `threadtest` | `thread` | sleep duration >= requested |
+| `sockettest` | `socket` | graceful connect failure, listen |
+| `soundtest` | `sound` | `&Client` calls complete (results are device-dependent) |
+| `ssztest` | `ssz` | compileString + run a snippet, memMark |
+
+Run with `bash test/run_ssz_tests.sh` (defaults to
+`install/ikemen-debug.exe`, then `build/Debug/ikemen-debug.exe`); the
+runner needs the `ssz_script/lib/` tree installed next to the exe
+(`make CONFIG=Debug install`) so `<name>.ssz` imports resolve.  Tests
+run from `test/work/` (gitignored) and exit nonzero on any failure.
+
+Note: `&Md5`/`&Arcfour`-style struct tests must not feed a raw digest
+back through `md5str()` — `md5str` hashes its input, so `md5str(digest)`
+re-hashes; use `toHex!ubyte?(digest)` to render a digest.  Test scripts
+live under `test/ssz/`, not `install/lib/` (the exe resolves `lib/x.ssz`
+relative to its own directory, so passing an absolute path to a
+`test/ssz/x.ssz` script works; `install/lib/` is copied from
+`ssz_script/lib/` by `make install`).
+
 ### Struct-method delegation (the `&X` pattern)
 
 Stateful structs (`&File`, `&Md5`, `&Arcfour`, `&Regex`, `&Client`, `&Compiler`,

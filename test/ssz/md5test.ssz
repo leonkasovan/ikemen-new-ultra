@@ -1,0 +1,17 @@
+// MD5 regression test — RFC 1321 test vectors.
+// Native md5/md5str + streaming &Md5 (ssz_script/lib/md5.cpp).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib md = <md5.ssz>;
+
+^/char r = "";
+r = r + .md.md5str(.s.sToU8(""));                                 // d41d8cd98f00b204e9800998ecf8427e
+r = r + "|";
+r = r + .md.md5str(.s.sToU8("abc"));                              // 900150983cd24fb0d6963f7d28e17f72
+r = r + "|";
+r = r + .s.toHex!ubyte?(.md.md5(.s.sToU8("The quick brown fox jumps over the lazy dog")));  // 9e107d9d372bb6826bd81d3542a419d6
+r = r + "|";
+&.md.Md5 mm;                                                      // streaming == one-shot
+mm.append(.s.sToU8("abc"));
+r = r + .s.toHex!ubyte?(mm.finish());
+.f.saveAsciiText("md5test_out.txt", r);

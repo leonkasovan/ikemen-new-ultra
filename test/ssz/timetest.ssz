@@ -1,0 +1,14 @@
+// Time regression test — native time lib (ssz_script/lib/time.cpp).
+// Range checks only (wall-clock values are not constant).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib t = <time>;
+
+^/char r = "";
+long ut = .t.unixTime();                       // 2000-01-01 .. 2100-01-01
+r = r + .s.uToSx((ulong)(ut > 946684800 && ut < 4102444800));
+r = r + "|";
+uint a = .t.tickCount();
+uint b = .t.tickCount();
+r = r + .s.uToSx((ulong)(b >= a));
+.f.saveAsciiText("timetest_out.txt", r);

@@ -1,0 +1,32 @@
+// Regex regression test - native &Regex methods (ssz_script/lib/regex.cpp).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib rx = <regex.ssz>;
+
+^/char r = "";
+&.rx.Regex re;
+^char err = re.init("(\w+)@(\w+)", 0);
+r = r + .s.uToSx((ulong)#err);
+r = r + "|";
+^^/char m = re.search("user@host");
+r = r + .s.uToSx((ulong)#m);
+r = r + "|";
+if(#m > 0) r = r + .s.uToSx((ulong)#m[0]);
+r = r + "|";
+if(#m > 1) r = r + .s.uToSx((ulong)(.s.equ(m[1], "user")));
+r = r + "|";
+if(#m > 2) r = r + .s.uToSx((ulong)(.s.equ(m[2], "host")));
+r = r + "|";
+^^/char nm = re.search("no match here");
+r = r + .s.uToSx((ulong)#nm);
+r = r + "|";
+&.rx.Regex bad;
+^char berr = bad.init("(", 0);
+r = r + .s.uToSx((ulong)(#berr > 0));
+r = r + "|";
+re.init("(\d+)", 0);
+^^/char m2 = re.search("abc 123 def");
+r = r + .s.uToSx((ulong)#m2);
+r = r + "|";
+if(#m2 > 1) r = r + .s.uToSx((ulong)(.s.equ(m2[1], "123")));
+.f.saveAsciiText("regextest_out.txt", r);

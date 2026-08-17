@@ -1,0 +1,19 @@
+// Arcfour (RC4) regression test — RFC 6229 test vectors.
+// Native one-shot arcfourEnc + streaming &Arcfour (ssz_script/lib/arcfour.cpp).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib a = <arcfour.ssz>;
+
+^/char r = "";
+^ubyte d1;
+.a.arcfourEnc(d1=, .s.sToU8("Key"), .s.sToU8("Plaintext"));
+r = r + .s.toHex!ubyte?(d1);                                      // bbf316e8d940af0ad3
+r = r + "|";
+^ubyte d2;
+.a.arcfourEnc(d2=, .s.sToU8("Secret"), .s.sToU8("Attack at dawn"));
+r = r + .s.toHex!ubyte?(d2);                                      // 45a01f645fc35b383552544b9bf5
+r = r + "|";
+&.a.Arcfour ac;                                                   // streaming == one-shot
+ac.init(.s.sToU8("Key"));
+r = r + .s.toHex!ubyte?(ac.encrypt(.s.sToU8("Plaintext")));
+.f.saveAsciiText("arcfourtest_out.txt", r);

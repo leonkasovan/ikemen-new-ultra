@@ -1,0 +1,24 @@
+// SSZ compiler regression test — native &Compiler + memMark
+// (ssz_script/lib/ssz.cpp): compile a snippet, run it, and confirm the
+// compiled code executed.
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib sz = <ssz.ssz>;
+
+^/char r = "";
+&.sz.Compiler c;
+^/char code = "lib f2 = <file.ssz>; .f2.saveAsciiText("\""ssztest_sub_out.txt"\"", "\""compiled-ran"\"");";
+.f.saveAsciiText("ssztest_code.txt", code);
+^/char err = c.compileString(code, "lib/");
+r = r + .s.uToSx((ulong)#err);
+r = r + "|";
+bool cr = c.run();
+r = r + .s.uToSx((ulong)cr);
+r = r + "|";
+^/char out = .f.loadAsciiText("ssztest_sub_out.txt");
+r = r + .s.uToSx((ulong)(.s.equ(out, "compiled-ran")));
+r = r + "|";
+.sz.memMarkBefore("test-tag");
+.sz.memMarkAfter("test-tag");
+r = r + "1";
+.f.saveAsciiText("ssztest_out.txt", r);
