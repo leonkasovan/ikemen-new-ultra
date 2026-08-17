@@ -1,19 +1,25 @@
+// ssz.ssz — the `ssz` library.
+//
+// The module functions (memMarkBefore/memMarkAfter/run) and the `&Compiler`
+// struct methods are implemented in C++ at ssz_script/lib/ssz.cpp and
+// delegated below; the struct keeps only its `index ptr` field.  The static
+// `ssz` plugin and this native lib coexist.
+
+lib sz = <ssz>;
+
 public void memMarkBefore(^/char label)
 {
-  plugin void MemMarkBefore(:^/char:) = <ssz>;
-  MemMarkBefore(:label:);
+  .sz.memMarkBefore(label);
 }
 
 public void memMarkAfter(^/char label)
 {
-  plugin void MemMarkAfter(:^/char:)  = <ssz>;
-  MemMarkAfter(:label:);
+  .sz.memMarkAfter(label);
 }
 
 public bool run(^/char file)
 {
-  plugin bool Run(:^/char:) = <ssz>;
-  ret Run(:file:);
+  ret .sz.run(file);
 }
 
 public &Compiler
@@ -21,32 +27,26 @@ public &Compiler
   index ptr;
   new()
   {
-    plugin index NewCompiler(::) = <ssz>;
-    `ptr = NewCompiler(::);
+    `ptr = .sz.newCompiler();
   }
   delete()
   {
-    plugin void DeleteCompiler(:index:) = <ssz>;
-    DeleteCompiler(:`ptr:);
+    .sz.deleteCompiler(`ptr=);
   }
   public ^/char compile(^/char file)
   {
-    plugin void CompilerCompile(:index, ^/char, ^/char=:) = <ssz>;
     ^/char error;
-    CompilerCompile(:`ptr, file, error=:);
+    .sz.compilerCompile(`ptr, file, error=);
     ret error;
   }
   public ^/char compileString(^/char code, ^/char dir)
   {
-    plugin void CompilerCompileString(:
-      index, ^/char, ^/char, ^/char=:) = <ssz>;
     ^/char error;
-    CompilerCompileString(:`ptr, code, dir, error=:);
+    .sz.compilerCompileString(`ptr, code, dir, error=);
     ret error;
   }
   public bool run()
   {
-    plugin bool CompilerRun(:index:) = <ssz>;
-    ret CompilerRun(:`ptr:);
+    ret .sz.compilerRun(`ptr);
   }
 }

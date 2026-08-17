@@ -27,6 +27,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -171,6 +172,120 @@ static std::vector<uint8_t> Md5Digest(const uint8_t* data, size_t n)
 	return digest;
 }
 
+// ---------------------------------------------------------------------------
+// &Md5 struct streaming state — the struct stays in SSZ (fields `^uint
+// count`, `^uint abcd`, `^ubyte buf`), the method bodies delegate here with
+// the fields passed as out-params (pointers to the caller's Reference slots;
+// the arrays' contents are mutated in place).  The state layout matches
+// md5.ssz exactly: count = 64-bit message bit length (lsw first), abcd =
+// digest buffer, buf = 64-byte accumulate block.
+// ---------------------------------------------------------------------------
+
+// Streaming append: update count, fold complete 64-byte blocks into abcd via
+// Md5Block, and keep the remainder in buf.  Mirrors md5.ssz's &Md5.append.
+static void Md5AppendState(
+	uint32_t count[2], uint32_t abcd[4], uint8_t buf[64],
+	const uint8_t* data, size_t n)
+{
+	if(n <= 0) return;
+	size_t offset = (count[0] >> 3) & 63;
+	uint32_t nbits = (uint32_t)(n << 3);
+	count[1] += (uint32_t)(n >> 29);
+	count[0] += nbits;
+	if(count[0] < nbits) count[1]++;
+
+	size_t consumed = 0;
+	if(offset > 0){
+		size_t copy = offset + n > 64 ? 64 - offset : n;
+		memcpy(buf + offset, data, copy);
+		if(offset + copy < 64) return;
+		data += copy;
+		consumed += copy;
+		Md5Block(abcd, buf);
+	}
+	while(n - consumed >= 64){
+		Md5Block(abcd, data);
+		data += 64;
+		consumed += 64;
+	}
+	size_t rem = n - consumed;
+	memcpy(buf, data, rem);
+}
+
+// SSZ: &Md5.init()
+// Args arrive reversed: (pu, abcd*, count*).
+static void SSZ_STDCALL Md5LibInit(PluginUtil*, Reference* abcd, Reference* count)
+{
+	uint32_t* c = (uint32_t*)(*count).atpos();
+	c[0] = 0;
+	c[1] = 0;
+	uint32_t* a = (uint32_t*)(*abcd).atpos();
+	a[0] = 0x67452301;
+	a[1] = 0xefcdab89;
+	a[2] = 0x98badcfe;
+	a[3] = 0x10325476;
+}
+
+// SSZ: &Md5.process(^/ubyte data /*[64]*/)
+// Args arrive reversed: (pu, data, abcd*).
+static void SSZ_STDCALL Md5LibProcess(PluginUtil*, Reference data, Reference* abcd)
+{
+	Md5Block((uint32_t*)(*abcd).atpos(), (const uint8_t*)data.atpos());
+}
+
+// SSZ: &Md5.append(^/ubyte data)
+// Args arrive reversed: (pu, data, buf*, abcd*, count*).
+static void SSZ_STDCALL Md5LibAppend(
+	PluginUtil*, Reference data, Reference* buf, Reference* abcd, Reference* count)
+{
+	Md5AppendState(
+		(uint32_t*)(*count).atpos(),
+		(uint32_t*)(*abcd).atpos(),
+		(uint8_t*)(*buf).atpos(),
+		(const uint8_t*)data.atpos(),
+		(size_t)data.len());
+}
+
+// SSZ: &Md5.finish() — pad, append the bit length, return the digest; the
+// struct state is consumed exactly like the SSZ (append mutates the fields).
+// Args arrive reversed: (pu, buf*, abcd*, count*).
+static intptr_t SSZ_STDCALL Md5LibFinish(
+	PluginUtil*, Reference* buf, Reference* abcd, Reference* count)
+{
+	uint32_t lcount[2];
+	uint32_t labcd[4];
+	uint8_t lbuf[64];
+	memcpy(lcount, (*count).atpos(), sizeof(lcount));
+	memcpy(labcd, (*abcd).atpos(), sizeof(labcd));
+	memcpy(lbuf, (*buf).atpos(), sizeof(lbuf));
+
+	// 8-byte little-endian bit length — captured from the count BEFORE the
+	// pad append, matching md5.ssz's finish (the SSZ builds `data` from the
+	// fields first, then appends pad and data).
+	uint8_t clen[8];
+	for(int i = 0; i < 8; i++){
+		clen[i] = (uint8_t)(lcount[i >> 2] >> ((i & 3) << 3));
+	}
+
+	// pad: 0x80 followed by zeros, length ((55 - (count[0]>>3)) & 63) + 1
+	std::vector<uint8_t> pad(64, 0);
+	pad[0] = 0x80;
+	size_t padLen = ((55 - (size_t)(lcount[0] >> 3)) & 63) + 1;
+	Md5AppendState(lcount, labcd, lbuf, pad.data(), padLen);
+	Md5AppendState(lcount, labcd, lbuf, clen, 8);
+
+	std::vector<uint8_t> digest(16);
+	for(int i = 0; i < 16; i++){
+		digest[i] = (uint8_t)(labcd[i >> 2] >> ((i & 3) << 3));
+	}
+
+	// write the consumed state back (the SSZ finish mutates the fields)
+	memcpy((*count).atpos(), lcount, sizeof(lcount));
+	memcpy((*abcd).atpos(), labcd, sizeof(labcd));
+	memcpy((*buf).atpos(), lbuf, sizeof(lbuf));
+	return MakeBytes(digest);
+}
+
 #undef F
 #undef G
 #undef H
@@ -221,10 +336,13 @@ static intptr_t SSZ_STDCALL Md5LibMd5Str(PluginUtil*, Reference data)
 // ---------------------------------------------------------------------------
 
 extern "C" bool md5_lib_register()
-{
-	static const NativeLib::NativeFunction funcs[] = {
-		{ "md5",    "^ubyte (^/ubyte)", (void*)Md5LibMd5    },
-		{ "md5str", "^char (^/ubyte)",  (void*)Md5LibMd5Str },
+{	static const NativeLib::NativeFunction funcs[] = {
+		{ "md5",       "^ubyte (^/ubyte)",            (void*)Md5LibMd5    },
+		{ "md5str",    "^char (^/ubyte)",             (void*)Md5LibMd5Str },
+		{ "md5Init",   "void (^uint=, ^uint=)",       (void*)Md5LibInit   },
+		{ "md5Process", "void (^uint=, ^/ubyte)",     (void*)Md5LibProcess },
+		{ "md5Append", "void (^uint=, ^uint=, ^ubyte=, ^/ubyte)", (void*)Md5LibAppend },
+		{ "md5Finish", "^ubyte (^uint=, ^uint=, ^ubyte=)",       (void*)Md5LibFinish },
 	};
 
 	NativeLib::NativeLibrary lib;

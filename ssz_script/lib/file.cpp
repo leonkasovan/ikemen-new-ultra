@@ -45,6 +45,10 @@ struct PluginUtil;
 // Native implementations defined in main/file/file.cpp
 // ---------------------------------------------------------------------------
 
+extern intptr_t SSZ_STDCALL Open(
+	const std::wstring& md, const std::wstring& fn);
+extern void SSZ_STDCALL FileClose(FILE* pFile);
+extern bool SSZ_STDCALL Seek(int32_t origin, int64_t offset, FILE* pFile);
 extern std::wstring SSZ_STDCALL LoadAsciiText(const std::wstring& path);
 extern bool SSZ_STDCALL SaveAsciiText(
 	const std::wstring& txt, const std::wstring& path);
@@ -184,6 +188,48 @@ static intptr_t SSZ_STDCALL FileLibGetCurrentDir(PluginUtil*)
 }
 
 // ---------------------------------------------------------------------------
+// &File struct methods — the struct stays in SSZ (field `index fh`), the
+// method bodies delegate here with the field passed as an `index=` out-param
+// (pointer to the caller's 8-byte slot, read-write).
+// ---------------------------------------------------------------------------
+
+// SSZ: &File.open(^/char fn, ^/char mode) — closes any open handle first.
+// Args arrive reversed: (pu, mode, fn, fh*).
+static bool SSZ_STDCALL FileLibFileOpen(
+	PluginUtil*, Reference mode, Reference fn, intptr_t* fh)
+{
+	if(*fh != 0){
+		FileClose((FILE*)*fh);
+		*fh = 0;
+	}
+	*fh = Open(RefToWstring(mode), RefToWstring(fn));
+	return *fh != 0;
+}
+
+// SSZ: &File.close()
+static void SSZ_STDCALL FileLibFileClose(PluginUtil*, intptr_t* fh)
+{
+	if(*fh != 0){
+		FileClose((FILE*)*fh);
+		*fh = 0;
+	}
+}
+
+// SSZ: &File.isOpened()
+static bool SSZ_STDCALL FileLibFileIsOpened(PluginUtil*, intptr_t fh)
+{
+	return fh != 0;
+}
+
+// SSZ: &File.seek(long offset, |.Seek origin)
+// Args arrive reversed: (pu, origin, offset, fh).
+static bool SSZ_STDCALL FileLibFileSeek(
+	PluginUtil*, int32_t origin, int64_t offset, intptr_t fh)
+{
+	return Seek(origin, offset, (FILE*)fh);
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -201,6 +247,10 @@ extern "C" bool file_lib_register()
 		{ "removeDir",     "bool (^/char)",                (void*)FileLibRemoveDir     },
 		{ "setCurrentDir", "bool (^/char)",                (void*)FileLibSetCurrentDir },
 		{ "getCurrentDir", "^/char ()",                    (void*)FileLibGetCurrentDir },
+		{ "fileOpen",      "bool (index=, ^/char, ^/char)", (void*)FileLibFileOpen      },
+		{ "fileClose",     "void (index=)",                 (void*)FileLibFileClose     },
+		{ "fileIsOpened",  "bool (index)",                  (void*)FileLibFileIsOpened  },
+		{ "fileSeek",      "bool (index, long, int)",       (void*)FileLibFileSeek      },
 	};
 
 	NativeLib::NativeLibrary lib;

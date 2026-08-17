@@ -82,6 +82,86 @@ static bool SSZ_STDCALL ArcfourLibEnc(
 }
 
 // ---------------------------------------------------------------------------
+// &Arcfour struct methods — the struct stays in SSZ (fields `uint x, y` and
+// `^ubyte state`), the method bodies delegate here with the fields passed as
+// out-params (pointers to the caller's slots, read-write).
+// ---------------------------------------------------------------------------
+
+// SSZ: &Arcfour.init(^/ubyte key) — KSA into the caller's state slot.
+// Args arrive reversed: (pu, key, state*, y*, x*).
+static void SSZ_STDCALL ArcfourLibInit(
+	PluginUtil*, Reference key, Reference* state, uint32_t* y, uint32_t* x)
+{
+	*x = 0;
+	*y = 0;
+	if(state->null() || state->len() < 256) return;  // defensive: SSZ new() allocates 256
+	uint8_t* st = (uint8_t*)state->atpos();
+	for(int i = 0; i < 256; i++) st[i] = (uint8_t)i;
+
+	const uint8_t* kb = (const uint8_t*)key.atpos();
+	size_t kn = (size_t)key.len();
+	if(kn == 0) return;
+	// KSA: state accumulator j advances by key[counter % kn] + S[counter];
+	// the SSZ tracks the key position separately (wraps at #key), which is
+	// exactly counter % kn.
+	size_t j = 0;
+	for(int counter = 0; counter < 256; counter++){
+		uint8_t t = st[counter];
+		j = (j + kb[counter % kn] + t) & 0xff;
+		uint8_t u = st[j];
+		st[j] = t;
+		st[counter] = u;
+	}
+}
+
+// SSZ: &Arcfour.getByte() — one PRGA keystream byte, advancing x/y.
+// Args arrive reversed: (pu, state*, y*, x*).
+static uint8_t SSZ_STDCALL ArcfourLibGetByte(
+	PluginUtil*, Reference* state, uint32_t* y, uint32_t* x)
+{
+	uint8_t* st = (uint8_t*)state->atpos();
+	uint32_t nx = (*x + 1) & 0xff;
+	uint8_t sx = st[nx];
+	uint32_t ny = (sx + *y) & 0xff;
+	uint8_t sy = st[ny];
+	*x = nx;
+	*y = ny;
+	st[ny] = sx;
+	st[nx] = sy;
+	return st[(sx + sy) & 0xff];
+}
+
+// SSZ: &Arcfour.encrypt(^/ubyte src) — XOR each source byte with keystream.
+// Args arrive reversed: (pu, src, state*, y*, x*).  Returns a heap ^ubyte.
+static intptr_t SSZ_STDCALL ArcfourLibEncrypt(
+	PluginUtil*, Reference src, Reference* state, uint32_t* y, uint32_t* x)
+{
+	const uint8_t* sp = src.null() ? nullptr : (const uint8_t*)src.atpos();
+	size_t n = src.null() ? 0 : (size_t)src.len();
+	std::vector<uint8_t> out(n);
+	uint8_t* st = (uint8_t*)state->atpos();
+	uint32_t xx = *x, yy = *y;
+	for(size_t i = 0; i < n; i++){
+		xx = (xx + 1) & 0xff;
+		yy = (yy + st[xx]) & 0xff;
+		uint8_t t = st[xx]; st[xx] = st[yy]; st[yy] = t;
+		out[i] = sp[i] ^ st[(st[xx] + st[yy]) & 0xff];
+	}
+	*x = xx;
+	*y = yy;
+
+	Reference* r = (Reference*)sszrefnewfunc(sizeof(Reference));
+	if(r != nullptr){
+		r->init();
+		r->refnew((intptr_t)out.size(), 1);
+		if(!r->null() && !out.empty()){
+			memcpy(r->atpos(), out.data(), out.size());
+		}
+	}
+	return (intptr_t)r;
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -89,6 +169,9 @@ extern "C" bool arcfour_lib_register()
 {
 	static const NativeLib::NativeFunction funcs[] = {
 		{ "arcfourEnc", "bool (^ubyte=, ^/ubyte, ^/ubyte)", (void*)ArcfourLibEnc },
+		{ "init",       "void (uint=, uint=, ^ubyte=, ^/ubyte)", (void*)ArcfourLibInit },
+		{ "getByte",    "ubyte (uint=, uint=, ^ubyte=)", (void*)ArcfourLibGetByte },
+		{ "encrypt",    "^ubyte (uint=, uint=, ^ubyte=, ^/ubyte)", (void*)ArcfourLibEncrypt },
 	};
 
 	NativeLib::NativeLibrary lib;

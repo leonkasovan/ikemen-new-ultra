@@ -29,6 +29,10 @@ extern "C" bool string_lib_register();
 extern "C" bool md5_lib_register();
 extern "C" bool arcfour_lib_register();
 extern "C" bool file_lib_register();
+extern "C" bool regex_lib_register();
+extern "C" bool sound_lib_register();
+extern "C" bool ssz_lib_register();
+extern "C" bool socket_lib_register();
 
 
 #include <stdio.h>
@@ -449,6 +453,22 @@ int main(int argc, char *argv[]) {
 	}
 	if (!file_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'file'");
+		return 1;
+	}
+	if (!regex_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'regex'");
+		return 1;
+	}
+	if (!sound_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'sound'");
+		return 1;
+	}
+	if (!ssz_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'ssz'");
+		return 1;
+	}
+	if (!socket_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'socket'");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");

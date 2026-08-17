@@ -1,38 +1,41 @@
+// sound.ssz — the `sound` library.
+//
+// The `&Client` struct methods (new/delete/start/stop/bufferReady/setBuffer)
+// are implemented in C++ at ssz_script/lib/sound.cpp and delegated below;
+// the struct keeps only its `index cl` field.  The static `sound` plugin and
+// this native lib coexist.
+
 const int Freq = 48000;
 const int Channels = 2;
 const int BufferSamples = 2048;
+
+lib sn = <sound>;
 
 public &Client
 {
   index cl = 0;
   new()
   {
-    plugin index NewClient(::) = <sound>;
-    `cl = NewClient(::);
+    `cl = .sn.newClient();
   }
   delete()
   {
-    plugin void DeleteClient(:index:) = <sound>;
-    DeleteClient(:`cl:);
+    .sn.deleteClient(`cl=);
   }
   public bool start()
   {
-    plugin bool ClientStart(:index:) = <sound>;
-    ret ClientStart(:`cl:);
+    ret .sn.clientStart(`cl);
   }
   public bool stop()
   {
-    plugin bool ClientStop(:index:) = <sound>;
-    ret ClientStop(:`cl:);
+    ret .sn.clientStop(`cl);
   }
   public bool bufferReady()
   {
-    plugin bool ClientBufferReady(:index:) = <sound>;
-    ret ClientBufferReady(:`cl:);
+    ret .sn.clientBufferReady(`cl);
   }
   public bool setBuffer(^/float buffer)
   {
-    plugin bool ClientSetBuffer(:index, ^/float:) = <sound>;
-    ret ClientSetBuffer(:`cl, buffer:);
+    ret .sn.clientSetBuffer(`cl, buffer);
   }
 }

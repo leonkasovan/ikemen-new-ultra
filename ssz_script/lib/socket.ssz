@@ -1,5 +1,11 @@
 const index INVALID_SOCKET = !0;
 
+// The &Socket struct's non-template methods are implemented in C++ at
+// ssz_script/lib/socket.cpp and delegated below; recv<_t>/recvAry<_t>/
+// send<_t>/sendAry<_t> and accept (which moves a whole &Socket out-param)
+// stay in SSZ and keep calling the static `socket` plugin.
+lib sk = <socket>;
+
 public &Socket
 {
   /index soc = .INVALID_SOCKET;
@@ -9,27 +15,23 @@ public &Socket
   }
   void setSoc(index s)
   {
-    `soc = s;
+    .sk.setSoc(s, `soc=);
   }
   public bool isOpen()
   {
-    ret `soc != .INVALID_SOCKET;
+    ret .sk.isOpen(`soc);
   }
   public void close()
   {
-    plugin void SocketClose(:index=:) = <socket>;
-    SocketClose(:`soc=:);
+    .sk.socketClose(`soc=);
   }
   public bool connect(^/char host, ^/char port, int timeout, bool nodelay)
   {
-    plugin bool SocketConnect(:index=, ^/char, ^/char, int, bool:) =
-      <socket>;
-    ret SocketConnect(:`soc=, host, port, timeout, nodelay:);
+    ret .sk.socketConnect(`soc=, host, port, timeout, nodelay);
   }
   public bool listen(^/char port, int backlog, bool ipv4)
   {
-    plugin bool SocketListen(:index=, ^/char, int, bool:) = <socket>;
-    ret SocketListen(:`soc=, port, backlog, ipv4:);
+    ret .sk.socketListen(`soc=, port, backlog, ipv4);
   }
   public bool accept(`self s=, int timeout, bool nodelay)
   {

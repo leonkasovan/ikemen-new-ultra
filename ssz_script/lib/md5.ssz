@@ -64,6 +64,10 @@ const uint T62 = /* 0xbd3af235 */ (T_MASK ^ 0x42c50dca);
 const uint T63 =    0x2ad7d2bb                         ;
 const uint T64 = /* 0xeb86d391 */ (T_MASK ^ 0x14792c6e);
 
+// The &Md5 struct's streaming methods (init/process/append/finish) are
+// implemented in C++ at ssz_script/lib/md5.cpp and delegated below.
+lib md = <md5>;
+
 public &Md5
 {
   /^uint count; /* message length in bits, lsw first */
@@ -78,197 +82,24 @@ public &Md5
   }
   public void init()
   {
-    `count[0] = `count[1] = 0d0;
-    `abcd[0] =   0x67452301                        ;
-    `abcd[1] = /*0xefcdab89*/ .T_MASK ^ 0x10325476;
-    `abcd[2] = /*0x98badcfe*/ .T_MASK ^ 0x67452301;
-    `abcd[3] =   0x10325476                        ;
+    .md.md5Init(`count=, `abcd=);
   }
   void process(^/ubyte data /*[64]*/)
   {
-    uint a = `abcd[0], b = `abcd[1], c = `abcd[2], d = `abcd[3];
-    uint t;
-    ^uint xbuf.new(16);
-    ^/uint X;
-    loop{index i = 0; do:
-      xbuf[i] = data[i*4];
-      xbuf[i] |= (uint)data[i*4+1] << 0d8;
-      xbuf[i] |= (uint)data[i*4+2] << 0d16;
-      xbuf[i] |= (uint)data[i*4+3] << 0d24;
-      i++;
-    while i < 16:
-    }
-    X = xbuf;
-    uint ROTATE_LEFT(uint x, uint n)
-    {
-      ret (((x) << (n)) | ((x) >> (0d32 - (n))));
-    }
-    void SET1(uint a=, uint b, uint c, uint d, uint k, uint s, uint Ti)
-    {
-      uint F(uint x, uint y, uint z)
-      {
-        ret (((x) & (y)) | (!(x) & (z)));
-      }
-      `t = a + F(b,c,d) + `X[(index)k] + Ti;
-      a = `ROTATE_LEFT(`t, s) + b;
-    }
-    SET1(a=, b, c, d,  0d0,  0d7,  .T1);
-    SET1(d=, a, b, c,  0d1, 0d12,  .T2);
-    SET1(c=, d, a, b,  0d2, 0d17,  .T3);
-    SET1(b=, c, d, a,  0d3, 0d22,  .T4);
-    SET1(a=, b, c, d,  0d4,  0d7,  .T5);
-    SET1(d=, a, b, c,  0d5, 0d12,  .T6);
-    SET1(c=, d, a, b,  0d6, 0d17,  .T7);
-    SET1(b=, c, d, a,  0d7, 0d22,  .T8);
-    SET1(a=, b, c, d,  0d8,  0d7,  .T9);
-    SET1(d=, a, b, c,  0d9, 0d12, .T10);
-    SET1(c=, d, a, b, 0d10, 0d17, .T11);
-    SET1(b=, c, d, a, 0d11, 0d22, .T12);
-    SET1(a=, b, c, d, 0d12,  0d7, .T13);
-    SET1(d=, a, b, c, 0d13, 0d12, .T14);
-    SET1(c=, d, a, b, 0d14, 0d17, .T15);
-    SET1(b=, c, d, a, 0d15, 0d22, .T16);
-    void SET2(uint a=, uint b, uint c, uint d, uint k, uint s, uint Ti)
-    {
-      uint G(uint x, uint y, uint z)
-      {
-        ret (((x) & (z)) | ((y) & !(z)));
-      }
-      `t = a + G(b,c,d) + `X[(index)k] + Ti;
-      a = `ROTATE_LEFT(`t, s) + b;
-    }
-    SET2(a=, b, c, d,  0d1,  0d5, .T17);
-    SET2(d=, a, b, c,  0d6,  0d9, .T18);
-    SET2(c=, d, a, b, 0d11, 0d14, .T19);
-    SET2(b=, c, d, a,  0d0, 0d20, .T20);
-    SET2(a=, b, c, d,  0d5,  0d5, .T21);
-    SET2(d=, a, b, c, 0d10,  0d9, .T22);
-    SET2(c=, d, a, b, 0d15, 0d14, .T23);
-    SET2(b=, c, d, a,  0d4, 0d20, .T24);
-    SET2(a=, b, c, d,  0d9,  0d5, .T25);
-    SET2(d=, a, b, c, 0d14,  0d9, .T26);
-    SET2(c=, d, a, b,  0d3, 0d14, .T27);
-    SET2(b=, c, d, a,  0d8, 0d20, .T28);
-    SET2(a=, b, c, d, 0d13,  0d5, .T29);
-    SET2(d=, a, b, c,  0d2,  0d9, .T30);
-    SET2(c=, d, a, b,  0d7, 0d14, .T31);
-    SET2(b=, c, d, a, 0d12, 0d20, .T32);
-    void SET3(uint a=, uint b, uint c, uint d, uint k, uint s, uint Ti)
-    {
-      uint H(uint x, uint y, uint z)
-      {
-        ret ((x) ^ (y) ^ (z));
-      }
-      `t = a + H(b,c,d) + `X[(index)k] + Ti;
-      a = `ROTATE_LEFT(`t, s) + b;
-    }
-    SET3(a=, b, c, d,  0d5,  0d4, .T33);
-    SET3(d=, a, b, c,  0d8, 0d11, .T34);
-    SET3(c=, d, a, b, 0d11, 0d16, .T35);
-    SET3(b=, c, d, a, 0d14, 0d23, .T36);
-    SET3(a=, b, c, d,  0d1,  0d4, .T37);
-    SET3(d=, a, b, c,  0d4, 0d11, .T38);
-    SET3(c=, d, a, b,  0d7, 0d16, .T39);
-    SET3(b=, c, d, a, 0d10, 0d23, .T40);
-    SET3(a=, b, c, d, 0d13,  0d4, .T41);
-    SET3(d=, a, b, c,  0d0, 0d11, .T42);
-    SET3(c=, d, a, b,  0d3, 0d16, .T43);
-    SET3(b=, c, d, a,  0d6, 0d23, .T44);
-    SET3(a=, b, c, d,  0d9,  0d4, .T45);
-    SET3(d=, a, b, c, 0d12, 0d11, .T46);
-    SET3(c=, d, a, b, 0d15, 0d16, .T47);
-    SET3(b=, c, d, a,  0d2, 0d23, .T48);
-    void SET4(uint a=, uint b, uint c, uint d, uint k, uint s, uint Ti)
-    {
-      uint I(uint x, uint y, uint z)
-      {
-        ret ((y) ^ ((x) | !(z)));
-      }
-      `t = a + I(b,c,d) + `X[(index)k] + Ti;
-      a = `ROTATE_LEFT(`t, s) + b;
-    }
-    SET4(a=, b, c, d,  0d0,  0d6, .T49);
-    SET4(d=, a, b, c,  0d7, 0d10, .T50);
-    SET4(c=, d, a, b, 0d14, 0d15, .T51);
-    SET4(b=, c, d, a,  0d5, 0d21, .T52);
-    SET4(a=, b, c, d, 0d12,  0d6, .T53);
-    SET4(d=, a, b, c,  0d3, 0d10, .T54);
-    SET4(c=, d, a, b, 0d10, 0d15, .T55);
-    SET4(b=, c, d, a,  0d1, 0d21, .T56);
-    SET4(a=, b, c, d,  0d8,  0d6, .T57);
-    SET4(d=, a, b, c, 0d15, 0d10, .T58);
-    SET4(c=, d, a, b,  0d6, 0d15, .T59);
-    SET4(b=, c, d, a, 0d13, 0d21, .T60);
-    SET4(a=, b, c, d,  0d4,  0d6, .T61);
-    SET4(d=, a, b, c, 0d11, 0d10, .T62);
-    SET4(c=, d, a, b,  0d2, 0d15, .T63);
-    SET4(b=, c, d, a,  0d9, 0d21, .T64);
-    `abcd[0] += a;
-    `abcd[1] += b;
-    `abcd[2] += c;
-    `abcd[3] += d;
+    .md.md5Process(`abcd=, data);
   }
   public void append(^/ubyte data)
   {
-    ^/ubyte p = data;
-    index offset = (index)((`count[0] >> 0d3) & 0d63);
-    uint nbits = (uint)(#data << 3);
-    if(#data <= 0) ret;
-    `count[1] += (uint)(#data >> 29);
-    `count[0] += nbits;
-    if(`count[0] < nbits) `count[1]++;
-    if(offset > 0){
-      index copy = offset + #data > 64 ? 64 - offset : #data;
-      loop{index i = 0; while; do:
-        `buf[offset + i] = p[i];
-        i++;
-      while i < copy:
-      }
-      if(offset + copy < 64) ret;
-      p = p[copy..-1];
-      `process(`buf);
-    }
-    loop{while; do:
-      `process(p);
-      p = p[64..-1];
-    while #p >= 64:
-    }
-    loop{index i = 0; while; do:
-      `buf[i] = p[i];
-      i++;
-    while i < #p:
-    }
+    .md.md5Append(`count=, `abcd=, `buf=, data);
   }
   public ^ubyte finish()
   {
-    ^/ubyte pad = (ubyte)[
-      0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-      ];
-    ^ubyte data.new(8);
-    loop{index i = 0; do:
-      data[i] = (ubyte)(`count[i >> 2] >> (uint)((i & 3) << 3));
-      i++;
-    while i < 8:
-    }
-    `append(pad[0..((55 - (index)(`count[0] >> 0d3)) & 63) + 1]);
-    `append(data);
-    ^ubyte digest.new(16);
-    loop{index i = 0; do:
-      digest[i] = (ubyte)(`abcd[i >> 2] >> (uint)((i & 3) << 3));
-      i++;
-    while i < 16:
-    }
-    ret digest;
+    ret .md.md5Finish(`count=, `abcd=, `buf=);
   }
 }
 
 // One-shot hash functions — implemented in C++ at ssz_script/lib/md5.cpp
 // (RFC 1321, matching this file's &Md5 streaming implementation).
-lib md = <md5>;
-
 public ^ubyte md5(^/ubyte data)
 {
   ret .md.md5(data);

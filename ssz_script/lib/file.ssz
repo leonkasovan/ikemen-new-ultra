@@ -23,20 +23,15 @@ public &File
   }
   public bool isOpened()
   {
-    ret `fh != 0;
+    ret .fl.fileIsOpened(`fh);
   }
   public bool open(^/char fn, ^/char mode)
   {
-    `close();
-    plugin index Open(:^/char, ^/char:) = <file>;
-    `fh = Open(:fn, mode:);
-    ret `fh != 0;
+    ret .fl.fileOpen(`fh=, fn, mode);
   }
   public void close()
   {
-    plugin index Close(:index:) = <file>;
-    Close(:`fh:);
-    `fh = 0;
+    .fl.fileClose(`fh=);
   }
   public bool read<_t>(_t x=)
   {
@@ -71,8 +66,7 @@ public &File
   }
   public bool seek(long offset, |.Seek origin)
   {
-    plugin bool Seek(:index, long, |.Seek:) = <file>;
-    ret Seek(:`fh, offset, origin:);
+    ret .fl.fileSeek(`fh, offset, (int)origin);
   }
 }
 
