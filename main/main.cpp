@@ -33,6 +33,7 @@ extern "C" bool regex_lib_register();
 extern "C" bool sound_lib_register();
 extern "C" bool ssz_lib_register();
 extern "C" bool socket_lib_register();
+extern "C" bool base64_lib_register();
 
 
 #include <stdio.h>
@@ -469,6 +470,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!socket_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'socket'");
+		return 1;
+	}
+	if (!base64_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'base64'");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");

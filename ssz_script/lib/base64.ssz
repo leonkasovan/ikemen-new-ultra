@@ -1,41 +1,33 @@
-lib m = <math.ssz>;
+// Native core — the char-conversion helpers (uintToB64Char/b64CharToUint)
+// and the byte-level base64 core (encB64/decB64) are implemented in C++ at
+// ssz_script/lib/base64.cpp.  The generic templates (encBase64<_t>/
+// decBase64<_t>) delegate to the byte-level core when the element type is
+// byte-sized (typesize(_t) == 1) and fall back to the original SSZ
+// bit-packing for wider element types, whose per-element big-endian bit
+// layout differs from the raw memory bytes.
+lib b64 = <base64>;
 
 public char uintToB64Char(uint n)
 {
-  branch{
-  cond n < 0d26:
-    ret 'A' + (char)n;
-  cond n < 0d52:
-    ret 'a' + (char)(n - 0d26);
-  cond n < 0d62:
-    ret '0' + (char)(n - 0d52);
-  cond n == 0d62:
-    ret '+';
-  cond n == 0d63:
-    ret '/';
-  }
-  ret '=';
+  ret .b64.uintToB64Char(n);
 }
 
 public uint b64CharToUint(char c)
 {
-  branch{
-  cond .m.inRange!char?('A', 'Z', c):
-    ret (uint)(c - 'A');
-  cond .m.inRange!char?('a', 'z', c):
-    ret (uint)(c - 'a') + 0d26;
-  cond .m.inRange!char?('0', '9', c):
-    ret (uint)(c - '0') + 0d52;
-  cond c == '+':
-    ret 0d62;
-  cond c == '/':
-    ret 0d63;
-  }
-  ret 0d64;
+  ret .b64.b64CharToUint(c);
 }
 
 public ^char encBase64<_t>(^/_t data)
 {
+  %ubyte ub;
+  branch{
+  cond typesize(_t) == 1:
+    loop{index i = 0; while; do:
+      ub .= (ubyte)data[i];
+      i++;
+    while i < #data:}
+    ret .b64.encB64(ub);
+  }
   %char buf;
   loop{
     index i = 0, bii = 0;
@@ -69,7 +61,17 @@ public ^char encBase64<_t>(^/_t data)
 
 public ..decBase64<_t>(^/char b64) ^_t
 {
+  ^ubyte ub;
   %_t buf;
+  branch{
+  cond typesize(_t) == 1:
+    ub = .b64.decB64(b64);
+    loop{index i = 0; while; do:
+      buf .= (_t)ub[i];
+      i++;
+    while i < #ub:}
+    ret buf;
+  }
   loop{
     index i = 0, bii = 0;
     *_t x = (*_t)0;
