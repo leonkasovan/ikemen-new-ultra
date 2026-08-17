@@ -154,9 +154,17 @@ plain-function core (`ssz_script/lib/string.cpp` — consumed via delegation
 from `string.ssz`, which keeps the templates, list-returning functions, and
 `&Format` in SSZ), the `md5` one-shot hashes (`ssz_script/lib/md5.cpp` —
 consumed via delegation from `md5.ssz`, which keeps the stateful `&Md5`
-struct in SSZ), and `arcfour` (`ssz_script/lib/arcfour.cpp` — the one-shot
+struct in SSZ), `arcfour` (`ssz_script/lib/arcfour.cpp` — the one-shot
 `arcfourEnc(^ubyte dest=, ...)` out-param function, consumed via delegation
-from `arcfour.ssz`, which keeps the stateful `&Arcfour` struct in SSZ).
+from `arcfour.ssz`, which keeps the stateful `&Arcfour` struct in SSZ), and
+`file` (`ssz_script/lib/file.cpp` — the module functions
+loadAsciiText/saveAsciiText/remove/move/copy/find/findDir/createDir/removeDir/
+setCurrentDir/getCurrentDir, consumed via delegation from `file.ssz`, which
+keeps the stateful `&File` struct, the `|Seek` enum, and the `readAll<_t>`
+template in SSZ; `find`/`findDir` return `%^char` lists built with the same
+`vectorToRefList` convention as the static bridge, and the implementations
+forward to the clean natives in `main/file/file.cpp` so both the static
+`file` plugin (for `&File` method calls) and the native lib coexist).
 
 ---
 

@@ -133,7 +133,8 @@ NATIVE_LIB_SRCS = \
   ssz_script/lib/math.cpp \
   ssz_script/lib/string.cpp \
   ssz_script/lib/md5.cpp \
-  ssz_script/lib/arcfour.cpp
+  ssz_script/lib/arcfour.cpp \
+  ssz_script/lib/file.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 

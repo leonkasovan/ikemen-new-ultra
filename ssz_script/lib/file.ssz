@@ -1,3 +1,14 @@
+// file.ssz — the `file` library.
+//
+// The plain module functions (loadAsciiText/saveAsciiText/remove/move/copy/
+// find/findDir/createDir/removeDir/setCurrentDir/getCurrentDir) are
+// implemented in C++ at ssz_script/lib/file.cpp and delegated below.  The
+// stateful `&File` struct, its `|Seek` enum, and the `readAll<_t>` template
+// stay in SSZ — their `plugin ... = <file>` declarations still resolve to the
+// static `file` plugin (main/file/file.cpp via the static plugin registry).
+
+lib fl = <file>;
+
 |Seek
 {
   SET = 0, CUR = 1, END = 2
@@ -81,74 +92,59 @@ public ..readAll<_t>(^/char fln) ^_t
 
 public ^char loadAsciiText(^/char fn)
 {
-  plugin void LoadAsciiText(:^/char, ^char=:) = <file>;
-  ^char buf;
-  LoadAsciiText(:fn, buf=:);
-  ret buf;
+  ret .fl.loadAsciiText(fn);
 }
 
 public bool saveAsciiText(^/char fn, ^/char txt)
 {
-  plugin bool SaveAsciiText(:^/char, ^/char:) = <file>;
-  ret SaveAsciiText(:fn, txt:);
+  ret .fl.saveAsciiText(fn, txt);
 }
 
 public bool remove(^/char fn)
 {
-  plugin bool Delete(:^/char:) = <file>;
-  ret Delete(:fn:);
+  ret .fl.remove(fn);
 }
 
 public bool move(^/char oldn, ^/char newn)
 {
-  plugin bool Move(:^/char, ^/char:) = <file>;
-  ret Move(:oldn, newn:);
+  ret .fl.move(oldn, newn);
 }
 
 public bool copy(^/char source, ^/char dist, bool overwrite)
 {
-  plugin bool Copy(:^/char, ^/char, bool:) = <file>;
-  ret Copy(:source, dist, overwrite:);
+  ret .fl.copy(source, dist, overwrite);
 }
 
 public ^^char find(^/char fn)
 {
-  plugin void Find(:^/char, %^char=:) = <file>;
   %^char ls;
-  Find(:fn, ls=:);
+  .fl.find(fn, ls=);
   ret ls;
 }
 
 public ^^char findDir(^/char fn)
 {
-  plugin void FindDir(:^/char, %^char=:) = <file>;
   %^char ls;
-  FindDir(:fn, ls=:);
+  .fl.findDir(fn, ls=);
   ret ls;
 }
 
 public bool createDir(^/char dir)
 {
-  plugin bool CreateDir(:^/char:) = <file>;
-  ret CreateDir(:dir:);
+  ret .fl.createDir(dir);
 }
 
 public bool removeDir(^/char dir)
 {
-  plugin bool RemoveDir(:^/char:) = <file>;
-  ret RemoveDir(:dir:);
+  ret .fl.removeDir(dir);
 }
 
 public bool setCurrentDir(^/char cdir)
 {
-  plugin bool SetCurrentDir(:^/char:) = <file>;
-  ret SetCurrentDir(:cdir:);
+  ret .fl.setCurrentDir(cdir);
 }
 
 public ^/char getCurrentDir()
 {
-  plugin bool GetCurrentDir(:^char=:) = <file>;
-  ^char cdir;
-  GetCurrentDir(:cdir=:);
-  ret cdir;
+  ret .fl.getCurrentDir();
 }
