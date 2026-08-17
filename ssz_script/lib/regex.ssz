@@ -8,21 +8,21 @@ public &Regex
   }
   void clear()
   {
-    plugin void DeleteRegex(:index:) = <dll/regex.dll>;
+    plugin void DeleteRegex(:index:) = <regex>;
     DeleteRegex(:`re:);
     `re = 0;
   }
   public ^char init(^/char reText, int flag)
   {
     `clear();
-    plugin index NewRegex(:^/char, bool, ^char=:) = <dll/regex.dll>;
+    plugin index NewRegex(:^/char, bool, ^char=:) = <regex>;
     ^char error;
     `re = NewRegex(:reText, (flag&`I) != 0, error=:);
     ret error;
   }
   public ^^/char search(^/char str)
   {
-    plugin void RegexSearch(:index, ^/char, ^^/char=:) = <dll/regex.dll>;
+    plugin void RegexSearch(:index, ^/char, ^^/char=:) = <regex>;
     ^^/char matches;
     RegexSearch(:`re, str, matches=:);
     ret matches;

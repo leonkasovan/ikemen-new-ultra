@@ -14,7 +14,7 @@ void refCopy(ref o=, ref r)
 void init()
 {
   plugin void Init(:
-    func .refSetNull.signature, func .refCopy.signature:) = "dll/lua.dll";
+    func .refSetNull.signature, func .refCopy.signature:) = <lua>;
   Init(:.refSetNull, .refCopy:);
 }
 init();
@@ -42,13 +42,13 @@ public &State
   index ptr = 0;
   new()
   {
-    plugin index NewState(::) = "dll/lua.dll";
+    plugin index NewState(::) = <lua>;
     `ptr = NewState(::);
   }
   delete()
   {
     if (`ptr != 0) {
-      plugin void Close(:index:) = "dll/lua.dll";
+      plugin void Close(:index:) = <lua>;
       index tmp = `ptr;
       `ptr = 0;
       Close(:tmp:);
@@ -56,96 +56,96 @@ public &State
   }
   public bool runFile(^/char str)
   {
-    plugin bool RunFile(:index, ^/char:) = "dll/lua.dll";
+    plugin bool RunFile(:index, ^/char:) = <lua>;
     ret RunFile(:`ptr, str:);
   }
   public bool runString(^/char str)
   {
-    plugin bool RunString(:index, ^/char:) = "dll/lua.dll";
+    plugin bool RunString(:index, ^/char:) = <lua>;
     ret RunString(:`ptr, str:);
   }
   public int getTop()
   {
-    plugin int GetTop(:index:) = "dll/lua.dll";
+    plugin int GetTop(:index:) = <lua>;
     ret GetTop(:`ptr:);
   }
   public void getGlobal(^/char var)
   {
-    plugin void GetGlobal(:index, ^/char:) = "dll/lua.dll";
+    plugin void GetGlobal(:index, ^/char:) = <lua>;
     GetGlobal(:`ptr, var:);
   }
   public void register(^/char n, func$void(`self=, int=) f)
   {
     plugin void Register(:
-      index, ^/char,  func$void(`self=, int=):) = "dll/lua.dll";
+      index, ^/char,  func$void(`self=, int=):) = <lua>;
     Register(:`ptr, n, f:);
   }
   public bool pcall(int nargs, int nresults)
   {
-    plugin bool Pcall(:index, int, int:) = "dll/lua.dll";
+    plugin bool Pcall(:index, int, int:) = <lua>;
     ret Pcall(:`ptr, nargs, nresults:);
   }
   public void pop(int n)
   {
-    plugin void Pop(:index, int:) = "dll/lua.dll";
+    plugin void Pop(:index, int:) = <lua>;
     Pop(:`ptr, n:);
   }
   public void pushNumber(double n)
   {
-    plugin void PushNumber(:index, double:) = "dll/lua.dll";
+    plugin void PushNumber(:index, double:) = <lua>;
     PushNumber(:`ptr, n:);
   }
   public bool isNumber(int idx)
   {
-    plugin bool IsNumber(:index, int:) = "dll/lua.dll";
+    plugin bool IsNumber(:index, int:) = <lua>;
     ret IsNumber(:`ptr, idx:);
   }
   public double toNumber(int idx)
   {
-    plugin double ToNumber(:index, int:) = "dll/lua.dll";
+    plugin double ToNumber(:index, int:) = <lua>;
     ret ToNumber(:`ptr, idx:);
   }
   public void pushBoolean(bool b)
   {
-    plugin void PushBoolean(:index, bool:) = "dll/lua.dll";
+    plugin void PushBoolean(:index, bool:) = <lua>;
     PushBoolean(:`ptr, b:);
   }
   public bool isBoolean(int idx)
   {
-    plugin bool IsBoolean(:index, int:) = "dll/lua.dll";
+    plugin bool IsBoolean(:index, int:) = <lua>;
     ret IsBoolean(:`ptr, idx:);
   }
   public bool toBoolean(int idx)
   {
-    plugin bool ToBoolean(:index, int:) = "dll/lua.dll";
+    plugin bool ToBoolean(:index, int:) = <lua>;
     ret ToBoolean(:`ptr, idx:);
   }
   public void pushString(^/char s)
   {
-    plugin void PushString(:index, ^/char:) = "dll/lua.dll";
+    plugin void PushString(:index, ^/char:) = <lua>;
     PushString(:`ptr, s:);
   }
   public bool isString(int idx)
   {
-    plugin bool IsString(:index, int:) = "dll/lua.dll";
+    plugin bool IsString(:index, int:) = <lua>;
     ret IsString(:`ptr, idx:);
   }
   public ^char toString(int idx)
   {
-    plugin void ToString(:index, ^char=, int:) = "dll/lua.dll";
+    plugin void ToString(:index, ^char=, int:) = <lua>;
     ^char tmp;
     ToString(:`ptr, tmp=, idx:);
     ret tmp;
   }
   public void pushRef(ref r)
   {
-    plugin void PushRef(:index, ref=:) = "dll/lua.dll";
+    plugin void PushRef(:index, ref=:) = <lua>;
     ref tmp = r;
     PushRef(:`ptr, tmp=:);
   }
   public ref toRef(int idx)
   {
-    plugin void ToRef(:index, ref=, int:) = "dll/lua.dll";
+    plugin void ToRef(:index, ref=, int:) = <lua>;
     ref tmp;
     ToRef(:`ptr, tmp=, idx:);
     ret tmp;

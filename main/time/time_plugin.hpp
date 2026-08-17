@@ -1,6 +1,6 @@
 #pragma once
 //
-// time_static.hpp
+// time_plugin.hpp
 //
 // Statically register every function exported by time.cpp
 // so that the SSZ runtime resolves them without loading time.dll.
@@ -16,7 +16,7 @@ extern "C"
 	int64_t  SSZ_STDCALL UnixTime(PluginUtil*);
 }
 
-inline bool time_static_register()
+inline bool time_plugin_register()
 {
 	static const SSZ_FunctionEntry time_mapping[] =
 	{

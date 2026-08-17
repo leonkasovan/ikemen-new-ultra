@@ -1,6 +1,6 @@
 #pragma once
 //
-// thread_static.hpp
+// thread_plugin.hpp
 //
 // Statically register every function exported by thread.cpp
 // so that the SSZ runtime resolves them without loading thread.dll.
@@ -19,7 +19,7 @@ extern "C"
 	void SSZ_STDCALL ThreadDelay(PluginUtil*, uint32_t);
 }
 
-inline bool thread_static_register()
+inline bool thread_plugin_register()
 {
 	static const SSZ_FunctionEntry thread_mapping[] =
 	{

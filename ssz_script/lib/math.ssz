@@ -6,73 +6,73 @@ const double E  = 2.718281828459045235360287471352662497757;
 
 public double sin(double x)
 {
-  plugin double Sin(:double:) = <dll/math.dll>;
+  plugin double Sin(:double:) = <math>;
   ret Sin(:x:);
 }
 
 public double cos(double x)
 {
-  plugin double Cos(:double:) = <dll/math.dll>;
+  plugin double Cos(:double:) = <math>;
   ret Cos(:x:);
 }
 
 public double tan(double x)
 {
-  plugin double Tan(:double:) = <dll/math.dll>;
+  plugin double Tan(:double:) = <math>;
   ret Tan(:x:);
 }
 
 public double asin(double x)
 {
-  plugin double ASin(:double:) = <dll/math.dll>;
+  plugin double ASin(:double:) = <math>;
   ret ASin(:x:);
 }
 
 public double acos(double x)
 {
-  plugin double ACos(:double:) = <dll/math.dll>;
+  plugin double ACos(:double:) = <math>;
   ret ACos(:x:);
 }
 
 public double atan(double x)
 {
-  plugin double ATan(:double:) = <dll/math.dll>;
+  plugin double ATan(:double:) = <math>;
   ret ATan(:x:);
 }
 
 public double log(double x, double y)
 {
-  plugin double Log(:double, double:) = <dll/math.dll>;
+  plugin double Log(:double, double:) = <math>;
   ret Log(:x, y:);
 }
 
 public double ln(double x)
 {
-  plugin double Ln(:double:) = <dll/math.dll>;
+  plugin double Ln(:double:) = <math>;
   ret Ln(:x:);
 }
 
 public double exp(double x)
 {
-  plugin double Exp(:double:) = <dll/math.dll>;
+  plugin double Exp(:double:) = <math>;
   ret Exp(:x:);
 }
 
 public double sqrt(double x)
 {
-  plugin double Sqrt(:double:) = <dll/math.dll>;
+  plugin double Sqrt(:double:) = <math>;
   ret Sqrt(:x:);
 }
 
 public double ceil(double x)
 {
-  plugin double Ceil(:double:) = <dll/math.dll>;
+  plugin double Ceil(:double:) = <math>;
   ret Ceil(:x:);
 }
 
 public double floor(double x)
 {
-  plugin double Floor(:double:) = <dll/math.dll>;
+  plugin double Floor(:double:) = <math>;
   ret Floor(:x:);
 }
 
@@ -84,19 +84,19 @@ public double round(double x)
 
 public bool isfinite(double x)
 {
-  plugin bool IsFinite(:double:) = <dll/math.dll>;
+  plugin bool IsFinite(:double:) = <math>;
   ret IsFinite(:x:);
 }
 
 public bool isinf(double x)
 {
-  plugin bool IsInf(:double:) = <dll/math.dll>;
+  plugin bool IsInf(:double:) = <math>;
   ret IsInf(:x:);
 }
 
 public bool isnan(double x)
 {
-  plugin bool IsNaN(:double:) = <dll/math.dll>;
+  plugin bool IsNaN(:double:) = <math>;
   ret IsNaN(:x:);
 }
 

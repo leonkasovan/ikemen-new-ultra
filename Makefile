@@ -123,6 +123,24 @@ MAIN_SRCS = \
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
+# Static plugin registration headers — included only by main.cpp.
+# Each header maps one plugin's exported functions into the SSZ static registry.
+PLUGIN_HEADERS = \
+  $(MAIN)/ssz/ssz_plugin.hpp \
+  $(MAIN)/lua/lua_plugin.hpp \
+  $(MAIN)/mesdialog/mesdialog_plugin.hpp \
+  $(MAIN)/ogg/ogg_plugin.hpp \
+  $(MAIN)/sdlplugin/sdlplugin_plugin.hpp \
+  $(MAIN)/alert/alert_plugin.hpp \
+  $(MAIN)/file/file_plugin.hpp \
+  $(MAIN)/math/math_plugin.hpp \
+  $(MAIN)/regex/regex_plugin.hpp \
+  $(MAIN)/shell/shell_plugin.hpp \
+  $(MAIN)/socket/socket_plugin.hpp \
+  $(MAIN)/sound/sound_plugin.hpp \
+  $(MAIN)/thread/thread_plugin.hpp \
+  $(MAIN)/time/time_plugin.hpp
+
 # ============================================================
 #  SDL2  (167 sources — Windows backend only)
 # ============================================================
@@ -604,6 +622,10 @@ endif
 $(BLD)/main/%.o: $(MAIN)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# main.cpp includes every plugin registration header, so rebuild it when
+# any of them changes.
+$(BLD)/main/main.o: $(PLUGIN_HEADERS)
 
 
 # ---- SDL2 (C) ----

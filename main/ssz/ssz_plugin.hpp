@@ -1,6 +1,6 @@
 #pragma once
 //
-// ssz_static.hpp
+// ssz_plugin.hpp
 //
 // Statically register every function exported by ssz.cpp
 // so that the SSZ runtime resolves them without loading ssz.dll.
@@ -21,7 +21,7 @@ class CompilerState;	extern "C"
 	void           SSZ_STDCALL MemMarkAfter(PluginUtil*, Reference);
 }
 
-inline bool ssz_static_register()
+inline bool ssz_plugin_register()
 {
 	static const SSZ_FunctionEntry ssz_mapping[] =
 	{

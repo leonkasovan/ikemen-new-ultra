@@ -1,6 +1,6 @@
 #pragma once
 //
-// lua_static.hpp
+// lua_plugin.hpp
 //
 // Example: statically register every function exported by lua.cpp
 // so that the SSZ runtime resolves them without loading lua.dll.
@@ -10,12 +10,12 @@
 // 1.  #include this header in the translation unit that owns main()
 //     (or wherever the SSZ compiler is initialised).
 //
-// 2.  Call  lua_static_register()  BEFORE the SSZ compiler runs.
+// 2.  Call  lua_plugin_register()  BEFORE the SSZ compiler runs.
 //
-//     #include "lua_static.hpp"
+//     #include "lua/lua_plugin.hpp"
 //
 //     int main() {
-//         if (!lua_static_register()) {
+//         if (!lua_plugin_register()) {
 //             printf("Failed to register lua functions.\n");
 //             return 1;
 //         }
@@ -23,7 +23,7 @@
 //     }
 //
 // 3.  The SSZ scripts (e.g. lib/alpha/lua.ssz) continue to use:
-//         plugin void Close(:index:) = "dll/lua.dll";
+//         plugin void Close(:index:) = <lua>;
 //     but NO lua.dll file is needed — the function pointer is
 //     resolved from the static registry.
 //
@@ -77,7 +77,7 @@ extern "C"
 
 /// Call once before the SSZ compiler starts.
 /// Returns true on success.
-inline bool lua_static_register()
+inline bool lua_plugin_register()
 {
 	static const SSZ_FunctionEntry lua_mapping[] =
 	{

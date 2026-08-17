@@ -3,47 +3,47 @@ public &OggVorbis
   index ptr = 0;
   new()
   {
-    plugin index NewOggVorbis(::) = "dll/ogg.dll";
+    plugin index NewOggVorbis(::) = <ogg>;
     `ptr = NewOggVorbis(::);
   }
   delete()
   {
-    plugin void DeleteOggVorbis(:index:) = "dll/ogg.dll";
+    plugin void DeleteOggVorbis(:index:) = <ogg>;
     DeleteOggVorbis(:`ptr:);
   }
   public bool open(^/char file)
   {
-    plugin bool OggVorbisOpen(:index, ^/char:) = "dll/ogg.dll";
+    plugin bool OggVorbisOpen(:index, ^/char:) = <ogg>;
     ret OggVorbisOpen(:`ptr, file:);
   }
   public void clear()
   {
-    plugin void OggVorbisClear(:index:) = "dll/ogg.dll";
+    plugin void OggVorbisClear(:index:) = <ogg>;
     OggVorbisClear(:`ptr:);
   }
   public long pcmTotal()
   {
-    plugin int OggVorbisPcmTotal(:index:) = "dll/ogg.dll";
+    plugin int OggVorbisPcmTotal(:index:) = <ogg>;
     ret OggVorbisPcmTotal(:`ptr:);
   }
   public int channels()
   {
-    plugin int OggVorbisChannels(:index:) = "dll/ogg.dll";
+    plugin int OggVorbisChannels(:index:) = <ogg>;
     ret OggVorbisChannels(:`ptr:);
   }
   public int rate()
   {
-    plugin int OggVorbisRate(:index:) = "dll/ogg.dll";
+    plugin int OggVorbisRate(:index:) = <ogg>;
     ret OggVorbisRate(:`ptr:);
   }
   public index read(^short buffer)
   {
-    plugin index OggVorbisRead(:index, ^short:) = "dll/ogg.dll";
+    plugin index OggVorbisRead(:index, ^short:) = <ogg>;
     ret OggVorbisRead(:`ptr, buffer:);
   }
   public int seek(double time)
   {
-    plugin int OggVorbisSeek(:index, double:) = "dll/ogg.dll";
+    plugin int OggVorbisSeek(:index, double:) = <ogg>;
     ret OggVorbisSeek(:`ptr, time:);
   }
 }

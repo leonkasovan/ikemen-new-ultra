@@ -1,6 +1,6 @@
 #pragma once
 //
-// alert_static.hpp
+// alert_plugin.hpp
 //
 // Statically register every function exported by alert.cpp
 // so that the SSZ runtime resolves them without loading alert.dll.
@@ -16,7 +16,7 @@ extern "C"
 	void SSZ_STDCALL Alert(PluginUtil*, Reference, Reference);
 }
 
-inline bool alert_static_register()
+inline bool alert_plugin_register()
 {
 	static const SSZ_FunctionEntry alert_mapping[] =
 	{

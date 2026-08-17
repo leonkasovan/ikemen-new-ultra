@@ -1,61 +1,61 @@
 lib f = <file.ssz>;
 
-plugin void End(::)                         = "dll/sdlplugin.dll";
-plugin bool PollEvent(:&Event=:)            = "dll/sdlplugin.dll";
-plugin bool UpdateGLViewport(:&Event=:) 	= "dll/sdlplugin.dll";
+plugin void End(::)                         = <sdlplugin>;
+plugin bool PollEvent(:&Event=:)            = <sdlplugin>;
+plugin bool UpdateGLViewport(:&Event=:) 	= <sdlplugin>;
 
 public void flip()
 {
-  plugin void Flip(::) = "dll/sdlplugin.dll";
+  plugin void Flip(::) = <sdlplugin>;
   Flip(::);
 }
 
 public void fill(&.Rect r=, uint c)
 {
-  plugin void Fill(:&.Rect=, uint:) = "dll/sdlplugin.dll";
+  plugin void Fill(:&.Rect=, uint:) = <sdlplugin>;
   Fill(:r=, c:);
 }
 
 public void softFill(&.Rect r=, uint c)
 {
-  plugin void SoftFill(:&.Rect=, uint:) = "dll/sdlplugin.dll";
+  plugin void SoftFill(:&.Rect=, uint:) = <sdlplugin>;
   SoftFill(:r=, c:);
 }
 
 public bool renderMugenZoom(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, ^uint pal, short ckey, &.Rect sr=, float cx, float ty, &.Rect tile=, float xtopscl, float xbotscl, float yscl, float rasterxadd, uint roto, int alpha, int rle, %byte pluginbuf=)
 {
-  plugin bool RenderMugenZoom(:^/ubyte, uint=, short, &.Rect=, float, float, &.Rect=, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = "dll/sdlplugin.dll";
+  plugin bool RenderMugenZoom(:^/ubyte, uint=, short, &.Rect=, float, float, &.Rect=, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = <sdlplugin>;
   ret RenderMugenZoom(:pxl, pal<>=, ckey, sr=, cx, ty, tile=, xtopscl, xbotscl, yscl, rasterxadd, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=:);
 }
 
 public bool renderMugenShadow(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, uint color, &.Rect sr=, float cx, float ty, float xscl, float yscl, float vscl, uint roto, int alpha, int rle, %byte pluginbuf=)
 {
-  plugin bool RenderMugenShadow(:^/ubyte, uint, &.Rect=, float, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = "dll/sdlplugin.dll";
+  plugin bool RenderMugenShadow(:^/ubyte, uint, &.Rect=, float, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = <sdlplugin>;
   ret RenderMugenShadow(:pxl, color, sr=, cx, ty, xscl, yscl, vscl, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=:);
 }
 
 public bool renderFontBatch(^ubyte atlas, float baseX, float baseY, ^uint pal, int atlasStride, int glyphH, int alpha, &.Rect window=, float xscl, float yscl, float spacing, ^int glyphData, int count)
 {
-  plugin bool RenderFontBatch(:ubyte=, float, float, uint=, int, int, int, &.Rect=, float, float, float, int=, int:) = "dll/sdlplugin.dll";
+  plugin bool RenderFontBatch(:ubyte=, float, float, uint=, int, int, int, &.Rect=, float, float, float, int=, int:) = <sdlplugin>;
   ret RenderFontBatch(:atlas<>=, baseX, baseY, pal<>=, atlasStride, glyphH, alpha, window=, xscl, yscl, spacing, glyphData<>=, count:);
 }
 
 public char getLastChar()
 {
-  plugin char GetLastChar(::) = "dll/sdlplugin.dll";
+  plugin char GetLastChar(::) = <sdlplugin>;
   ret GetLastChar(::);
 }
 
 public ^ubyte decodePNG8(int w=, int h=, &.f.File file=)
 {
-  plugin void DecodePNG8(:^ubyte=, int=, int=, &.f.File:) = "dll/sdlplugin.dll";
+  plugin void DecodePNG8(:^ubyte=, int=, int=, &.f.File:) = <sdlplugin>;
   ^ubyte img;
   DecodePNG8(:img=, w=, h=, file:);
   ret img;
 }
 
-plugin bool KeyState(:|SDLKey:)             = "dll/sdlplugin.dll";
-plugin bool JoystickButtonState(:int, int:) = "dll/sdlplugin.dll";
+plugin bool KeyState(:|SDLKey:)             = <sdlplugin>;
+plugin bool JoystickButtonState(:int, int:) = <sdlplugin>;
 
 public int pollInputBitmask(
   int jn,
@@ -70,12 +70,12 @@ public int pollInputBitmask(
   int q2, int w2, int e2, int s2,
   int sec)
 {
-  plugin int PollInputBitmask(:int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int:) = "dll/sdlplugin.dll";
+  plugin int PollInputBitmask(:int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int:) = <sdlplugin>;
   ret PollInputBitmask(:jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s, jn2, u2, d2, l2, r2, a2, b2, c2, x2, y2, z2, q2, w2, e2, s2, sec:);
 }
 
-plugin void Delay(:uint:)                   = "dll/sdlplugin.dll";
-plugin uint GetTicks(::)                    = "dll/sdlplugin.dll";
+plugin void Delay(:uint:)                   = <sdlplugin>;
+plugin uint GetTicks(::)                    = <sdlplugin>;
 
 const int SNDFREQ = 44100;
 const index SNDBUFLEN = 4096;
@@ -83,25 +83,25 @@ const index SNDBUFLEN = 4096;
 public bool setSndBuf(^int buf)
 {
   if(#buf != .SNDBUFLEN) ret false;
-  plugin bool SetSndBuf(:int=:) = "dll/sdlplugin.dll";
+  plugin bool SetSndBuf(:int=:) = <sdlplugin>;
   ret SetSndBuf(:buf<>=:);
 }
 
 public int playVideo(int audiotrack, int volume, ^/char captures, ^/char fn)
 {
-  plugin int PlayVideo(:int, int, ^/char, ^/char:) = "dll/sdlplugin.dll";
+  plugin int PlayVideo(:int, int, ^/char, ^/char:) = <sdlplugin>;
   ret PlayVideo(:audiotrack, volume, captures, fn:);
 }
 
 public bool playBGM(^/char pldir, ^/char fn)
 {
-  plugin bool PlayBGM(:^/char, ^/char:) = "dll/sdlplugin.dll";
+  plugin bool PlayBGM(:^/char, ^/char:) = <sdlplugin>;
   ret PlayBGM(:pldir, fn:);
 }
 
 public void pauseBGM(bool pause)
 {
-  plugin void PauseBGM(:bool:) = "dll/sdlplugin.dll";
+  plugin void PauseBGM(:bool:) = <sdlplugin>;
   PauseBGM(:pause:);
 }
 
@@ -109,43 +109,43 @@ public void pauseBGM(bool pause)
 // These stubs are kept for ABI compatibility but do nothing.
 public bool sendOpenBGM(int rate, int channels)
 {
-  plugin bool SendOpenBGM(:int, int:) = "dll/sdlplugin.dll";
+  plugin bool SendOpenBGM(:int, int:) = <sdlplugin>;
   ret SendOpenBGM(:rate, channels:);
 }
 
 public void sendCloseBGM()
 {
-  plugin void SendCloseBGM(::) = "dll/sdlplugin.dll";
+  plugin void SendCloseBGM(::) = <sdlplugin>;
   SendCloseBGM(::);
 }
 
 public index sendWriteBGM(^/short buffer)
 {
-  plugin index SendWriteBGM(:^/short:) = "dll/sdlplugin.dll";
+  plugin index SendWriteBGM(:^/short:) = <sdlplugin>;
   ret SendWriteBGM(:buffer:);
 }
 
 public void fadeInBGM(int time)
 {
-  plugin void FadeInBGM(:int:) = "dll/sdlplugin.dll";
+  plugin void FadeInBGM(:int:) = <sdlplugin>;
   FadeInBGM(:time:);
 }
 
 public void fadeOutBGM(int time)
 {
-  plugin void FadeOutBGM(:int:) = "dll/sdlplugin.dll";
+  plugin void FadeOutBGM(:int:) = <sdlplugin>;
   FadeOutBGM(:time:);
 }
 
 public void setVolume(float gvol, float wvol, float bvol)
 {
-  plugin void SetVolume(:float, float, float:) = "dll/sdlplugin.dll";
+  plugin void SetVolume(:float, float, float:) = <sdlplugin>;
   SetVolume(:gvol, wvol, bvol:);
 }
 
 public void setOpacity(float wo)
 {
-  plugin void SetOpacity(:float:) = "dll/sdlplugin.dll";
+  plugin void SetOpacity(:float:) = <sdlplugin>;
   SetOpacity(:wo:);
 }
 
@@ -816,35 +816,35 @@ public &Surface
   }
   public void free()
   {
-    plugin void FreeSurface(:index:) = "dll/sdlplugin.dll";
+    plugin void FreeSurface(:index:) = <sdlplugin>;
     FreeSurface(:`sur:);
     `sur = 0;
   }
   public void allocSurface(int w, int h)
   {
-    plugin index AllocSurface(:int, int:) = "dll/sdlplugin.dll";
+    plugin index AllocSurface(:int, int:) = <sdlplugin>;
     `free();
     `sur = AllocSurface(:w, h:);
   }
   public void imgLoad(^/char fn)
   {
-    plugin index IMGLoad(:^/char:) = "dll/sdlplugin.dll";
+    plugin index IMGLoad(:^/char:) = <sdlplugin>;
     `free();
     `sur = IMGLoad(:fn:);
   }
   /void blitToWin(&.Rect dr=)
   {
-    plugin void BlitSurface(:index, &.Rect=:) = "dll/sdlplugin.dll";
+    plugin void BlitSurface(:index, &.Rect=:) = <sdlplugin>;
     BlitSurface(:`sur, dr=:);
   }
   public void createPaletteSurface(^ubyte img, ^uint pal, int w, int h)
   {
-    plugin index CreatePaletteSurface(:ubyte=, uint=, int, int:) = "dll/sdlplugin.dll";
+    plugin index CreatePaletteSurface(:ubyte=, uint=, int, int:) = <sdlplugin>;
     `sur = CreatePaletteSurface(:img<>=, pal<>=, w, h:);
   }
   public void setColorKey(int key)
   {
-    plugin index SetColorKey(:index, int:) = "dll/sdlplugin.dll";
+    plugin index SetColorKey(:index, int:) = <sdlplugin>;
     SetColorKey(:`sur, key:);
   }
 }
@@ -858,35 +858,35 @@ public &Font
   }
   public void close()
   {
-    plugin void CloseFont(:index:) = "dll/sdlplugin.dll";
+    plugin void CloseFont(:index:) = <sdlplugin>;
     if(`font != 0) CloseFont(:`font:);
     `font = 0;
   }
   public void open(^/char fn, int size)
   {
-    plugin index OpenFont(:^/char, int:) = "dll/sdlplugin.dll";
+    plugin index OpenFont(:^/char, int:) = <sdlplugin>;
     `close();
     `font = OpenFont(:fn, size:);
   }
   public void render(uint color, int x, int y, ^/char str)
   {
     plugin void RenderFont(:
-      index, uint, int, int, ^/char:) = "dll/sdlplugin.dll";
+      index, uint, int, int, ^/char:) = <sdlplugin>;
     RenderFont(:`font, color, x, y, str:);
   }
 }
 
 public void drawTTF(^/char path, int align, ^/char text, int x, int y, float scaleX, float scaleY, int r, int g, int b, int alpha)
 {
-  plugin void DrawTTF(:^/char, int, ^/char, int, int, float, float, int, int, int, int:) = "dll/sdlplugin.dll";
+  plugin void DrawTTF(:^/char, int, ^/char, int, int, float, float, int, int, int, int:) = <sdlplugin>;
   DrawTTF(:path, align, text, x, y, scaleX, scaleY, r, g, b, alpha:);
 }
 
 public bool init(^/char t, int w, int h, int renderer, bool mugen)
 {
-  plugin bool RendererInit(:^/char, int, int, ^/char:) = "dll/sdlplugin.dll";
-  plugin bool GlInit(:^/char, int, int:) = "dll/sdlplugin.dll";
-  plugin bool Init(:^/char, int, int, bool:) = "dll/sdlplugin.dll";
+  plugin bool RendererInit(:^/char, int, int, ^/char:) = <sdlplugin>;
+  plugin bool GlInit(:^/char, int, int:) = <sdlplugin>;
+  plugin bool Init(:^/char, int, int, bool:) = <sdlplugin>;
   ^/char rendererStr = "SDL2";
   if(renderer == 1) rendererStr = "OpenGL";
   if(renderer == 2) rendererStr = "OpenGL ES";
@@ -896,55 +896,55 @@ public bool init(^/char t, int w, int h, int renderer, bool mugen)
 
 public int getWidth()
 {
-  plugin int GetWidth(::) = "dll/sdlplugin.dll";
+  plugin int GetWidth(::) = <sdlplugin>;
   ret GetWidth(::);
 }
 
 public int getHeight()
 {
-  plugin int GetHeight(::) = "dll/sdlplugin.dll";
+  plugin int GetHeight(::) = <sdlplugin>;
   ret GetHeight(::);
 }
 
 public void windowSize(int w, int h)
 {
-  plugin void WindowSize(:int, int:) = "dll/sdlplugin.dll";
+  plugin void WindowSize(:int, int:) = <sdlplugin>;
   WindowSize(:w, h:);
 }
 
 public void fullScreenMode(bool fullReal)
 {
-  plugin void FullScreenExclusive(:bool:) = "dll/sdlplugin.dll";
+  plugin void FullScreenExclusive(:bool:) = <sdlplugin>;
   FullScreenExclusive(:fullReal:);
 }
 
 public bool fullScreen(bool full)
 {
-  plugin bool FullScreen(:bool:) = "dll/sdlplugin.dll";
+  plugin bool FullScreen(:bool:) = <sdlplugin>;
   ret FullScreen(:full:);
 }
 
 public void setWindowType(int state)
 {
-  plugin void WindowType(:int:) = "dll/sdlplugin.dll";
+  plugin void WindowType(:int:) = <sdlplugin>;
   WindowType(:state:);
 }
 
 public void keepAspectRatio(bool aspect)
 {
-  plugin void AspectRatio(:bool:) = "dll/sdlplugin.dll";
+  plugin void AspectRatio(:bool:) = <sdlplugin>;
   AspectRatio(:aspect:);
 }
 
 public void takeScreenShot(^/char dir)
 {
-  plugin void TakeScreenShot(:^/char:) = "dll/sdlplugin.dll";
+  plugin void TakeScreenShot(:^/char:) = <sdlplugin>;
   TakeScreenShot(:dir:);
 }
 
 public void showCursor(bool show)
 {
-  plugin void CursorShow(:bool:) = "dll/sdlplugin.dll";
+  plugin void CursorShow(:bool:) = <sdlplugin>;
   CursorShow(:show:);
 }
 
@@ -957,13 +957,13 @@ public &GlTexture
   }
   public void clear()
   {
-    plugin void DeleteGlTexture(:uint:) = "dll/sdlplugin.dll";
+    plugin void DeleteGlTexture(:uint:) = <sdlplugin>;
     DeleteGlTexture(:`id:);
     `id = 0x0;
   }
   public bool load8bitTexture(^ubyte pxl, int w, int h)
   {
-    plugin uint Load8bitTexture(:ubyte=, int, int:) = "dll/sdlplugin.dll";
+    plugin uint Load8bitTexture(:ubyte=, int, int:) = <sdlplugin>;
     if(#pxl == 0 || #pxl != w*h) ret false;
     `clear();
     `id = Load8bitTexture(:pxl<>=, w, h:);
@@ -971,29 +971,29 @@ public &GlTexture
   }
   public bool loadPngTexture(int w=, int h=, &.f.File file=)
   {
-    plugin uint LoadPngTexture(:int=, int=, &.f.File:) = "dll/sdlplugin.dll";
+    plugin uint LoadPngTexture(:int=, int=, &.f.File:) = <sdlplugin>;
     `clear();
     `id = LoadPngTexture(:w=, h=, file:);
     ret `id != 0x0;
   }
 }
 
-plugin void MugenFillGl(:&Rect, uint, int:) = "dll/sdlplugin.dll";
-plugin bool InitMugenGl(::) = "dll/sdlplugin.dll";
-plugin bool RenderMugenGl(:&GlTexture, uint=, int, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float:) = "dll/sdlplugin.dll";
-plugin bool RenderMugenGlFc(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, bool, float, float, float, float, float, float, float:) = "dll/sdlplugin.dll";
-plugin bool RenderMugenGlFcS(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, uint:) = "dll/sdlplugin.dll";
-plugin void GlSwapBuffers(::) = "dll/sdlplugin.dll";
+plugin void MugenFillGl(:&Rect, uint, int:) = <sdlplugin>;
+plugin bool InitMugenGl(::) = <sdlplugin>;
+plugin bool RenderMugenGl(:&GlTexture, uint=, int, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float:) = <sdlplugin>;
+plugin bool RenderMugenGlFc(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, bool, float, float, float, float, float, float, float:) = <sdlplugin>;
+plugin bool RenderMugenGlFcS(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, uint:) = <sdlplugin>;
+plugin void GlSwapBuffers(::) = <sdlplugin>;
 
 public bool bindGlContext()
 {
-  plugin bool BindGlContext(::) = "dll/sdlplugin.dll";
+  plugin bool BindGlContext(::) = <sdlplugin>;
   ret BindGlContext(::);
 }
 
 public bool unbindGlContext()
 {
-  plugin bool UnbindGlContext(::) = "dll/sdlplugin.dll";
+  plugin bool UnbindGlContext(::) = <sdlplugin>;
   ret UnbindGlContext(::);
 }
 
@@ -1011,12 +1011,12 @@ public &UseGlContext
 
 public void enablePerfMonitor(bool enable)
 {
-  plugin void EnablePerfMonitor(:bool:) = "dll/sdlplugin.dll";
+  plugin void EnablePerfMonitor(:bool:) = <sdlplugin>;
   EnablePerfMonitor(:enable:);
 }
 
 public void getRendererInfo()
 {
-  plugin void GetRendererInfo(::) = "dll/sdlplugin.dll";
+  plugin void GetRendererInfo(::) = <sdlplugin>;
   GetRendererInfo(::);
 }

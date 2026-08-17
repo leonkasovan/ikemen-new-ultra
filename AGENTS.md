@@ -12,10 +12,48 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 | Plugin registry | `main/ssz/static_plugin_registry.hpp` | 170 |
 | Platform abstraction | `main/ssz/sszdef.h` | 176 |
 | Type ID definitions | `main/ssz/typeid.h` | 35 |
-| 13 plugin sources | `main/*/` | 50–200 each |
-| 13 static headers | `main/*_static.hpp` | 30–240 each |
+| 14 plugin sources | `main/*/` | 50–200 each |
+| 14 static plugin headers | `main/*/*_plugin.hpp` | 30–240 each |
 
 **External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, PortAudio, OpenGL.
+
+---
+
+## SSZ Plugin Resolution
+
+SSZ scripts declare plugin functions with a library reference that determines how
+the function pointer is resolved at compile time (see `SDLLItem` in
+`main/ssz/sourcetree.hpp`):
+
+| Declaration | Meaning | Resolution path |
+|---|---|---|
+| `plugin uint TickCount(::) = <dll/time.dll>;` | Load the **real DLL** `dll/time.dll` from disk | `LoadLibraryW` / `GetProcAddress` — fails at compile time if the DLL is missing |
+| `plugin uint TickCount(::) = <time>;` | Resolve from the **static plugin registry** | Lookup in `StaticPluginRegistry` (`main/ssz/static_plugin_registry.hpp`) — no DLL file required |
+
+The deciding factor is whether the reference ends in `.dll`: a bare library name
+(`<time>`) always goes through the static registry, while any `.dll` path
+(`<dll/time.dll>`) is treated as a real DLL. The two forms are mutually
+exclusive — a bare name never falls back to dynamic loading, and a `.dll` path
+never consults the static registry.
+
+### Registering a static plugin
+
+Each statically-linked plugin ships a registration header that maps its exported
+functions into the registry, e.g. `main/time/time_plugin.hpp` for the `time`
+plugin. These headers are listed in `PLUGIN_HEADERS` in the `Makefile` (they are
+included only by `main/main.cpp`, which calls every `*_plugin_register()` before
+the SSZ compiler runs).
+
+To use a static plugin from an SSZ script, declare it with the bare library name:
+
+```ssz
+// lib/time.ssz — resolves TickCount/UnixTime from main/time/time.cpp
+plugin uint TickCount(::) = <time>;
+```
+
+The corresponding SSZ script libraries live in `ssz_script/lib/` (bare-name
+declarations) — the `lib/*.ssz` and `lib/alpha/*.ssz` wrappers were migrated
+away from `<dll/xxx.dll>` when the static plugin system replaced the DLLs.
 
 ---
 

@@ -1,6 +1,6 @@
 #pragma once
 //
-// file_static.hpp
+// file_plugin.hpp
 //
 // Statically register every function exported by file.cpp
 // so that the SSZ runtime resolves them without loading file.dll.
@@ -39,7 +39,7 @@ extern "C"
 	void     SSZ_STDCALL GetCurrentDir(PluginUtil*, Reference*);
 }
 
-inline bool file_static_register()
+inline bool file_plugin_register()
 {
 	static const SSZ_FunctionEntry file_mapping[] =
 	{

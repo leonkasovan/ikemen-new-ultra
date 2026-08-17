@@ -1,6 +1,6 @@
 #pragma once
 //
-// sdlplugin_static.hpp
+// sdlplugin_plugin.hpp
 //
 // Statically registers every function exported by sdlplugin.cpp
 // so that the SSZ runtime resolves them without loading sdlplugin.dll.
@@ -10,12 +10,12 @@
 // 1.  #include this header in the translation unit that owns main()
 //     (or wherever the SSZ compiler is initialised).
 //
-// 2.  Call  sdlplugin_static_register()  BEFORE the SSZ compiler runs.
+// 2.  Call  sdlplugin_plugin_register()  BEFORE the SSZ compiler runs.
 //
-//     #include "sdlplugin_static.hpp"
+//     #include "sdlplugin/sdlplugin_plugin.hpp"
 //
 //     int main() {
-//         if (!sdlplugin_static_register()) {
+//         if (!sdlplugin_plugin_register()) {
 //             printf("Failed to register sdlplugin functions.\n");
 //             return 1;
 //         }
@@ -23,7 +23,7 @@
 //     }
 //
 // 3.  The SSZ scripts continue to use:
-//         plugin void Flip() = "dll/sdlplugin.dll";
+//         plugin void Flip() = <sdlplugin>;
 //     but NO sdlplugin.dll file is needed — the function pointer is
 //     resolved from the static registry.
 //
@@ -165,7 +165,7 @@ extern "C"
 
 /// Call once before the SSZ compiler starts.
 /// Returns true on success.
-inline bool sdlplugin_static_register()
+inline bool sdlplugin_plugin_register()
 {
 	static const SSZ_FunctionEntry sdlplugin_mapping[] =
 	{

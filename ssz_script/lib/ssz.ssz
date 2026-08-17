@@ -1,18 +1,18 @@
 public void memMarkBefore(^/char label)
 {
-  plugin void MemMarkBefore(:^/char:) = <dll/ssz.dll>;
+  plugin void MemMarkBefore(:^/char:) = <ssz>;
   MemMarkBefore(:label:);
 }
 
 public void memMarkAfter(^/char label)
 {
-  plugin void MemMarkAfter(:^/char:)  = <dll/ssz.dll>;
+  plugin void MemMarkAfter(:^/char:)  = <ssz>;
   MemMarkAfter(:label:);
 }
 
 public bool run(^/char file)
 {
-  plugin bool Run(:^/char:) = <dll/ssz.dll>;
+  plugin bool Run(:^/char:) = <ssz>;
   ret Run(:file:);
 }
 
@@ -21,17 +21,17 @@ public &Compiler
   index ptr;
   new()
   {
-    plugin index NewCompiler(::) = <dll/ssz.dll>;
+    plugin index NewCompiler(::) = <ssz>;
     `ptr = NewCompiler(::);
   }
   delete()
   {
-    plugin void DeleteCompiler(:index:) = <dll/ssz.dll>;
+    plugin void DeleteCompiler(:index:) = <ssz>;
     DeleteCompiler(:`ptr:);
   }
   public ^/char compile(^/char file)
   {
-    plugin void CompilerCompile(:index, ^/char, ^/char=:) = <dll/ssz.dll>;
+    plugin void CompilerCompile(:index, ^/char, ^/char=:) = <ssz>;
     ^/char error;
     CompilerCompile(:`ptr, file, error=:);
     ret error;
@@ -39,14 +39,14 @@ public &Compiler
   public ^/char compileString(^/char code, ^/char dir)
   {
     plugin void CompilerCompileString(:
-      index, ^/char, ^/char, ^/char=:) = <dll/ssz.dll>;
+      index, ^/char, ^/char, ^/char=:) = <ssz>;
     ^/char error;
     CompilerCompileString(:`ptr, code, dir, error=:);
     ret error;
   }
   public bool run()
   {
-    plugin bool CompilerRun(:index:) = <dll/ssz.dll>;
+    plugin bool CompilerRun(:index:) = <ssz>;
     ret CompilerRun(:`ptr:);
   }
 }

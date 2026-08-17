@@ -1,6 +1,6 @@
 #pragma once
 //
-// sound_static.hpp
+// sound_plugin.hpp
 //
 // Statically register every function exported by sound.cpp
 // so that the SSZ runtime resolves them without loading sound.dll.
@@ -24,7 +24,7 @@ extern "C"
 	bool    SSZ_STDCALL ClientSetBuffer(PluginUtil*, Reference, Client*);
 }
 
-inline bool sound_static_register()
+inline bool sound_plugin_register()
 {
 	static const SSZ_FunctionEntry sound_mapping[] =
 	{

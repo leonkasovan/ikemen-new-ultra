@@ -1,6 +1,6 @@
 #pragma once
 //
-// ogg_static.hpp
+// ogg_plugin.hpp
 //
 // Statically registers every function exported by ogg.cpp
 // so that the SSZ runtime resolves them without loading ogg.dll.
@@ -10,12 +10,12 @@
 // 1.  #include this header in the translation unit that owns main()
 //     (or wherever the SSZ compiler is initialised).
 //
-// 2.  Call  ogg_static_register()  BEFORE the SSZ compiler runs.
+// 2.  Call  ogg_plugin_register()  BEFORE the SSZ compiler runs.
 //
-//     #include "ogg_static.hpp"
+//     #include "ogg/ogg_plugin.hpp"
 //
 //     int main() {
-//         if (!ogg_static_register()) {
+//         if (!ogg_plugin_register()) {
 //             printf("Failed to register ogg functions.\n");
 //             return 1;
 //         }
@@ -23,7 +23,7 @@
 //     }
 //
 // 3.  The SSZ scripts continue to use:
-//         plugin void Close(:index:) = "dll/ogg.dll";
+//         plugin void Close(:index:) = <ogg>;
 //     but NO ogg.dll file is needed — the function pointer is
 //     resolved from the static registry.
 //
@@ -64,7 +64,7 @@ extern "C"
 
 /// Call once before the SSZ compiler starts.
 /// Returns true on success.
-inline bool ogg_static_register()
+inline bool ogg_plugin_register()
 {
 	static const SSZ_FunctionEntry ogg_mapping[] =
 	{

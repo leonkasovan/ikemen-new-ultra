@@ -1,6 +1,6 @@
 #pragma once
 //
-// shell_static.hpp
+// shell_plugin.hpp
 //
 // Statically register every function exported by shell.cpp
 // so that the SSZ runtime resolves them without loading shell.dll.
@@ -17,7 +17,7 @@ extern "C"
 	bool SSZ_STDCALL MoveTrash(PluginUtil*, Reference);
 }
 
-inline bool shell_static_register()
+inline bool shell_plugin_register()
 {
 	static const SSZ_FunctionEntry shell_mapping[] =
 	{

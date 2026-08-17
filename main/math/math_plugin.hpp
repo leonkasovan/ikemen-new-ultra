@@ -1,6 +1,6 @@
 #pragma once
 //
-// math_static.hpp
+// math_plugin.hpp
 //
 // Statically register every function exported by math.cpp
 // so that the SSZ runtime resolves them without loading math.dll.
@@ -29,7 +29,7 @@ extern "C"
 	bool   SSZ_STDCALL IsNaN(PluginUtil*, double);
 }
 
-inline bool math_static_register()
+inline bool math_plugin_register()
 {
 	static const SSZ_FunctionEntry math_mapping[] =
 	{

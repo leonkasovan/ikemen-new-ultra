@@ -5,20 +5,20 @@
 #include "sszdef.h"
 #include "commandline.hpp"
 #include "mem_profiler.hpp"
-#include "ssz_static.hpp"
-#include "lua_static.hpp"
-#include "mesdialog_static.hpp"
-#include "ogg_static.hpp"
-#include "sdlplugin_static.hpp"
-#include "alert_static.hpp"
-#include "file_static.hpp"
-#include "math_static.hpp"
-#include "regex_static.hpp"
-#include "shell_static.hpp"
-#include "socket_static.hpp"
-#include "sound_static.hpp"
-#include "thread_static.hpp"
-#include "time_static.hpp"
+#include "ssz/ssz_plugin.hpp"
+#include "lua/lua_plugin.hpp"
+#include "mesdialog/mesdialog_plugin.hpp"
+#include "ogg/ogg_plugin.hpp"
+#include "sdlplugin/sdlplugin_plugin.hpp"
+#include "alert/alert_plugin.hpp"
+#include "file/file_plugin.hpp"
+#include "math/math_plugin.hpp"
+#include "regex/regex_plugin.hpp"
+#include "shell/shell_plugin.hpp"
+#include "socket/socket_plugin.hpp"
+#include "sound/sound_plugin.hpp"
+#include "thread/thread_plugin.hpp"
+#include "time/time_plugin.hpp"
 
 
 #include <stdio.h>
@@ -26,7 +26,7 @@
 #include <stdlib.h>
 
 // Required for complete Reference type in extern "C" bridge declarations
-// (static registration headers use Reference by value for __stdcall decoration).
+// (static plugin registration headers use Reference by value for __stdcall decoration).
 #include "arrayandref.hpp"
 
 // =========================================================================
@@ -348,59 +348,59 @@ int main(int argc, char *argv[]) {
 
 	LOG_DEBUG("SSZ", "=== I.K.E.M.E.N. Plus Ultra startup ===");
 	LOG_DEBUG("SSZ", "Registering static plugins...");
-	if (!ssz_static_register()) {
+	if (!ssz_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register SSZ functions");
 		return 1;
 	}
-	if (!lua_static_register()) {
+	if (!lua_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Lua functions");
 		return 1;
 	}
-	if (!mesdialog_static_register()) {
+	if (!mesdialog_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register MesDialog functions");
 		return 1;
 	}
-	if (!ogg_static_register()) {
+	if (!ogg_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Ogg functions");
 		return 1;
 	}
-	if (!sdlplugin_static_register()) {
+	if (!sdlplugin_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register SDL plugin functions");
 		return 1;
 	}
-	if (!alert_static_register()) {
+	if (!alert_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Alert functions");
 		return 1;
 	}
-	if (!file_static_register()) {
+	if (!file_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register File functions");
 		return 1;
 	}
-	if (!math_static_register()) {
+	if (!math_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Math functions");
 		return 1;
 	}
-	if (!regex_static_register()) {
+	if (!regex_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Regex functions");
 		return 1;
 	}
-	if (!shell_static_register()) {
+	if (!shell_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Shell functions");
 		return 1;
 	}
-	if (!socket_static_register()) {
+	if (!socket_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Socket functions");
 		return 1;
 	}
-	if (!sound_static_register()) {
+	if (!sound_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Sound functions");
 		return 1;
 	}
-	if (!thread_static_register()) {
+	if (!thread_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Thread functions");
 		return 1;
 	}
-	if (!time_static_register()) {
+	if (!time_plugin_register()) {
 		LOG_INFO("Ikemen", "Failed to register Time functions");
 		return 1;
 	}

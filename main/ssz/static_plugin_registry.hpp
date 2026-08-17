@@ -28,13 +28,12 @@
 //       // handle error
 //   }
 //
-// The SSZ scripts continue to use their normal `plugin` declarations
-// for type information, e.g.:
-//   plugin void Close(:index:) = "dll/lua.dll";
+// The SSZ scripts declare plugins with a bare library name to resolve
+// from this static registry, e.g.:
+//   plugin void Close(:index:) = <lua>;
 //
-// But the DLL file is no longer required — SDLLItem resolves the
-// function pointer from the static registry instead of calling
-// LoadLibrary / GetProcAddress.
+// The DLL path form <dll/lua.dll> instead means "load the real DLL"
+// and goes through LoadLibrary / GetProcAddress as usual.
 //
 
 #include <string>

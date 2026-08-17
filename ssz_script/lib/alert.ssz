@@ -1,5 +1,5 @@
 public void alert<_t>(^/char mes)
 {
-	plugin void Alert(:^/char, ^/char:) = <dll/alert.dll>;
+	plugin void Alert(:^/char, ^/char:) = <alert>;
 	Alert(:mes, <idname>(typeid(_t)):);
 }

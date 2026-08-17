@@ -319,7 +319,7 @@ public &Font
     plugin bool RenderMugenGl(:
       &.sdl.GlTexture, index, int, &.sdl.Rect=, float, float, &.sdl.Rect=,
       float, float, float, float, float, float, int, &.sdl.Rect=, float,
-      float:) = <alpha/dll/sdlplugin.dll>;
+      float:) = <sdlplugin>;
     branch{
     cond #pal > 0:
       .sdl.RenderMugenGl(:

@@ -1,6 +1,6 @@
 #pragma once
 //
-// regex_static.hpp
+// regex_plugin.hpp
 //
 // Statically register every function exported by regex.cpp
 // so that the SSZ runtime resolves them without loading regex.dll.
@@ -26,7 +26,7 @@ extern "C"
 	void         SSZ_STDCALL RegexSearch(PluginUtil*, Reference*, Reference, RNS::wregex*);
 }
 
-inline bool regex_static_register()
+inline bool regex_plugin_register()
 {
 	static const SSZ_FunctionEntry regex_mapping[] =
 	{

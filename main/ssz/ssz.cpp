@@ -626,8 +626,8 @@ static void runner(MAIN_FUNC mf)
 // MemMarkBefore / MemMarkAfter  –  memory snapshot markers callable from SSZ
 //
 // Usage in SSZ:
-//   plugin void MemMarkBefore(:^/char:) = <dll/ssz.dll>;
-//   plugin void MemMarkAfter(:^/char:)  = <dll/ssz.dll>;
+//   plugin void MemMarkBefore(:^/char:) = <ssz>;
+//   plugin void MemMarkAfter(:^/char:)  = <ssz>;
 //
 //   MemMarkBefore("CHAR");
 //   ... loading ...

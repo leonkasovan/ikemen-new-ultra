@@ -1,6 +1,6 @@
 #pragma once
 //
-// mesdialog_static.hpp
+// mesdialog_plugin.hpp
 //
 // Statically registers every function exported by mesdialog.cpp
 // so that the SSZ runtime resolves them without loading mesdialog.dll.
@@ -10,12 +10,12 @@
 // 1.  #include this header in the translation unit that owns main()
 //     (or wherever the SSZ compiler is initialised).
 //
-// 2.  Call  mesdialog_static_register()  BEFORE the SSZ compiler runs.
+// 2.  Call  mesdialog_plugin_register()  BEFORE the SSZ compiler runs.
 //
-//     #include "mesdialog_static.hpp"
+//     #include "mesdialog/mesdialog_plugin.hpp"
 //
 //     int main() {
-//         if (!mesdialog_static_register()) {
+//         if (!mesdialog_plugin_register()) {
 //             printf("Failed to register mesdialog functions.\n");
 //             return 1;
 //         }
@@ -23,7 +23,7 @@
 //     }
 //
 // 3.  The SSZ scripts continue to use:
-//         plugin void Close(:index:) = "dll/mesdialog.dll";
+//         plugin void Close(:index:) = <mesdialog>;
 //     but NO mesdialog.dll file is needed — the function pointer is
 //     resolved from the static registry.
 //
@@ -69,7 +69,7 @@ extern "C"
 
 /// Call once before the SSZ compiler starts.
 /// Returns true on success.
-inline bool mesdialog_static_register()
+inline bool mesdialog_plugin_register()
 {
 	static const SSZ_FunctionEntry mesdialog_mapping[] =
 	{

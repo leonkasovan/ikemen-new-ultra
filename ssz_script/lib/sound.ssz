@@ -7,32 +7,32 @@ public &Client
   index cl = 0;
   new()
   {
-    plugin index NewClient(::) = <dll/sound.dll>;
+    plugin index NewClient(::) = <sound>;
     `cl = NewClient(::);
   }
   delete()
   {
-    plugin void DeleteClient(:index:) = <dll/sound.dll>;
+    plugin void DeleteClient(:index:) = <sound>;
     DeleteClient(:`cl:);
   }
   public bool start()
   {
-    plugin bool ClientStart(:index:) = <dll/sound.dll>;
+    plugin bool ClientStart(:index:) = <sound>;
     ret ClientStart(:`cl:);
   }
   public bool stop()
   {
-    plugin bool ClientStop(:index:) = <dll/sound.dll>;
+    plugin bool ClientStop(:index:) = <sound>;
     ret ClientStop(:`cl:);
   }
   public bool bufferReady()
   {
-    plugin bool ClientBufferReady(:index:) = <dll/sound.dll>;
+    plugin bool ClientBufferReady(:index:) = <sound>;
     ret ClientBufferReady(:`cl:);
   }
   public bool setBuffer(^/float buffer)
   {
-    plugin bool ClientSetBuffer(:index, ^/float:) = <dll/sound.dll>;
+    plugin bool ClientSetBuffer(:index, ^/float:) = <sound>;
     ret ClientSetBuffer(:`cl, buffer:);
   }
 }

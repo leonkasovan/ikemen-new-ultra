@@ -1,15 +1,15 @@
-plugin bool YesNo(:^/char:) = "dll/mesdialog.dll";
-plugin bool GetClipboardStr(:^char=:) = "dll/mesdialog.dll";
-plugin void GetInifileString(:^/char, ^/char, ^/char, ^/char, ^char=:) = "dll/mesdialog.dll";
-plugin int GetInifileInt(:^/char, ^/char, ^/char, int:) = "dll/mesdialog.dll";
-plugin bool WriteInifileString(:^/char, ^/char, ^/char, ^/char:) = "dll/mesdialog.dll";
-plugin void InputStr(:^/char, ^char=:) = "dll/mesdialog.dll";
-plugin bool UnCompress(:^ubyte=, ^/ubyte:) = "dll/mesdialog.dll";
-plugin void UbytesToStr(:|CodePage, ^char=, ^/ubyte:) = "dll/mesdialog.dll";
-plugin void StrToUbytes(:|CodePage, ^ubyte=, ^/char:) = "dll/mesdialog.dll";
-plugin void AsciiToLocal(:^char=, ^/char:) = "dll/mesdialog.dll";
-plugin void SetSharedString(:^/char:) = "dll/mesdialog.dll";
-plugin void GetSharedString(:^char=:) = "dll/mesdialog.dll";
+plugin bool YesNo(:^/char:) = <mesdialog>;
+plugin bool GetClipboardStr(:^char=:) = <mesdialog>;
+plugin void GetInifileString(:^/char, ^/char, ^/char, ^/char, ^char=:) = <mesdialog>;
+plugin int GetInifileInt(:^/char, ^/char, ^/char, int:) = <mesdialog>;
+plugin bool WriteInifileString(:^/char, ^/char, ^/char, ^/char:) = <mesdialog>;
+plugin void InputStr(:^/char, ^char=:) = <mesdialog>;
+plugin bool UnCompress(:^ubyte=, ^/ubyte:) = <mesdialog>;
+plugin void UbytesToStr(:|CodePage, ^char=, ^/ubyte:) = <mesdialog>;
+plugin void StrToUbytes(:|CodePage, ^ubyte=, ^/char:) = <mesdialog>;
+plugin void AsciiToLocal(:^char=, ^/char:) = <mesdialog>;
+plugin void SetSharedString(:^/char:) = <mesdialog>;
+plugin void GetSharedString(:^char=:) = <mesdialog>;
 
 |CodePage
 {
@@ -34,7 +34,7 @@ lib al = <alert.ssz>;
 public void veryUnsafeCopy<dst_t, src_t>(dst_t d=, src_t s=)
 {
   lib math = <math.ssz>;
-  plugin void VeryUnsafeCopy(:dst_t=, src_t=, index:) = "dll/mesdialog.dll";
+  plugin void VeryUnsafeCopy(:dst_t=, src_t=, index:) = <mesdialog>;
   VeryUnsafeCopy(:d=, s=, math.min!index?(typesize(dst_t), typesize(src_t)):);
 }
 
@@ -42,7 +42,7 @@ index thandle = 0;
 
 public bool tajuuCheck(^/char name)
 {
-  plugin index TazyuuCheck(:^/char:) = "dll/mesdialog.dll";
+  plugin index TazyuuCheck(:^/char:) = <mesdialog>;
   if(.thandle == 0) .thandle = TazyuuCheck(:name:);
   ret .thandle == 0;
 }
@@ -51,7 +51,7 @@ public bool tajuuCheck(^/char name)
 {
   delete()
   {
-    plugin void CloseTazyuuHandle(:index:) = "dll/mesdialog.dll";
+    plugin void CloseTazyuuHandle(:index:) = <mesdialog>;
     if(.thandle != 0) CloseTazyuuHandle(:.thandle:);
   }
 }

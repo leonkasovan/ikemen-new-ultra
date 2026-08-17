@@ -1,6 +1,6 @@
 #pragma once
 //
-// socket_static.hpp
+// socket_plugin.hpp
 //
 // Statically register every function exported by socket.cpp
 // so that the SSZ runtime resolves them without loading socket.dll.
@@ -33,7 +33,7 @@ extern "C"
 	intptr_t SSZ_STDCALL SocketRecvAry(PluginUtil*, intptr_t, Reference, SOCKET*);
 }
 
-inline bool socket_static_register()
+inline bool socket_plugin_register()
 {
 	static const SSZ_FunctionEntry socket_mapping[] =
 	{
