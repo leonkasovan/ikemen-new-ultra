@@ -265,14 +265,16 @@ public &Md5
   }
 }
 
+// One-shot hash functions — implemented in C++ at ssz_script/lib/md5.cpp
+// (RFC 1321, matching this file's &Md5 streaming implementation).
+lib md = <md5>;
+
 public ^ubyte md5(^/ubyte data)
 {
-  &.Md5 m.append(data);
-  ret m.finish();
+  ret .md.md5(data);
 }
 
 public ^char md5str(^/ubyte data)
 {
-  lib str = <string.ssz>;
-  ret str.toHex!ubyte?()<, .md5(data);
+  ret .md.md5str(data);
 }

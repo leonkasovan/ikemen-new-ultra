@@ -26,6 +26,7 @@ extern "C" bool shell_lib_register();
 extern "C" bool thread_lib_register();
 extern "C" bool math_lib_register();
 extern "C" bool string_lib_register();
+extern "C" bool md5_lib_register();
 
 
 #include <stdio.h>
@@ -434,6 +435,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!string_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'string'");
+		return 1;
+	}
+	if (!md5_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'md5'");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");

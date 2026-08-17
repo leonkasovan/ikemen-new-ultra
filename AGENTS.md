@@ -141,10 +141,12 @@ variable is for SSZ-side interface parity.
 Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
 (`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`), the
 `math` PRNG core (`ssz_script/lib/math.cpp` — consumed via delegation from
-`math.ssz`, which keeps the template functions in SSZ), and the `string`
+`math.ssz`, which keeps the template functions in SSZ), the `string`
 plain-function core (`ssz_script/lib/string.cpp` — consumed via delegation
 from `string.ssz`, which keeps the templates, list-returning functions, and
-`&Format` in SSZ).
+`&Format` in SSZ), and the `md5` one-shot hashes (`ssz_script/lib/md5.cpp` —
+consumed via delegation from `md5.ssz`, which keeps the stateful `&Md5`
+struct in SSZ).
 
 ---
 
