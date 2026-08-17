@@ -104,18 +104,28 @@ static intptr_t SSZ_STDCALL StrLibToLower(PluginUtil*, Reference str)
 }
 
 // SSZ: public int nextLine(index i=, ^/char str)
-// Returns 1 for '\n', 2 for "\r\n", 0 when no newline is found before the end.
-static int64_t SSZ_STDCALL StrLibNextLine(PluginUtil*, Reference str, int32_t i)
+// Out-param `i=` arrives as a pointer to the caller's slot: scan from *ip,
+// return 1 for '\n' / 2 for "\r\n" / 0 when no newline, and write the
+// position just past the newline back into *ip (or #str when none).
+static int64_t SSZ_STDCALL StrLibNextLine(PluginUtil*, Reference str, int32_t* ip)
 {
 	std::WSTR s = PluginUtil::refToWstr(str);
-	for(; i < (int32_t)s.size(); ){
+	intptr_t i = *ip;
+	for(; i < (intptr_t)s.size(); ){
 		WCHR c = s[i];
-		if(c == L'\n') return 1;
+		if(c == L'\n'){
+			*ip = (int32_t)(i + 1);
+			return 1;
+		}
 		if(c == L'\r'){
-			if(i+1 < (int32_t)s.size() && s[i+1] == L'\n') return 2;
+			if(i+1 < (intptr_t)s.size() && s[i+1] == L'\n'){
+				*ip = (int32_t)(i + 2);
+				return 2;
+			}
 		}
 		i++;
 	}
+	*ip = (int32_t)s.size();
 	return 0;
 }
 
@@ -343,7 +353,7 @@ extern "C" bool string_lib_register()
 		{ "uToSo",      "^char (ulong)",             (void*)StrLibUToSo      },
 		{ "equ",        "bool (^/char, ^/char)",     (void*)StrLibEqu        },
 		{ "toLower",    "^char (^/char)",            (void*)StrLibToLower    },
-		{ "nextLine",   "int (index, ^/char)",       (void*)StrLibNextLine   },
+		{ "nextLine",   "int (index=, ^/char)",      (void*)StrLibNextLine   },
 		{ "trim",       "^/char (^/char)",           (void*)StrLibTrim       },
 		{ "find",       "index (^/char, ^/char)",    (void*)StrLibFind       },
 		{ "cFind",      "index (^/char, ^/char)",    (void*)StrLibCFind      },

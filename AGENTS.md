@@ -114,6 +114,14 @@ ABI notes (all proven by the plugin bridges in `main/ssz/bridge.cpp`):
   an 8-byte slot with unspecified high bits — declare them `int32_t`/
   `uint32_t`/`float`, never `int64_t` (which would read garbage).
 - Strings arrive as `Reference`; convert with `ikemen::ssz_bridge::refToWstring`.
+- **Out-parameters** (`type=`): the C function receives a **pointer to the
+  caller's slot** as the corresponding parameter (the same `~DAINYUU_TOKEN`
+  convention the parser uses) — `^ubyte dest=` arrives as `Reference* dest`,
+  `index i=` arrives as `int32_t* ip`.  Write the result in place through the
+  pointer; the JIT copies it back to the caller's variable.  A native
+  function whose SSZ declaration has `=` but that takes the value by copy
+  silently fails to write back — e.g. `nextLine(index i=, ...)` must advance
+  `*ip` past the newline or `splitLines`' loop never terminates.
 - **String/array returns** (`^char`/`^/char`/`^ubyte`): return the address of a
   heap-allocated `Reference` (`sszrefnewfunc(sizeof(Reference))` + `init()`, then
   `PluginUtil::wstrToRef` for strings or `refnew(size,1)`+`memcpy` for byte
@@ -144,9 +152,11 @@ Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
 `math.ssz`, which keeps the template functions in SSZ), the `string`
 plain-function core (`ssz_script/lib/string.cpp` — consumed via delegation
 from `string.ssz`, which keeps the templates, list-returning functions, and
-`&Format` in SSZ), and the `md5` one-shot hashes (`ssz_script/lib/md5.cpp` —
+`&Format` in SSZ), the `md5` one-shot hashes (`ssz_script/lib/md5.cpp` —
 consumed via delegation from `md5.ssz`, which keeps the stateful `&Md5`
-struct in SSZ).
+struct in SSZ), and `arcfour` (`ssz_script/lib/arcfour.cpp` — the one-shot
+`arcfourEnc(^ubyte dest=, ...)` out-param function, consumed via delegation
+from `arcfour.ssz`, which keeps the stateful `&Arcfour` struct in SSZ).
 
 ---
 

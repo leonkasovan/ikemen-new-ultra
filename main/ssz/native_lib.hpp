@@ -76,6 +76,16 @@ inline bool TypeNameToTokens(
 		out.insert(out.begin(), PUBLIC_TOKEN);
 		return true;
 	}
+	if(!t.empty() && t.back() == '='){
+		// "<type>="  — out-parameter (passed by reference), encoded exactly
+		// like the parser's DAINYUU_TOKEN handling: base type tokens plus a
+		// trailing ~DAINYUU_TOKEN marker.  The C function receives a pointer
+		// to the caller's Reference slot as this parameter.
+		auto sub = trim(t.substr(0, t.size()-1));
+		if(!TypeNameToTokens(sub, out)) return false;
+		out.push_back(~DAINYUU_TOKEN);
+		return true;
+	}
 	if(t == "void")   { out.push_back(VOID_TOKEN);   return true; }
 	if(t == "bool")   { out.push_back(BOOL_TOKEN);   return true; }
 	if(t == "byte")   { out.push_back(BYTE_TOKEN);   return true; }

@@ -132,7 +132,7 @@ public ^char toLower(^/char str)
 
 public int nextLine(index i=, ^/char str)
 {
-  ret .sn.nextLine(i, str);
+  ret .sn.nextLine(i=, str);
 }
 
 public %^/char splitLines(^/char str)

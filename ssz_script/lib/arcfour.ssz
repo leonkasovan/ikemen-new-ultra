@@ -63,10 +63,11 @@ public &Arcfour
   }
 }
 
+// One-shot RC4 encrypt — implemented in C++ at ssz_script/lib/arcfour.cpp
+// (matches this file's &Arcfour streaming implementation).
+lib arc = <arcfour>;
+
 public bool arcfourEnc(^ubyte dest=, ^/ubyte key, ^/ubyte src)
 {
-  if(#key == 0) ret false;
-  &.Arcfour rc4.init(key);
-  dest = rc4.encrypt(src);
-  ret true;
+  ret .arc.arcfourEnc(dest=, key, src);
 }
