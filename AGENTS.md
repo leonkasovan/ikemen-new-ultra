@@ -105,6 +105,22 @@ henshuu, so calls like `time.tickCount()` are type-checked and JIT-compiled
 exactly like `plugin` calls. Native members accept both `(:` and plain `(` call
 syntax.
 
+ABI notes (all proven by the plugin bridges in `main/ssz/bridge.cpp`):
+
+- **Arguments arrive reversed** — the last SSZ parameter is the first C++
+  parameter (`open(file, arg, cdir, waitfor, active)` becomes
+  `ShellLibOpen(pu, active, waitfor, cdir, arg, file)`).
+- **32-bit SSZ args** (`int`/`uint`/`bool`/`float`/...) occupy the low 32 bits of
+  an 8-byte slot with unspecified high bits — declare them `int32_t`/
+  `uint32_t`/`float`, never `int64_t` (which would read garbage).
+- Strings arrive as `Reference`; convert with `ikemen::ssz_bridge::refToWstring`.
+
+A native library may also expose **module variables** (`NativeVariable`): they
+are registered as ordinary SSZ module variables (e.g. `"public int"` for a
+cross-module-visible one), backed by the module's variable frame.  A C++
+function that needs state holds it internally (e.g. a `static`); the registered
+variable is for SSZ-side interface parity.
+
 ### Wiring a new native library
 
 1. Create `ssz_script/lib/<name>.cpp` with `extern "C" bool <name>_lib_register()`.
@@ -115,7 +131,9 @@ syntax.
    `.ssz` aside (e.g. `time.ssz.bak`) for comparison.
 
 Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
-(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`).
+(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`), and the
+`math` PRNG core (`ssz_script/lib/math.cpp` — consumed via delegation from
+`math.ssz`, which keeps the template functions in SSZ).
 
 ---
 

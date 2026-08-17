@@ -129,7 +129,8 @@ MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 NATIVE_LIB_SRCS = \
   ssz_script/lib/time.cpp \
   ssz_script/lib/shell.cpp \
-  ssz_script/lib/thread.cpp
+  ssz_script/lib/thread.cpp \
+  ssz_script/lib/math.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 
@@ -653,7 +654,7 @@ $(BLD)/main/ssz/bridge.o: $(SSZ_HEADERS)
 $(BLD)/main/main.o: $(PLUGIN_HEADERS)
 
 # ---- Native SSZ libraries (C++) ----
-$(BLD)/nativelib/%.o: ssz_script/lib/%.cpp
+$(BLD)/nativelib/%.o: ssz_script/lib/%.cpp $(SSZ)/native_lib.hpp $(SSZ)/sszdef.h $(SSZ)/tokenkind.h $(SSZ)/typeid.h
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 

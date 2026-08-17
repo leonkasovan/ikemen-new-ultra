@@ -23,6 +23,13 @@
 //     int64_t  SSZ_STDCALL UnixTime(PluginUtil*);
 //     int64_t  SSZ_STDCALL Div(PluginUtil*, int64_t x, int64_t y);
 //
+// IMPORTANT — 32-bit SSZ arguments (int/uint/bool/float/...) arrive in the
+// LOW 32 bits of an 8-byte slot, with the upper 32 bits unspecified.  Declare
+// such parameters with their native 32-bit type (int32_t/uint32_t/float), not
+// int64_t — reading 8 bytes would include garbage in the high half.  This
+// matches the plugin bridges in main/ssz/bridge.cpp (e.g. ThreadDelay takes
+// uint32_t).  Returns use the full slot, so a 64-bit return type is safe.
+//
 // The signature string describes the SSZ view of the function, e.g.
 //     "uint ()"             ->  uint tickCount()
 //     "long (long, long)"   ->  long div(long x, long y)
@@ -62,6 +69,13 @@ inline bool TypeNameToTokens(
 		while(s.size() > 0 && (s[0] == ' ' || s[0] == '\t')) s.erase(0, 1);
 		return s;
 	};
+	if(t.rfind("public ", 0) == 0){
+		// "public <type>"  — public module variable (cross-module access)
+		auto sub = trim(t.substr(7));
+		if(!TypeNameToTokens(sub, out)) return false;
+		out.insert(out.begin(), PUBLIC_TOKEN);
+		return true;
+	}
 	if(t == "void")   { out.push_back(VOID_TOKEN);   return true; }
 	if(t == "bool")   { out.push_back(BOOL_TOKEN);   return true; }
 	if(t == "byte")   { out.push_back(BYTE_TOKEN);   return true; }
@@ -162,10 +176,25 @@ struct NativeFunction
 	void* fnptr;            // C function with plugin ABI
 };
 
+// A module-level variable exposed by a native library (e.g. math's
+// `randseed`).  Synthesized as an ordinary SSZ module variable: reads and
+// writes go through the module's own variable frame, sized by the declared
+// type.  Note that the frame slot is separate from any state a C++ function
+// keeps internally — a native library that needs its variables to track
+// native state must either keep that state in C++ (and treat the registered
+// variable as interface parity) or accept the frame-backed value as the
+// authoritative one.
+struct NativeVariable
+{
+	std::string name;
+	std::string type;       // SSZ type name, e.g. "int"
+};
+
 struct NativeLibrary
 {
 	std::string name;
 	std::vector<NativeFunction> functions;
+	std::vector<NativeVariable> variables;
 };
 
 // Registry: library name -> NativeLibrary.

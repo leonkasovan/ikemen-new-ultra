@@ -5476,6 +5476,23 @@ ELSE:
 				return nullptr;
 			}
 		}
+		// Module variables (e.g. math's `randseed`): registered as ordinary
+		// module-level variables, so SSZ can read/write them through the
+		// module's variable frame.
+		for(auto& v : lib->variables){
+			std::vector<intptr_t> tyv;
+			if(!NativeLib::TypeNameToTokens(v.type, tyv)){
+				delete m;
+				return nullptr;
+			}
+			std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
+			std::WSTR vname;
+			for(char c : v.name) vname += (WCHR)c;
+			if(!m->AddHensuu(ty, vname, m->GetTypeSize(ty), *m->srce)){
+				delete m;
+				return nullptr;
+			}
+		}
 		stat->srclist.insert(
 			std::pair<std::WSTR, SourceTree*>(path, m));
 		return m;
