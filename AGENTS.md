@@ -17,6 +17,8 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 
 **External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, PortAudio, OpenGL.
 
+**See also:** [`PROGRESS.md`](PROGRESS.md) — the SSZ→native library conversion status (per-library breakdown, phase history, gotchas).
+
 ---
 
 ## SSZ Plugin Resolution
@@ -146,22 +148,16 @@ variable is for SSZ-side interface parity.
 4. Change the consuming script to `lib <name> = <name>;` and keep the original
    `.ssz` aside (e.g. `time.ssz.bak`) for comparison.
 
-Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
-(`ssz_script/lib/shell.cpp`), `thread` (`ssz_script/lib/thread.cpp`), the
-`math` PRNG core (`ssz_script/lib/math.cpp` — consumed via delegation from
-`math.ssz`, which keeps the template functions in SSZ), the `string`
-plain-function core (`ssz_script/lib/string.cpp` — consumed via delegation
-from `string.ssz`, which keeps the templates, list-returning functions, and
-`&Format` in SSZ), the `md5` hash functions and `&Md5` streaming methods
-(`ssz_script/lib/md5.cpp`), `arcfour` (`ssz_script/lib/arcfour.cpp` — the
-one-shot `arcfourEnc(^ubyte dest=, ...)` plus the `&Arcfour` streaming
-methods), `file` (`ssz_script/lib/file.cpp` — the module functions and the
-`&File` methods), `regex` (`ssz_script/lib/regex.cpp` — the `&Regex`
-methods), `sound` (`ssz_script/lib/sound.cpp` — the `&Client` methods),
-`ssz` (`ssz_script/lib/ssz.cpp` — memMarkBefore/memMarkAfter/run and the
-`&Compiler` methods), `socket` (`ssz_script/lib/socket.cpp` — the
-non-template `&Socket` methods), and `table` (`ssz_script/lib/table.cpp` —
-the concrete `hash` function, delegated from `table.ssz`).
+**Conversion status:** the full per-library breakdown (native surface, what
+stays in SSZ, phase history, known gotchas) lives in **`PROGRESS.md`**.  In
+short: **14 native libraries registered** — `time`, `shell`, `thread` are
+fully native; `math`, `string`, `md5`, `arcfour`, `file`, `regex`, `sound`,
+`ssz`, `socket`, `base64`, `table` are native cores consumed via delegation
+from a thin `.ssz` wrapper (which keeps templates, list-returners, and
+`&Format`-style struct containers in SSZ); `consts`, `stack`, `alert` stay
+in SSZ entirely (template-bound, see below).  Sources live in
+`ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
+Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
 ### Why the template libraries (`stack`, `table`, `alert`) stay in SSZ
 
