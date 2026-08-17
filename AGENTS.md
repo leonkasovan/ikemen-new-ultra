@@ -196,6 +196,27 @@ registry. The native-lib registry has no equivalent re-parse.
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
+### Why `lib/alpha/*` stays in SSZ
+
+`ssz_script/lib/alpha/` (`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`,
+`sdlplugin.ssz`) are **bridge/type-definition libs**, not logic libs: each is a
+thin `plugin` bridge to an already-static plugin (`<lua>`, `<mesdialog>`,
+`<ogg>`, `<sdlplugin>`) plus the enums/structs that form the game's type
+vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
+They are deliberately **not converted** — `TypeNameToTokens` in
+`main/ssz/native_lib.hpp` cannot express `|Enum`, `&Struct`, `ref`, `func`, or
+dot-qualified types (`|.sdl.K`, `&.f.File`), and every alpha lib needs at least
+one in its plugin signatures (the synthesized native henshuu's type string must
+exactly match the call-site types, e.g. `.sdl.PollEvent(:.sdle=:)` where
+`.sdle` is `&sdl.Event`).  `ogg.ssz` is the lone structural exception (all 8
+signatures use expressible types) but is dead code — `ssz/sound.ssz` dropped
+its import (SDL_mixer handles OGG).  Full research write-up in `PROGRESS.md`.
+
+**Note:** a native lib name may coincide with a static plugin name (`<ogg>` the
+plugin vs. a hypothetical native lib `ogg`) — the two registries are separate
+and resolve from different statement kinds (`plugin` vs `lib`), so there is no
+collision; the blocker above is purely the signature parser.
+
 **`(_t)` vs `(*_t)` casts in templates (fixed bug):** the byte-sized branch
 of `decBase64<_t>` originally used a bare `(_t)ub[i]` cast, which fails at
 template instantiation — the JIT re-parses template bodies per

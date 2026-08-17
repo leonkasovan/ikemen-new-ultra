@@ -120,6 +120,41 @@ from source** with `_t` bound (`BlockOpen`/`MakeTree`, sourcetree.hpp ~5999) —
 that's why socket's in-body plugin declarations work. The native registry has no
 such re-parse.
 
+## Why `lib/alpha/*` stays in SSZ
+
+`ssz_script/lib/alpha/` holds **bridge/type-definition libs**, not logic libs —
+`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`, `sdlplugin.ssz` (fully
+researched, Aug 2026).  Each is a thin `plugin` bridge to an already-static
+plugin (`<lua>`, `<mesdialog>`, `<ogg>`, `<sdlplugin>`) plus the enums/structs
+that give the game its type vocabulary (`|EventType`, `|SDLKey`, `|K`,
+`|CodePage`, `&Event`, `&Rect`, `&Surface`, `&Font`, …).  Converting them is
+blocked by the native registry's signature parser (`TypeNameToTokens` in
+`main/ssz/native_lib.hpp`), which supports only primitives + `/X`, `^X`, `%X`,
+`=` — **not** `|Enum`, `&Struct`, `ref`, `func`, or dot-qualified types
+(`|.sdl.K`, `&.f.File`).  Every alpha lib needs at least one such type in its
+plugin signatures, and the synthesized henshuu's type string must exactly match
+the call-site types (e.g. `.sdl.PollEvent(:.sdle=:)` where `.sdle` is
+`&sdl.Event`), so 4 of the 5 cannot be expressed at all:
+
+- **`sdlplugin.ssz`** — load-bearing for the whole game (`ikemen.ssz`,
+  `fighting.ssz`, `bg.ssz`, … import it); struct out-params like `&Event=` and
+  enum params are everywhere.
+- **`sdlevent.ssz`** — game event-loop logic built entirely on `&sdl.Event` /
+  `|.sdl.K`.
+- **`lua.ssz`** — core is `ref`/`func` delegates (`refSetNull`/`refCopy`,
+  `register(^/char, func$void(...))`).
+- **`mesdialog.ssz`** — `|CodePage`-typed signatures plus the `veryUnsafeCopy`
+  template (used by `common.ssz`/`char.ssz`), which is template-bound by
+  definition.
+- **`ogg.ssz`** — structurally convertible (all 8 signatures use expressible
+  types, and a native lib name `ogg` would not collide with the `<ogg>` plugin
+  registry), but it is **dead code** — `ssz/sound.ssz` removed the import
+  ("SDL_mixer handles OGG").  Converting it would only duplicate the static
+  plugin it bridges.
+
+The plugins these libs bridge are already static C++; leaving the bridges in
+SSZ costs nothing at runtime and keeps the type vocabulary intact.
+
 ## Known fixes / gotchas worth remembering
 
 - **`(_t)` vs `(*_t)` casts in templates**: bare `(_t)` casts fail at
@@ -145,10 +180,12 @@ such re-parse.
 
 ## Remaining / next steps
 
-- None of the 14 convertible libs remain — the conversion is complete for the
-  concrete surface.  Future work would require JIT support for
-  `TYPE_TOKEN` resolution in native signatures (to port `stack`/`table`) or
-  `DynamicRef` frame slots (to hold `^null` data).
+- The 14 convertible `lib/` libs are done, and `lib/alpha/` is intentionally
+  left in SSZ (bridge/type libs — see above).  Future engine work would require
+  JIT support for `TYPE_TOKEN` resolution in native signatures (to port
+  `stack`/`table`) or `DynamicRef` frame slots (to hold `^null` data);
+  converting `alpha/` would additionally need `|Enum`/`&Struct`/`ref`/`func` in
+  `TypeNameToTokens`.
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
   exercised but only `int`/`short` are in the regression test — `long`/`float`
   round-trips could be added.
