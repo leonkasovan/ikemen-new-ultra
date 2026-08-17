@@ -236,6 +236,12 @@ runner needs the `ssz_script/lib/` tree installed next to the exe
 (`make CONFIG=Debug install`) so `<name>.ssz` imports resolve.  Tests
 run from `test/work/` (gitignored) and exit nonzero on any failure.
 
+Wired into the Makefile: `make test` runs the C++ file smoke test
+(`test-file`) plus the SSZ suite (`test-ssz`, which forces a
+`CONFIG=Debug install` first so the runner finds `install/ikemen-debug.exe`
+and a fresh copy of `ssz_script/lib/`).  Each can also be invoked
+individually (`make test-file`, `make test-ssz`).
+
 Note: `&Md5`/`&Arcfour`-style struct tests must not feed a raw digest
 back through `md5str()` — `md5str` hashes its input, so `md5str(digest)`
 re-hashes; use `toHex!ubyte?(digest)` to render a digest.  Test scripts

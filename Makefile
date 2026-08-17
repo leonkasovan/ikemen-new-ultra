@@ -627,7 +627,7 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
 
-.PHONY: all clean install test
+.PHONY: all clean install test test-file test-ssz
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
@@ -767,9 +767,15 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(FLAC_DEFS) -c -o $@ $<
 
-# ---- Regression smoke tests ----
-# Compile and run file-operation tests against the native implementations.
-# Depends on the main build having compiled file.o first.
+# ---- Regression tests ----
+# Two suites:
+#   * test-file — C++ smoke test of the native file library (builds
+#                 build/<CONFIG>/test_file.exe against the current config).
+#   * test-ssz  — SSZ native-lib regression suite (test/run_ssz_tests.sh).
+#                 Needs the Debug exe installed, so it forces CONFIG=Debug
+#                 for the install step (the runner looks for
+#                 install/ikemen-debug.exe).
+# `make test` runs both.
 TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
 
@@ -780,8 +786,14 @@ $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
 $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-test: $(TEST_FILE_BIN)
+test-file: $(TEST_FILE_BIN)
 	$(TEST_FILE_BIN)
+
+test-ssz:
+	$(MAKE) CONFIG=Debug install
+	bash $(TEST)/run_ssz_tests.sh
+
+test: test-file test-ssz
 
 clean:
 	rm -rf $(BLD)
