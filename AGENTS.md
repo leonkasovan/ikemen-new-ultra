@@ -150,12 +150,15 @@ variable is for SSZ-side interface parity.
 
 **Conversion status:** the full per-library breakdown (native surface, what
 stays in SSZ, phase history, known gotchas) lives in **`PROGRESS.md`**.  In
-short: **14 native libraries registered** — `time`, `shell`, `thread` are
+short: **15 native libraries registered** — `time`, `shell`, `thread` are
 fully native; `math`, `string`, `md5`, `arcfour`, `file`, `regex`, `sound`,
-`ssz`, `socket`, `base64`, `table` are native cores consumed via delegation
-from a thin `.ssz` wrapper (which keeps templates, list-returners, and
-`&Format`-style struct containers in SSZ); `consts`, `stack`, `alert` stay
-in SSZ entirely (template-bound, see below).  Sources live in
+`ssz`, `socket`, `base64`, `table`, `sdlplugin` are native cores consumed via
+delegation from a thin `.ssz` wrapper (which keeps templates, list-returners,
+`&Format`-style struct containers, and — for `sdlplugin` — the
+enums/structs/constants in SSZ); `consts`, `stack`, `alert` stay in SSZ
+entirely (template-bound, see below).  `sdlplugin` is the first alpha-lib
+bridge to go native, enabled by `|Enum`/`&Struct` support in
+`TypeNameToTokens` (native_lib.hpp).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
@@ -196,26 +199,35 @@ registry. The native-lib registry has no equivalent re-parse.
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
-### Why `lib/alpha/*` stays in SSZ
+### `lib/alpha/*` — bridge/type libs (sdlplugin now native)
 
 `ssz_script/lib/alpha/` (`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`,
-`sdlplugin.ssz`) are **bridge/type-definition libs**, not logic libs: each is a
-thin `plugin` bridge to an already-static plugin (`<lua>`, `<mesdialog>`,
-`<ogg>`, `<sdlplugin>`) plus the enums/structs that form the game's type
-vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
-They are deliberately **not converted** — `TypeNameToTokens` in
-`main/ssz/native_lib.hpp` cannot express `|Enum`, `&Struct`, `ref`, `func`, or
-dot-qualified types (`|.sdl.K`, `&.f.File`), and every alpha lib needs at least
-one in its plugin signatures (the synthesized native henshuu's type string must
-exactly match the call-site types, e.g. `.sdl.PollEvent(:.sdle=:)` where
-`.sdle` is `&sdl.Event`).  `ogg.ssz` is the lone structural exception (all 8
-signatures use expressible types) but is dead code — `ssz/sound.ssz` dropped
-its import (SDL_mixer handles OGG).  Full research write-up in `PROGRESS.md`.
+`sdlplugin.ssz`) are **bridge/type-definition libs**: each is a thin `plugin`
+bridge to an already-static plugin (`<lua>`, `<mesdialog>`, `<ogg>`,
+`<sdlplugin>`) plus the enums/structs that form the game's type vocabulary
+(`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
+
+- ✅ **`sdlplugin.ssz`** — **converted**: `TypeNameToTokens` now supports
+  `|Enum`/`&Struct` (AND_TOKEN/OR_TOKEN + class id) via a
+  `NativeTypeContext` resolver callback (`SourceTree::NativeTypeID`), so the
+  native bridge `alpha/sdlplugin.cpp` re-exports the static plugin's fnptrs
+  and the `.ssz` delegates module functions while keeping the types.  The
+  importing module must declare the referenced types before
+  `lib sdlp = <sdlplugin>;`, and call sites use the `(::)`/`(:` forms.
+- **`sdlevent.ssz`** — event-loop logic built on `&sdl.Event`/`|.sdl.K`;
+  only the `&Key` methods are convertible (stateful `event()`/`eventUpdate()`
+  stay in SSZ).
+- **`lua.ssz`** / **`mesdialog.ssz`** — still blocked: signatures need `ref` /
+  `func` delegates (and `mesdialog`'s `veryUnsafeCopy` is template-bound).
+- **`ogg.ssz`** — structurally convertible but dead code (`ssz/sound.ssz`
+  dropped its import — SDL_mixer handles OGG).
+
+Full research write-up in `PROGRESS.md`.
 
 **Note:** a native lib name may coincide with a static plugin name (`<ogg>` the
 plugin vs. a hypothetical native lib `ogg`) — the two registries are separate
 and resolve from different statement kinds (`plugin` vs `lib`), so there is no
-collision; the blocker above is purely the signature parser.
+collision.
 
 **`(_t)` vs `(*_t)` casts in templates (fixed bug):** the byte-sized branch
 of `decBase64<_t>` originally used a bare `(_t)ub[i]` cast, which fails at

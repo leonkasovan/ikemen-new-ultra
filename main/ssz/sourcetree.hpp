@@ -5429,6 +5429,61 @@ ELSE:
 		}
 		return true;
 	}
+	// Resolve a struct/enum type path ("Event", ".Rect", ".f.File") to a
+	// funclist class id, mirroring PathtoClassID's name lookup: a leading
+	// '.' starts at the module root; intermediate segments must be libs
+	// (followed through their LIB henshuu); the final segment is the
+	// class/enum itself, found either as a TYPE henshuu or as a funclist
+	// child.  Returns -1 when the type cannot be resolved.
+	MEMBER int32_t NativeTypeID(
+		const std::WSTR& path, const bool wantclass)
+	{
+		SourceTree* pst = this;
+		size_t pos = 0;
+		if(pos < path.size() && path[pos] == L('.')){
+			pst = root;
+			pos++;
+		}
+		if(pos >= path.size()) return -1;
+		for(;;){
+			auto dot = path.find(L('.'), pos);
+			auto name = path.substr(
+				pos, dot == std::WSTR::npos ? std::WSTR::npos : dot - pos);
+			if(name.empty()) return -1;
+			auto phs = pst->GetHensuu(name, false);
+			if(phs != nullptr && phs->type[0] == LIB_TOKEN){
+				if(dot == std::WSTR::npos) return -1;  // a lib is not a type
+				pst = (SourceTree*)phs->type[1];
+				pos = dot + 1;
+				continue;
+			}
+			if(dot != std::WSTR::npos) return -1;  // only libs are traversed
+			// Final segment — the class or enum type name.
+			if(
+				phs != nullptr && phs->type[0] == TYPE_TOKEN
+				&& (phs->type[1] == AND_TOKEN || phs->type[1] == OR_TOKEN))
+			{
+				return (int32_t)phs->type[2];
+			}
+			auto ci = pst->GetFuncId(name, false);
+			if(ci < 0) return -1;
+			auto pst2 = stat->funclist.Get(ci);
+			if(pst2->selftype != CLASS_BLOCK && pst2->selftype != ENUM_BLOCK){
+				return -1;
+			}
+			if(wantclass && pst2->selftype != CLASS_BLOCK) return -1;
+			if(!wantclass && pst2->selftype != ENUM_BLOCK) return -1;
+			return ci;
+		}
+	}
+	// Callback adapter: NativeLib::TypeNameToTokens receives the resolving
+	// module through NativeTypeContext.state.
+	static int32_t NativeTypeIDCallback(void* state, const std::string& path, bool wantclass)
+	{
+		std::WSTR wpath;
+		for(char c : path) wpath += (WCHR)c;
+		return ((SourceTree*)state)->NativeTypeID(wpath, wantclass);
+	}
 	// Resolve `<name>` to a registered native (C++) library.  If found,
 	// synthesize a module SourceTree exposing each native function as a
 	// plugin-typed henshuu (same representation the parser produces for
@@ -5461,21 +5516,28 @@ ELSE:
 		m->srce->filename = path;
 		m->kakutei = true;
 		m->myname = base;				m->srce->setNextLast();
+				// Struct/enum types in native signatures resolve against the
+				// importing module (`this` — the module currently being
+				// parsed, which must already have declared the referenced
+				// types, e.g. `lib x = <lib>` placed after the type defs).
+				NativeLib::NativeTypeContext ctx;
+				ctx.state = this;
+				ctx.resolveType = &SourceTree::NativeTypeIDCallback;
 				for(auto& fn : lib->functions){
-			std::vector<intptr_t> tyv;
-			if(!NativeLib::BuildPluginType(fn.signature, tyv)){
-				delete m;
-				return nullptr;
+				std::vector<intptr_t> tyv;
+				if(!NativeLib::BuildPluginType(fn.signature, tyv, &ctx)){
+					delete m;
+					return nullptr;
+				}
+				std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
+				ty += (intptr_t)fn.fnptr;
+				std::WSTR fname;
+				for(char c : fn.name) fname += (WCHR)c;
+				if(!m->AddHensuu(ty, fname, 0, *m->srce)){
+					delete m;
+					return nullptr;
+				}
 			}
-			std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
-			ty += (intptr_t)fn.fnptr;
-			std::WSTR fname;
-			for(char c : fn.name) fname += (WCHR)c;
-			if(!m->AddHensuu(ty, fname, 0, *m->srce)){
-				delete m;
-				return nullptr;
-			}
-		}
 		// Module variables (e.g. math's `randseed`): registered as ordinary
 		// module-level variables, so SSZ can read/write them through the
 		// module's variable frame.

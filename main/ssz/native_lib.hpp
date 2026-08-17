@@ -60,9 +60,31 @@
 namespace NativeLib
 {
 
+// ---------------------------------------------------------------------
+// Struct / enum type-name resolution
+//
+// Native signature strings may reference SSZ struct and enum types
+// (`&Event`, `&.Rect`, `&.f.File`, `|SDLKey`).  The token encoding for
+// these is AND_TOKEN/OR_TOKEN plus the type's class id in the compiler's
+// global funclist — the same encoding the parser produces for
+// `plugin ... (:&Event=:)`.  native_lib.hpp cannot see SourceTree, so the
+// caller (SourceTree::NativeLibFrom) supplies a resolver callback that
+// looks the name up exactly like PathtoClassID does.
+// ---------------------------------------------------------------------
+struct NativeTypeContext
+{
+	void* state;
+	// Resolve a type path ("Event", ".Rect", ".f.File") to a funclist
+	// class id; wantclass=false means an enum.  Returns -1 on failure.
+	int32_t (*resolveType)(void* state, const std::string& path, bool wantclass);
+};
+
 // Append the token encoding for a single SSZ type name ("long", "^int", ...).
+// Struct/enum names (`&X`/`|X`, optionally dot-qualified) require a non-null
+// ctx with a resolveType callback.
 inline bool TypeNameToTokens(
-	const std::string& t, std::vector<intptr_t>& out)
+	const std::string& t, std::vector<intptr_t>& out,
+	const NativeTypeContext* ctx = nullptr)
 {
 	auto trim = [](std::string s){
 		while(s.size() > 0 && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
@@ -72,7 +94,7 @@ inline bool TypeNameToTokens(
 	if(t.rfind("public ", 0) == 0){
 		// "public <type>"  — public module variable (cross-module access)
 		auto sub = trim(t.substr(7));
-		if(!TypeNameToTokens(sub, out)) return false;
+		if(!TypeNameToTokens(sub, out, ctx)) return false;
 		out.insert(out.begin(), PUBLIC_TOKEN);
 		return true;
 	}
@@ -82,7 +104,7 @@ inline bool TypeNameToTokens(
 		// trailing ~DAINYUU_TOKEN marker.  The C function receives a pointer
 		// to the caller's Reference slot as this parameter.
 		auto sub = trim(t.substr(0, t.size()-1));
-		if(!TypeNameToTokens(sub, out)) return false;
+		if(!TypeNameToTokens(sub, out, ctx)) return false;
 		out.push_back(~DAINYUU_TOKEN);
 		return true;
 	}
@@ -104,7 +126,7 @@ inline bool TypeNameToTokens(
 		// /<type>  — string type (e.g. /char), encoded as WARU_TOKEN + <type>
 		auto sub = trim(t.substr(1));
 		std::vector<intptr_t> tmp;
-		if(!TypeNameToTokens(sub, tmp)) return false;
+		if(!TypeNameToTokens(sub, tmp, ctx)) return false;
 		out.push_back(WARU_TOKEN);
 		for(auto tk : tmp) out.push_back(tk);
 		return true;
@@ -129,13 +151,30 @@ inline bool TypeNameToTokens(
 		for(auto tk : tmp) out.push_back(tk);
 		return true;
 	}
+	if(t.size() >= 2 && (t[0] == '&' || t[0] == '|')){
+		// &<struct> / |<enum> — class/struct and enum types, optionally
+		// dot-qualified (&.Rect, &.f.File, |.sdl.K).  Encoded exactly like
+		// the parser's TypeNanika OR/AND case: the marker token plus the
+		// type's funclist class id, resolved by the caller-supplied
+		// callback against the importing module's scope.
+		bool wantclass = t[0] == '&';
+		auto sub = trim(t.substr(1));
+		if(sub.empty() || ctx == nullptr || ctx->resolveType == nullptr) return false;
+		int32_t ci = ctx->resolveType(ctx->state, sub, wantclass);
+		if(ci < 0) return false;
+		out.push_back(wantclass ? AND_TOKEN : OR_TOKEN);
+		out.push_back((intptr_t)ci);
+		return true;
+	}
 	return false;
 }
 
 // Build the plugin type token string (sans function pointer) from an SSZ
-// signature like "uint ()" or "long (long, long)".
+// signature like "uint ()" or "long (long, long)".  Pass a non-null ctx to
+// allow struct/enum types in the signature.
 inline bool BuildPluginType(
-	const std::string& sig, std::vector<intptr_t>& type)
+	const std::string& sig, std::vector<intptr_t>& type,
+	const NativeTypeContext* ctx = nullptr)
 {
 	// Split "<ret> (<params>)" at the first '(' .
 	auto paren = sig.find('(');
@@ -156,7 +195,7 @@ inline bool BuildPluginType(
 	type.clear();
 	type.push_back(PLUGIN_TOKEN);
 	type.push_back(SIGNATURE_TOKEN);
-	if(!TypeNameToTokens(ret, type)) return false;
+	if(!TypeNameToTokens(ret, type, ctx)) return false;
 	type.push_back(SHOUKAKKOOPEN_TOKEN);
 	if(params.size() > 0){
 		size_t pos = 0;
@@ -168,7 +207,7 @@ inline bool BuildPluginType(
 			piece = trim(piece);
 			if(piece.size() > 0){
 				if(!first) type.push_back(COMMA_TOKEN);
-				if(!TypeNameToTokens(piece, type)) return false;
+				if(!TypeNameToTokens(piece, type, ctx)) return false;
 				first = false;
 			}
 			if(comma == std::string::npos) break;

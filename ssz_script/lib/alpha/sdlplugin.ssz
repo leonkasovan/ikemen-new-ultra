@@ -1,153 +1,7 @@
 lib f = <file.ssz>;
 
-plugin void End(::)                         = <sdlplugin>;
-plugin bool PollEvent(:&Event=:)            = <sdlplugin>;
-plugin bool UpdateGLViewport(:&Event=:) 	= <sdlplugin>;
-
-public void flip()
-{
-  plugin void Flip(::) = <sdlplugin>;
-  Flip(::);
-}
-
-public void fill(&.Rect r=, uint c)
-{
-  plugin void Fill(:&.Rect=, uint:) = <sdlplugin>;
-  Fill(:r=, c:);
-}
-
-public void softFill(&.Rect r=, uint c)
-{
-  plugin void SoftFill(:&.Rect=, uint:) = <sdlplugin>;
-  SoftFill(:r=, c:);
-}
-
-public bool renderMugenZoom(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, ^uint pal, short ckey, &.Rect sr=, float cx, float ty, &.Rect tile=, float xtopscl, float xbotscl, float yscl, float rasterxadd, uint roto, int alpha, int rle, %byte pluginbuf=)
-{
-  plugin bool RenderMugenZoom(:^/ubyte, uint=, short, &.Rect=, float, float, &.Rect=, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = <sdlplugin>;
-  ret RenderMugenZoom(:pxl, pal<>=, ckey, sr=, cx, ty, tile=, xtopscl, xbotscl, yscl, rasterxadd, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=:);
-}
-
-public bool renderMugenShadow(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, uint color, &.Rect sr=, float cx, float ty, float xscl, float yscl, float vscl, uint roto, int alpha, int rle, %byte pluginbuf=)
-{
-  plugin bool RenderMugenShadow(:^/ubyte, uint, &.Rect=, float, float, float, float, float, uint, int, &.Rect=, float, float, int, %byte=:) = <sdlplugin>;
-  ret RenderMugenShadow(:pxl, color, sr=, cx, ty, xscl, yscl, vscl, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=:);
-}
-
-public bool renderFontBatch(^ubyte atlas, float baseX, float baseY, ^uint pal, int atlasStride, int glyphH, int alpha, &.Rect window=, float xscl, float yscl, float spacing, ^int glyphData, int count)
-{
-  plugin bool RenderFontBatch(:ubyte=, float, float, uint=, int, int, int, &.Rect=, float, float, float, int=, int:) = <sdlplugin>;
-  ret RenderFontBatch(:atlas<>=, baseX, baseY, pal<>=, atlasStride, glyphH, alpha, window=, xscl, yscl, spacing, glyphData<>=, count:);
-}
-
-public char getLastChar()
-{
-  plugin char GetLastChar(::) = <sdlplugin>;
-  ret GetLastChar(::);
-}
-
-public ^ubyte decodePNG8(int w=, int h=, &.f.File file=)
-{
-  plugin void DecodePNG8(:^ubyte=, int=, int=, &.f.File:) = <sdlplugin>;
-  ^ubyte img;
-  DecodePNG8(:img=, w=, h=, file:);
-  ret img;
-}
-
-plugin bool KeyState(:|SDLKey:)             = <sdlplugin>;
-plugin bool JoystickButtonState(:int, int:) = <sdlplugin>;
-
-public int pollInputBitmask(
-  int jn,
-  int u, int d, int l, int r,
-  int a, int b, int c,
-  int x, int y, int z,
-  int q, int w, int e, int s,
-  int jn2,
-  int u2, int d2, int l2, int r2,
-  int a2, int b2, int c2,
-  int x2, int y2, int z2,
-  int q2, int w2, int e2, int s2,
-  int sec)
-{
-  plugin int PollInputBitmask(:int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int:) = <sdlplugin>;
-  ret PollInputBitmask(:jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s, jn2, u2, d2, l2, r2, a2, b2, c2, x2, y2, z2, q2, w2, e2, s2, sec:);
-}
-
-plugin void Delay(:uint:)                   = <sdlplugin>;
-plugin uint GetTicks(::)                    = <sdlplugin>;
-
 const int SNDFREQ = 44100;
 const index SNDBUFLEN = 4096;
-
-public bool setSndBuf(^int buf)
-{
-  if(#buf != .SNDBUFLEN) ret false;
-  plugin bool SetSndBuf(:int=:) = <sdlplugin>;
-  ret SetSndBuf(:buf<>=:);
-}
-
-public int playVideo(int audiotrack, int volume, ^/char captures, ^/char fn)
-{
-  plugin int PlayVideo(:int, int, ^/char, ^/char:) = <sdlplugin>;
-  ret PlayVideo(:audiotrack, volume, captures, fn:);
-}
-
-public bool playBGM(^/char pldir, ^/char fn)
-{
-  plugin bool PlayBGM(:^/char, ^/char:) = <sdlplugin>;
-  ret PlayBGM(:pldir, fn:);
-}
-
-public void pauseBGM(bool pause)
-{
-  plugin void PauseBGM(:bool:) = <sdlplugin>;
-  PauseBGM(:pause:);
-}
-
-// Deprecated: OGG streaming is now handled by PlayBGM via SDL_mixer.
-// These stubs are kept for ABI compatibility but do nothing.
-public bool sendOpenBGM(int rate, int channels)
-{
-  plugin bool SendOpenBGM(:int, int:) = <sdlplugin>;
-  ret SendOpenBGM(:rate, channels:);
-}
-
-public void sendCloseBGM()
-{
-  plugin void SendCloseBGM(::) = <sdlplugin>;
-  SendCloseBGM(::);
-}
-
-public index sendWriteBGM(^/short buffer)
-{
-  plugin index SendWriteBGM(:^/short:) = <sdlplugin>;
-  ret SendWriteBGM(:buffer:);
-}
-
-public void fadeInBGM(int time)
-{
-  plugin void FadeInBGM(:int:) = <sdlplugin>;
-  FadeInBGM(:time:);
-}
-
-public void fadeOutBGM(int time)
-{
-  plugin void FadeOutBGM(:int:) = <sdlplugin>;
-  FadeOutBGM(:time:);
-}
-
-public void setVolume(float gvol, float wvol, float bvol)
-{
-  plugin void SetVolume(:float, float, float:) = <sdlplugin>;
-  SetVolume(:gvol, wvol, bvol:);
-}
-
-public void setOpacity(float wo)
-{
-  plugin void SetOpacity(:float:) = <sdlplugin>;
-  SetOpacity(:wo:);
-}
 
 const ubyte RELEASED = 0;
 const ubyte PRESSED = 1;
@@ -876,78 +730,6 @@ public &Font
   }
 }
 
-public void drawTTF(^/char path, int align, ^/char text, int x, int y, float scaleX, float scaleY, int r, int g, int b, int alpha)
-{
-  plugin void DrawTTF(:^/char, int, ^/char, int, int, float, float, int, int, int, int:) = <sdlplugin>;
-  DrawTTF(:path, align, text, x, y, scaleX, scaleY, r, g, b, alpha:);
-}
-
-public bool init(^/char t, int w, int h, int renderer, bool mugen)
-{
-  plugin bool RendererInit(:^/char, int, int, ^/char:) = <sdlplugin>;
-  plugin bool GlInit(:^/char, int, int:) = <sdlplugin>;
-  plugin bool Init(:^/char, int, int, bool:) = <sdlplugin>;
-  ^/char rendererStr = "SDL2";
-  if(renderer == 1) rendererStr = "OpenGL";
-  if(renderer == 2) rendererStr = "OpenGL ES";
-  if(renderer == 3) rendererStr = "Vulkan";
-  ret RendererInit(:t, w, h, rendererStr:);
-}
-
-public int getWidth()
-{
-  plugin int GetWidth(::) = <sdlplugin>;
-  ret GetWidth(::);
-}
-
-public int getHeight()
-{
-  plugin int GetHeight(::) = <sdlplugin>;
-  ret GetHeight(::);
-}
-
-public void windowSize(int w, int h)
-{
-  plugin void WindowSize(:int, int:) = <sdlplugin>;
-  WindowSize(:w, h:);
-}
-
-public void fullScreenMode(bool fullReal)
-{
-  plugin void FullScreenExclusive(:bool:) = <sdlplugin>;
-  FullScreenExclusive(:fullReal:);
-}
-
-public bool fullScreen(bool full)
-{
-  plugin bool FullScreen(:bool:) = <sdlplugin>;
-  ret FullScreen(:full:);
-}
-
-public void setWindowType(int state)
-{
-  plugin void WindowType(:int:) = <sdlplugin>;
-  WindowType(:state:);
-}
-
-public void keepAspectRatio(bool aspect)
-{
-  plugin void AspectRatio(:bool:) = <sdlplugin>;
-  AspectRatio(:aspect:);
-}
-
-public void takeScreenShot(^/char dir)
-{
-  plugin void TakeScreenShot(:^/char:) = <sdlplugin>;
-  TakeScreenShot(:dir:);
-}
-
-public void showCursor(bool show)
-{
-  plugin void CursorShow(:bool:) = <sdlplugin>;
-  CursorShow(:show:);
-}
-
 public &GlTexture
 {
   uint id = 0x0;
@@ -978,23 +760,259 @@ public &GlTexture
   }
 }
 
-plugin void MugenFillGl(:&Rect, uint, int:) = <sdlplugin>;
-plugin bool InitMugenGl(::) = <sdlplugin>;
-plugin bool RenderMugenGl(:&GlTexture, uint=, int, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float:) = <sdlplugin>;
-plugin bool RenderMugenGlFc(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, bool, float, float, float, float, float, float, float:) = <sdlplugin>;
-plugin bool RenderMugenGlFcS(:&GlTexture, &Rect=, float, float, &Rect=, float, float, float, float, float, float, int, &Rect=, float, float, uint:) = <sdlplugin>;
-plugin void GlSwapBuffers(::) = <sdlplugin>;
+// ── Native sdlplugin library ──────────────────────────────────────────────
+// Module-level functions delegate to the native `sdlplugin` library
+// (ssz_script/lib/alpha/sdlplugin.cpp), which re-exports the static
+// <sdlplugin> plugin's functions.  The import must sit after the struct/enum
+// definitions above because the native signatures reference those types
+// (&Event, &.Rect, &GlTexture, |SDLKey, &.f.File).  The &Surface/&Font/
+// &GlTexture methods above keep their in-body `plugin` declarations — the
+// static plugin registry and the native registry coexist.
+lib sdlp = <sdlplugin>;
+
+public void End()
+{
+  .sdlp.End();
+}
+
+public bool PollEvent(&.Event e=)
+{
+  ret .sdlp.pollEvent(e=);
+}
+
+public bool UpdateGLViewport(&.Event e=)
+{
+  ret .sdlp.updateGLViewport(e=);
+}
+
+public void flip()
+{
+  .sdlp.flip();
+}
+
+public void fill(&.Rect r=, uint c)
+{
+  .sdlp.fill(r=, c);
+}
+
+public void softFill(&.Rect r=, uint c)
+{
+  .sdlp.softFill(r=, c);
+}
+
+public bool renderMugenZoom(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, ^uint pal, short ckey, &.Rect sr=, float cx, float ty, &.Rect tile=, float xtopscl, float xbotscl, float yscl, float rasterxadd, uint roto, int alpha, int rle, %byte pluginbuf=)
+{
+  ret .sdlp.renderMugenZoom(:pxl, pal<>=, ckey, sr=, cx, ty, tile=, xtopscl, xbotscl, yscl, rasterxadd, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=:);
+}
+
+public bool renderMugenShadow(&.Rect dr=, float rcx, float rcy, ^ubyte pxl, uint color, &.Rect sr=, float cx, float ty, float xscl, float yscl, float vscl, uint roto, int alpha, int rle, %byte pluginbuf=)
+{
+  ret .sdlp.renderMugenShadow(pxl, color, sr=, cx, ty, xscl, yscl, vscl, roto, alpha, dr=, rcx, rcy, rle, pluginbuf=);
+}
+
+public bool renderFontBatch(^ubyte atlas, float baseX, float baseY, ^uint pal, int atlasStride, int glyphH, int alpha, &.Rect window=, float xscl, float yscl, float spacing, ^int glyphData, int count)
+{
+  ret .sdlp.renderFontBatch(:atlas<>=, baseX, baseY, pal<>=, atlasStride, glyphH, alpha, window=, xscl, yscl, spacing, glyphData<>=, count:);
+}
+
+public char getLastChar()
+{
+  ret .sdlp.getLastChar();
+}
+
+public ^ubyte decodePNG8(int w=, int h=, &.f.File file=)
+{
+  ^ubyte img;
+  .sdlp.decodePNG8(img=, w=, h=, file);
+  ret img;
+}
+
+public bool KeyState(|.SDLKey key)
+{
+  ret .sdlp.keyState(key);
+}
+
+public bool JoystickButtonState(int jn, int btn)
+{
+  ret .sdlp.joystickButtonState(jn, btn);
+}
+
+public int pollInputBitmask(
+  int jn,
+  int u, int d, int l, int r,
+  int a, int b, int c,
+  int x, int y, int z,
+  int q, int w, int e, int s,
+  int jn2,
+  int u2, int d2, int l2, int r2,
+  int a2, int b2, int c2,
+  int x2, int y2, int z2,
+  int q2, int w2, int e2, int s2,
+  int sec)
+{
+  ret .sdlp.pollInputBitmask(jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s, jn2, u2, d2, l2, r2, a2, b2, c2, x2, y2, z2, q2, w2, e2, s2, sec);
+}
+
+public void Delay(uint ms)
+{
+  .sdlp.delay(ms);
+}
+
+public uint GetTicks()
+{
+  ret .sdlp.getTicks();
+}
+
+public bool setSndBuf(^int buf)
+{
+  if(#buf != .SNDBUFLEN) ret false;
+  ret .sdlp.setSndBuf(:buf<>=:);
+}
+
+public int playVideo(int audiotrack, int volume, ^/char captures, ^/char fn)
+{
+  ret .sdlp.playVideo(audiotrack, volume, captures, fn);
+}
+
+public bool playBGM(^/char pldir, ^/char fn)
+{
+  ret .sdlp.playBGM(pldir, fn);
+}
+
+public void pauseBGM(bool pause)
+{
+  .sdlp.pauseBGM(pause);
+}
+
+// Deprecated: OGG streaming is now handled by PlayBGM via SDL_mixer.
+// These stubs are kept for ABI compatibility but do nothing.
+public bool sendOpenBGM(int rate, int channels)
+{
+  ret .sdlp.sendOpenBGM(rate, channels);
+}
+
+public void sendCloseBGM()
+{
+  .sdlp.sendCloseBGM();
+}
+
+public index sendWriteBGM(^/short buffer)
+{
+  ret .sdlp.sendWriteBGM(buffer);
+}
+
+public void fadeInBGM(int time)
+{
+  .sdlp.fadeInBGM(time);
+}
+
+public void fadeOutBGM(int time)
+{
+  .sdlp.fadeOutBGM(time);
+}
+
+public void setVolume(float gvol, float wvol, float bvol)
+{
+  .sdlp.setVolume(gvol, wvol, bvol);
+}
+
+public void setOpacity(float wo)
+{
+  .sdlp.setOpacity(wo);
+}
+
+public void drawTTF(^/char path, int align, ^/char text, int x, int y, float scaleX, float scaleY, int r, int g, int b, int alpha)
+{
+  .sdlp.drawTTF(path, align, text, x, y, scaleX, scaleY, r, g, b, alpha);
+}
+
+public bool init(^/char t, int w, int h, int renderer, bool mugen)
+{
+  ^/char rendererStr = "SDL2";
+  if(renderer == 1) rendererStr = "OpenGL";
+  if(renderer == 2) rendererStr = "OpenGL ES";
+  if(renderer == 3) rendererStr = "Vulkan";
+  ret .sdlp.init(t, w, h, rendererStr);
+}
+
+public int getWidth()
+{
+  ret .sdlp.getWidth();
+}
+
+public int getHeight()
+{
+  ret .sdlp.getHeight();
+}
+
+public void windowSize(int w, int h)
+{
+  .sdlp.windowSize(w, h);
+}
+
+public void fullScreenMode(bool fullReal)
+{
+  .sdlp.fullScreenMode(fullReal);
+}
+
+public bool fullScreen(bool full)
+{
+  ret .sdlp.fullScreen(full);
+}
+
+public void setWindowType(int state)
+{
+  .sdlp.setWindowType(state);
+}
+
+public void keepAspectRatio(bool aspect)
+{
+  .sdlp.keepAspectRatio(aspect);
+}
+
+public void takeScreenShot(^/char dir)
+{
+  .sdlp.takeScreenShot(dir);
+}
+
+public void showCursor(bool show)
+{
+  .sdlp.showCursor(show);
+}
+
+public void MugenFillGl(&.Rect r, uint c, int alpha)
+{
+  .sdlp.mugenFillGl(r, c, alpha);
+}
+
+public bool RenderMugenGl(&.GlTexture tex, uint pal=, int roto, &.Rect sr=, float cx, float ty, &.Rect tile=, float xtopscl, float xbotscl, float yscl, float rasterxadd, float xscl, float rxadd, int alpha, &.Rect window=, float rcx, float rcy)
+{
+  ret .sdlp.renderMugenGl(tex, pal=, roto, sr=, cx, ty, tile=, xtopscl, xbotscl, yscl, rasterxadd, xscl, rxadd, alpha, window=, rcx, rcy);
+}
+
+public bool RenderMugenGlFc(&.GlTexture tex, &.Rect rct=, float x, float y, &.Rect tile=, float xts, float xbs, float ys, float xscl, float rxadd, float agl, int trans, &.Rect window=, float rcx, float rcy, bool neg, float color, float ar, float ag, float ab, float mr, float mg, float mb)
+{
+  ret .sdlp.renderMugenGlFc(tex, rct=, x, y, tile=, xts, xbs, ys, xscl, rxadd, agl, trans, window=, rcx, rcy, neg, color, ar, ag, ab, mr, mg, mb);
+}
+
+public bool RenderMugenGlFcS(&.GlTexture tex, &.Rect rct=, float x, float y, &.Rect tile=, float xts, float xbs, float ys, float xscl, float rxadd, float agl, int trans, &.Rect window=, float rcx, float rcy, uint fcol)
+{
+  ret .sdlp.renderMugenGlFcS(tex, rct=, x, y, tile=, xts, xbs, ys, xscl, rxadd, agl, trans, window=, rcx, rcy, fcol);
+}
+
+public void GlSwapBuffers()
+{
+  .sdlp.glSwapBuffers();
+}
 
 public bool bindGlContext()
 {
-  plugin bool BindGlContext(::) = <sdlplugin>;
-  ret BindGlContext(::);
+  ret .sdlp.bindGlContext();
 }
 
 public bool unbindGlContext()
 {
-  plugin bool UnbindGlContext(::) = <sdlplugin>;
-  ret UnbindGlContext(::);
+  ret .sdlp.unbindGlContext();
 }
 
 public &UseGlContext
@@ -1011,12 +1029,10 @@ public &UseGlContext
 
 public void enablePerfMonitor(bool enable)
 {
-  plugin void EnablePerfMonitor(:bool:) = <sdlplugin>;
-  EnablePerfMonitor(:enable:);
+  .sdlp.enablePerfMonitor(enable);
 }
 
 public void getRendererInfo()
 {
-  plugin void GetRendererInfo(::) = <sdlplugin>;
-  GetRendererInfo(::);
+  .sdlp.getRendererInfo();
 }

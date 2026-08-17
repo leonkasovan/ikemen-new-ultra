@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**14 native libraries registered, 3 libraries intentionally remain in SSZ.**
+**15 native libraries registered, 3 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -27,6 +27,7 @@ stay in SSZ" below).
 | 12 | `socket` | `socket.cpp` | 🔀 **Hybrid** | Non-template `&Socket` methods; `recv<_t>`/`send<_t>`/`accept` stay in SSZ |
 | 13 | `base64` | `base64.cpp` | 🔀 **Hybrid** | Byte-level core (`uintToB64Char`/`b64CharToUint`/`encB64`/`decB64`); templates delegate for byte-sized types, SSZ bit-packing fallback for wide types |
 | 14 | `table` | `table.cpp` | 🔀 **Hybrid** | Concrete `hash` only; `NameTable`/`IntTable`/`intHash<_t>` stay in SSZ |
+| 15 | `sdlplugin` | `alpha/sdlplugin.cpp` | 🔀 **Hybrid** | Bridge to the static `<sdlplugin>` plugin; enabled by `|Enum`/`&Struct` support in `TypeNameToTokens`.  Module functions delegate natively; `&Surface`/`&Font`/`&GlTexture` methods keep in-body plugin decls, enums/structs/constants stay in SSZ |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
 | — | `stack` | — | ⏸ **Stays in SSZ** | 100% template data structure (`&Stack<_t>`/`&Node<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
@@ -56,6 +57,7 @@ template-bound by design (see below).
 | Regression suite | `bdd3a1c` | `test/ssz/*` + `test/run_ssz_tests.sh` (12 tests, frozen reference vectors) |
 | decBase64 fix | `a644791` | `(_t)` → `(*_t)` cast fix — `decBase64<_t>` compiles; suite covers round-trips |
 | Makefile test wiring | `d717a0f` | `make test` / `test-file` / `test-ssz` |
+| Enum/Struct native types | *(next commit)* | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
 
 ## Architecture
 
@@ -120,40 +122,40 @@ from source** with `_t` bound (`BlockOpen`/`MakeTree`, sourcetree.hpp ~5999) —
 that's why socket's in-body plugin declarations work. The native registry has no
 such re-parse.
 
-## Why `lib/alpha/*` stays in SSZ
+## `lib/alpha/*` — status after `|Enum`/`&Struct` support
 
 `ssz_script/lib/alpha/` holds **bridge/type-definition libs**, not logic libs —
-`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`, `sdlplugin.ssz` (fully
-researched, Aug 2026).  Each is a thin `plugin` bridge to an already-static
-plugin (`<lua>`, `<mesdialog>`, `<ogg>`, `<sdlplugin>`) plus the enums/structs
-that give the game its type vocabulary (`|EventType`, `|SDLKey`, `|K`,
-`|CodePage`, `&Event`, `&Rect`, `&Surface`, `&Font`, …).  Converting them is
-blocked by the native registry's signature parser (`TypeNameToTokens` in
-`main/ssz/native_lib.hpp`), which supports only primitives + `/X`, `^X`, `%X`,
-`=` — **not** `|Enum`, `&Struct`, `ref`, `func`, or dot-qualified types
-(`|.sdl.K`, `&.f.File`).  Every alpha lib needs at least one such type in its
-plugin signatures, and the synthesized henshuu's type string must exactly match
-the call-site types (e.g. `.sdl.PollEvent(:.sdle=:)` where `.sdle` is
-`&sdl.Event`), so 4 of the 5 cannot be expressed at all:
+`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`, `sdlplugin.ssz`.  Each is
+a thin `plugin` bridge to an already-static plugin (`<lua>`, `<mesdialog>`,
+`<ogg>`, `<sdlplugin>`) plus the enums/structs that give the game its type
+vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
 
-- **`sdlplugin.ssz`** — load-bearing for the whole game (`ikemen.ssz`,
-  `fighting.ssz`, `bg.ssz`, … import it); struct out-params like `&Event=` and
-  enum params are everywhere.
+`TypeNameToTokens` now understands `|Enum` and `&Struct` (encoded as
+AND_TOKEN/OR_TOKEN + the type's funclist class id, resolved like
+`PathtoClassID` via the `NativeTypeContext` callback the importing module
+supplies).  The synthesized henshuu's type string must exactly match the
+call-site types — the importing script must already have declared the
+referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
+
+- ✅ **`sdlplugin.ssz`** — **converted** (native bridge `alpha/sdlplugin.cpp`
+  re-exports the static plugin's fnptrs; the `.ssz` keeps enums/structs/
+  constants and delegates module functions like `PollEvent`/`KeyState`/
+  `renderMugenZoom`).  Verified: probe resolves `&Event=` out-params and
+  `(::)`/`(:` call sites; full game compiles clean.
 - **`sdlevent.ssz`** — game event-loop logic built entirely on `&sdl.Event` /
-  `|.sdl.K`.
+  `|.sdl.K`; only the `&Key` methods are convertible (stateful `event()`/
+  `eventUpdate()` touch module variables and stay in SSZ).
 - **`lua.ssz`** — core is `ref`/`func` delegates (`refSetNull`/`refCopy`,
-  `register(^/char, func$void(...))`).
-- **`mesdialog.ssz`** — `|CodePage`-typed signatures plus the `veryUnsafeCopy`
-  template (used by `common.ssz`/`char.ssz`), which is template-bound by
-  definition.
-- **`ogg.ssz`** — structurally convertible (all 8 signatures use expressible
-  types, and a native lib name `ogg` would not collide with the `<ogg>` plugin
-  registry), but it is **dead code** — `ssz/sound.ssz` removed the import
-  ("SDL_mixer handles OGG").  Converting it would only duplicate the static
-  plugin it bridges.
+  `register(^/char, func$void(...))`) — still not expressible.
+- **`mesdialog.ssz`** — `|CodePage`-typed signatures are now expressible, but
+  the `veryUnsafeCopy` template (used by `common.ssz`/`char.ssz`) is
+  template-bound by definition.
+- **`ogg.ssz`** — structurally convertible, but **dead code** — `ssz/sound.ssz`
+  removed the import ("SDL_mixer handles OGG").  Converting it would only
+  duplicate the static plugin it bridges.
 
-The plugins these libs bridge are already static C++; leaving the bridges in
-SSZ costs nothing at runtime and keeps the type vocabulary intact.
+Bridge libs are already static C++ behind the scenes; the remaining SSZ
+type-vocabulary surface stays put.
 
 ## Known fixes / gotchas worth remembering
 
@@ -180,12 +182,14 @@ SSZ costs nothing at runtime and keeps the type vocabulary intact.
 
 ## Remaining / next steps
 
-- The 14 convertible `lib/` libs are done, and `lib/alpha/` is intentionally
-  left in SSZ (bridge/type libs — see above).  Future engine work would require
-  JIT support for `TYPE_TOKEN` resolution in native signatures (to port
-  `stack`/`table`) or `DynamicRef` frame slots (to hold `^null` data);
-  converting `alpha/` would additionally need `|Enum`/`&Struct`/`ref`/`func` in
-  `TypeNameToTokens`.
+- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` is now
+  a native bridge (`|Enum`/`&Struct` landed in `TypeNameToTokens`).  Remaining
+  SSZ surface: `sdlevent`'s stateful event loop, `lua`/`mesdialog` (need
+  `ref`/`func` signatures), `ogg` (dead code), and the template-bound
+  `consts`/`stack`/`alert`.  Future engine work would require JIT support for
+  `TYPE_TOKEN` resolution in native signatures (to port `stack`/`table`) or
+  `DynamicRef` frame slots (to hold `^null` data), and `ref`/`func` in
+  `TypeNameToTokens` for `lua.ssz`.
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
   exercised but only `int`/`short` are in the regression test — `long`/`float`
   round-trips could be added.
