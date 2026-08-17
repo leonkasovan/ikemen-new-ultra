@@ -1,0 +1,71 @@
+// sdlevent regression test — native &Key methods (ssz_script/lib/alpha/sdlevent.cpp)
+//   reset() clears `down`; checkDown(k, m) sets `down` when the key AND the
+//   shift/ctrl/alt modifier expectations all match the SDL key-modifier mask.
+//   The struct stays in SSZ; the methods delegate to the native lib, whose
+//   signatures use the dot-qualified |.sdl.K enum type.
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib sdl = <alpha/sdlplugin.ssz>;
+lib ev = <alpha/sdlevent.ssz>;
+
+^/char r = "";
+public %&ev.Key keys;
+keys.new(2);
+
+// Case 1: key 'a', no modifiers, no mods held -> true
+keys[0].key = .sdl.K::a;
+keys[0].shift = false;
+keys[0].ctrl = false;
+keys[0].alt = false;
+keys[0].reset();
+keys[0].checkDown(.sdl.K::a, 0x0000);
+r = r + .s.uToSx((ulong)(int)keys[0].down);
+r = r + "|";
+// Case 2: wrong key -> false
+keys[0].reset();
+keys[0].checkDown(.sdl.K::b, 0x0000);
+r = r + .s.uToSx((ulong)(int)keys[0].down);
+r = r + "|";
+// Case 3: key expects shift, but no shift held -> false
+keys[1].key = .sdl.K::UP;
+keys[1].shift = true;
+keys[1].ctrl = false;
+keys[1].alt = false;
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0000);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 4: shift held (KMOD_LSHIFT=0x1) -> true
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0001);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 5: ctrl held but key does not expect ctrl (KMOD_RCTRL=0x80) -> false
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0080);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 6: ctrl held but shift still true from case 3 -> false
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0040);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 7: ctrl held, shift=false, ctrl=true (KMOD_LCTRL=0x40) -> true
+keys[1].shift = false;
+keys[1].ctrl = true;
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0040);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 8: alt held, ctrl=false, alt=true (KMOD_RALT=0x200) -> true
+keys[1].ctrl = false;
+keys[1].alt = true;
+keys[1].reset();
+keys[1].checkDown(.sdl.K::UP, 0x0200);
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+// Case 9: reset clears down
+keys[1].reset();
+r = r + .s.uToSx((ulong)(int)keys[1].down);
+r = r + "|";
+.f.saveAsciiText("sdleventtest_out.txt", r);

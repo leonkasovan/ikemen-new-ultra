@@ -2,6 +2,12 @@
 lib sdl = <alpha/sdlplugin.ssz>;
 lib sh = <shell>;
 
+// ── Native sdlevent library ───────────────────────────────────────────────
+// The &Key methods below delegate to ssz_script/lib/alpha/sdlevent.cpp; the
+// stateful event()/eventUpdate() functions stay in SSZ (they drive module
+// state through the event struct and dozens of key flags).
+lib ev = <sdlevent>;
+
 uint nexttime = 0x0, lastdraw = 0x0;
 float nexttimeFractionalPart = 0.0;
 public &sdl.Event sdle;
@@ -28,18 +34,11 @@ public &Key
   public bool down = false;
   public void reset()
   {
-    `down = false;
+    .ev.keyReset(`down=);
   }
   public void checkDown(|.sdl.K k, ushort m)
   {
-    `down |=
-       `key == k
-       && `shift == (
-         (m & (.sdl.KMOD_LSHIFT | .sdl.KMOD_RSHIFT)) != 0x0)
-       && `ctrl == (
-         (m & (.sdl.KMOD_LCTRL | .sdl.KMOD_RCTRL)) != 0x0)
-       && `alt == (
-         (m & (.sdl.KMOD_LALT | .sdl.KMOD_RALT)) != 0x0);
+    .ev.keyCheckDown(`key=, `shift=, `ctrl=, `alt=, `down=, k, m);
   }
 }
 

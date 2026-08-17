@@ -36,6 +36,7 @@ extern "C" bool socket_lib_register();
 extern "C" bool base64_lib_register();
 extern "C" bool table_lib_register();
 extern "C" bool sdlplugin_lib_register();
+extern "C" bool sdlevent_lib_register();
 
 
 #include <stdio.h>
@@ -484,6 +485,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!sdlplugin_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'sdlplugin'");
+		return 1;
+	}
+	if (!sdlevent_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'sdlevent'");
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");

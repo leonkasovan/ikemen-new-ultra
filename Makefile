@@ -141,7 +141,8 @@ NATIVE_LIB_SRCS = \
   ssz_script/lib/socket.cpp \
   ssz_script/lib/base64.cpp \
   ssz_script/lib/table.cpp \
-  ssz_script/lib/alpha/sdlplugin.cpp
+  ssz_script/lib/alpha/sdlplugin.cpp \
+  ssz_script/lib/alpha/sdlevent.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 

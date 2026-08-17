@@ -150,15 +150,15 @@ variable is for SSZ-side interface parity.
 
 **Conversion status:** the full per-library breakdown (native surface, what
 stays in SSZ, phase history, known gotchas) lives in **`PROGRESS.md`**.  In
-short: **15 native libraries registered** — `time`, `shell`, `thread` are
+short: **16 native libraries registered** — `time`, `shell`, `thread` are
 fully native; `math`, `string`, `md5`, `arcfour`, `file`, `regex`, `sound`,
-`ssz`, `socket`, `base64`, `table`, `sdlplugin` are native cores consumed via
-delegation from a thin `.ssz` wrapper (which keeps templates, list-returners,
-`&Format`-style struct containers, and — for `sdlplugin` — the
-enums/structs/constants in SSZ); `consts`, `stack`, `alert` stay in SSZ
-entirely (template-bound, see below).  `sdlplugin` is the first alpha-lib
-bridge to go native, enabled by `|Enum`/`&Struct` support in
-`TypeNameToTokens` (native_lib.hpp).  Sources live in
+`ssz`, `socket`, `base64`, `table`, `sdlplugin`, `sdlevent` are native cores
+consumed via delegation from a thin `.ssz` wrapper (which keeps templates,
+list-returners, `&Format`-style struct containers, and — for the alpha
+bridges — the enums/structs/constants in SSZ); `consts`, `stack`, `alert`
+stay in SSZ entirely (template-bound, see below).  `sdlplugin`/`sdlevent` are
+the first alpha-lib bridges to go native, enabled by `|Enum`/`&Struct`
+support in `TypeNameToTokens` (native_lib.hpp).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
@@ -214,9 +214,10 @@ bridge to an already-static plugin (`<lua>`, `<mesdialog>`, `<ogg>`,
   and the `.ssz` delegates module functions while keeping the types.  The
   importing module must declare the referenced types before
   `lib sdlp = <sdlplugin>;`, and call sites use the `(::)`/`(:` forms.
-- **`sdlevent.ssz`** — event-loop logic built on `&sdl.Event`/`|.sdl.K`;
-  only the `&Key` methods are convertible (stateful `event()`/`eventUpdate()`
-  stay in SSZ).
+- ✅ **`sdlevent.ssz`** — **partially converted**: the `&Key` methods
+  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) delegate to
+  `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop stays in
+  SSZ (module-variable state).
 - **`lua.ssz`** / **`mesdialog.ssz`** — still blocked: signatures need `ref` /
   `func` delegates (and `mesdialog`'s `veryUnsafeCopy` is template-bound).
 - **`ogg.ssz`** — structurally convertible but dead code (`ssz/sound.ssz`

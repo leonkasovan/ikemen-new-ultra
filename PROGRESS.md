@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**15 native libraries registered, 3 libraries intentionally remain in SSZ.**
+**16 native libraries registered, 3 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -28,6 +28,7 @@ stay in SSZ" below).
 | 13 | `base64` | `base64.cpp` | 🔀 **Hybrid** | Byte-level core (`uintToB64Char`/`b64CharToUint`/`encB64`/`decB64`); templates delegate for byte-sized types, SSZ bit-packing fallback for wide types |
 | 14 | `table` | `table.cpp` | 🔀 **Hybrid** | Concrete `hash` only; `NameTable`/`IntTable`/`intHash<_t>` stay in SSZ |
 | 15 | `sdlplugin` | `alpha/sdlplugin.cpp` | 🔀 **Hybrid** | Bridge to the static `<sdlplugin>` plugin; enabled by `|Enum`/`&Struct` support in `TypeNameToTokens`.  Module functions delegate natively; `&Surface`/`&Font`/`&GlTexture` methods keep in-body plugin decls, enums/structs/constants stay in SSZ |
+| 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) native; stateful `event()`/`eventUpdate()` stay in SSZ |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
 | — | `stack` | — | ⏸ **Stays in SSZ** | 100% template data structure (`&Stack<_t>`/`&Node<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
@@ -57,7 +58,8 @@ template-bound by design (see below).
 | Regression suite | `bdd3a1c` | `test/ssz/*` + `test/run_ssz_tests.sh` (12 tests, frozen reference vectors) |
 | decBase64 fix | `a644791` | `(_t)` → `(*_t)` cast fix — `decBase64<_t>` compiles; suite covers round-trips |
 | Makefile test wiring | `d717a0f` | `make test` / `test-file` / `test-ssz` |
-| Enum/Struct native types | *(next commit)* | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
+| Enum/Struct native types | `6f49edd` | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
+| sdlevent &Key | *(next commit)* | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
 
 ## Architecture
 
@@ -142,9 +144,11 @@ referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
   constants and delegates module functions like `PollEvent`/`KeyState`/
   `renderMugenZoom`).  Verified: probe resolves `&Event=` out-params and
   `(::)`/`(:` call sites; full game compiles clean.
-- **`sdlevent.ssz`** — game event-loop logic built entirely on `&sdl.Event` /
-  `|.sdl.K`; only the `&Key` methods are convertible (stateful `event()`/
-  `eventUpdate()` touch module variables and stay in SSZ).
+- ✅ **`sdlevent.ssz`** — **partially converted**: the `&Key` methods
+  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) delegate to the
+  native `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop
+  (module-variable state: `nexttime`, `lastdraw`, dozens of key flags, the
+  `sdle` event struct) stays in SSZ.  Verified by `test/ssz/sdleventtest.ssz`.
 - **`lua.ssz`** — core is `ref`/`func` delegates (`refSetNull`/`refCopy`,
   `register(^/char, func$void(...))`) — still not expressible.
 - **`mesdialog.ssz`** — `|CodePage`-typed signatures are now expressible, but
@@ -172,24 +176,25 @@ type-vocabulary surface stays put.
 ## Testing
 
 - **SSZ suite**: `test/ssz/*.ssz` with frozen `test/ssz/*.expected` references,
-  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  12 tests cover
-  12 of the 14 native libs (sound is device-dependent — checks completion, not
+  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  13 tests cover
+  13 of the 16 native libs (sound is device-dependent — checks completion, not
   values; `shell`/`string` have no dedicated test — `string`'s `sToU8`/`u8ToS`
-  are exercised indirectly by `basetest`/`md5test`).
+  are exercised indirectly by `basetest`/`md5test`; `sdleventtest` covers the
+  native `&Key` methods).
 - **C++ smoke test**: `test/test_file.cpp` (40 checks) — `make test-file`.
 - **Makefile**: `make test` = `test-file` + `test-ssz` (the latter forces a
   `CONFIG=Debug install` so the runner finds `install/ikemen-debug.exe`).
 
 ## Remaining / next steps
 
-- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` is now
-  a native bridge (`|Enum`/`&Struct` landed in `TypeNameToTokens`).  Remaining
-  SSZ surface: `sdlevent`'s stateful event loop, `lua`/`mesdialog` (need
-  `ref`/`func` signatures), `ogg` (dead code), and the template-bound
-  `consts`/`stack`/`alert`.  Future engine work would require JIT support for
-  `TYPE_TOKEN` resolution in native signatures (to port `stack`/`table`) or
-  `DynamicRef` frame slots (to hold `^null` data), and `ref`/`func` in
-  `TypeNameToTokens` for `lua.ssz`.
+- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` is a
+  native bridge and `sdlevent`'s `&Key` methods are native (`|Enum`/`&Struct`
+  landed in `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful
+  event loop, `lua`/`mesdialog` (need `ref`/`func` signatures), `ogg` (dead
+  code), and the template-bound `consts`/`stack`/`alert`.  Future engine work
+  would require JIT support for `TYPE_TOKEN` resolution in native signatures
+  (to port `stack`/`table`) or `DynamicRef` frame slots (to hold `^null`
+  data), and `ref`/`func` in `TypeNameToTokens` for `lua.ssz`.
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
   exercised but only `int`/`short` are in the regression test — `long`/`float`
   round-trips could be added.
