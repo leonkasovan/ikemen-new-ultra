@@ -2,6 +2,7 @@
 #include <string>
 
 #include "static_plugin_registry.hpp"
+#include "native_lib.hpp"
 
 // This tells std::cout how to handle std::wstring automatically
 inline std::ostream& operator<<(std::ostream& os, const std::wstring& wstr) {
@@ -4383,6 +4384,33 @@ ELSE:
 				oldsst = src.sst;
 				switch (ki = src.GetToken(hkishiki)) {
 				case SHOUKAKKOOPEN_TOKEN:
+					// `(` after a name normally routes to the funclist
+					// (NanikaPath).  Native library members are plugin-typed
+					// henshuu, so try that resolution first — if the name
+					// resolves to a plugin member, emit a plugin call.
+					{
+						name.clear();
+						name.append(src.source + oldsst.t, oldsst.i - oldsst.t);
+						if (
+							(phs = GetHensuuIndex(name, hidx, false))
+							&& phs->type[0] == PLUGIN_TOKEN)
+						{
+							if (frp == root) {
+								tk += GLOBAL_TOKEN;
+							}
+							else if (frp == hkishiki.frp->parent) {
+								tk += MEMBER_TOKEN;
+							}
+							tk += ~hidx;
+							tk += SHOUKAKKOOPEN_TOKEN;
+							if (
+								!hkishiki.Shiki(
+									tk, src, NULL_TOKEN, src.GetToken(hkishiki),
+									SHOUKAKKOCLOSE_TOKEN)) return false;
+							tk += SHOUKAKKOCLOSE_TOKEN;
+							break;
+						}
+					}
 				case EXCLAMATION_TOKEN:
 				case COLOCOLO_TOKEN:
 					COLOYAJIRUSHI:
@@ -4421,14 +4449,19 @@ ELSE:
 					}
 					tk += ~hidx;
 					if (phs->type[0] == PLUGIN_TOKEN) {
-						if (ki != KAKKOCOLOOPEN_TOKEN) {
-							return gaarimasen(src, L("(:"));
+						// Plugin-typed members accept both `(:` and `(` call
+						// syntax.  `(:` is the classic plugin form; `(` is used
+						// by native (C++) library members.  Both compile to the
+						// same token stream (plugin call with a return slot).
+						if (ki != KAKKOCOLOOPEN_TOKEN && ki != SHOUKAKKOOPEN_TOKEN) {
+							return gaarimasen(src, L("("));
 						}
-						tk += KAKKOCOLOOPEN_TOKEN;
+						tk += ki;
 						if (
 							!hkishiki.Shiki(
 								tk, src, NULL_TOKEN, src.GetToken(hkishiki),
-								KAKKOCOLOCLOSE_TOKEN)) return false;
+								ki == KAKKOCOLOOPEN_TOKEN
+								? KAKKOCOLOCLOSE_TOKEN : SHOUKAKKOCLOSE_TOKEN)) return false;
 						tk += SHOUKAKKOCLOSE_TOKEN;
 						break;
 					}
@@ -5396,6 +5429,57 @@ ELSE:
 		}
 		return true;
 	}
+	// Resolve `<name>` to a registered native (C++) library.  If found,
+	// synthesize a module SourceTree exposing each native function as a
+	// plugin-typed henshuu (same representation the parser produces for
+	// `plugin ... = <name>`), and cache it in srclist under `path`.
+	// Returns nullptr when `name` is not a registered native library.
+	MEMBER SourceTree* NativeLibFrom(Src& src, const std::WSTR& path)
+	{
+		// Extract the bare library name from the resolved path
+		// (e.g. ".../lib/time" -> "time", ".../lib/alpha/sdlevent.ssz" -> "sdlevent").
+		std::WSTR base;
+		for(intptr_t i = IDX(path.size()) - 1; i >= 0; i--){
+			if(path[i] == L('/') || path[i] == L('\\')) break;
+			base.insert(base.begin(), path[i]);
+		}
+		auto dot = base.find_last_of(L('.'));
+		if(dot != std::WSTR::npos) base.resize(dot);
+		std::string nm;
+		for(intptr_t i = 0; i < IDX(base.size()); i++){
+			if(base[i] > 255) return nullptr;
+			nm += (char)base[i];
+		}					const auto* lib = NativeLib::FindLibrary(nm);
+					if(lib == nullptr) return nullptr;
+
+		// Already synthesized?
+		auto fi = stat->srclist.find(path);
+		if(fi != stat->srclist.end()) return fi->second;
+
+		// Build a fresh module SourceTree.
+		auto* m = new SourceTree(stat);
+		m->srce->filename = path;
+		m->kakutei = true;
+		m->myname = base;				m->srce->setNextLast();
+				for(auto& fn : lib->functions){
+			std::vector<intptr_t> tyv;
+			if(!NativeLib::BuildPluginType(fn.signature, tyv)){
+				delete m;
+				return nullptr;
+			}
+			std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
+			ty += (intptr_t)fn.fnptr;
+			std::WSTR fname;
+			for(char c : fn.name) fname += (WCHR)c;
+			if(!m->AddHensuu(ty, fname, 0, *m->srce)){
+				delete m;
+				return nullptr;
+			}
+		}
+		stat->srclist.insert(
+			std::pair<std::WSTR, SourceTree*>(path, m));
+		return m;
+	}
 	MEMBER SourceTree* LibNanika(Src &src, SourceTree &hkishiki, bool pub)
 	{
 		SourceTree *ret = nullptr;
@@ -5409,6 +5493,20 @@ ELSE:
 			{
 				std::WSTR name;
 				if (!hkishiki.LibPath(src, name)) return nullptr;
+				// Native (C++) library fallback: only bare `<name>` forms
+				// (no `.ssz` extension) resolve from the native registry.
+				// `<name.ssz>` always reads the real script file.
+				if (
+					kin == SHOU_TOKEN
+					&& name.size() >= 4
+					&& name.compare(name.size()-4, 4, L(".ssz")) != 0
+					&& NativeLibFrom(src, name) != nullptr)
+				{
+					// A registered native (C++) library — synthesized module
+					// SourceTree is already in srclist under `name`.
+					ret = stat->srclist[name];
+					return ret;
+				}
 				if (stat->srclist.find(name) != stat->srclist.end()) {
 					if (!root->kakutei) {
 						auto pst = stat->srclist[name];

@@ -5102,9 +5102,18 @@ class JITer
 			}
 			tmpb = ty[idx] == AND_TOKEN;
 			if ((typ.id = TokenToTypeId(ty.data(), idx)) == UNKNOWN_TYPEID){
-				if(ty[0] != PLUGIN_TOKEN || iap[i+1] != KAKKOCOLOOPEN_TOKEN){
+				// Plugin-typed members accept both `(:` (classic plugin form)
+				// and `(` (native / C++ library members) call syntax.  Both
+				// compile to the same PluginCall with a return slot.
+				if(
+					ty[0] != PLUGIN_TOKEN || (
+						iap[i+1] != KAKKOCOLOOPEN_TOKEN
+						&& iap[i+1] != SHOUKAKKOOPEN_TOKEN))
+				{
 					return false;
 				}
+				// Both `(:` and `(` are encoded as ~hidx followed by the
+				// opener token — skip both to land on the first argument.
 				i += 2;
 				if(!pjtr->bin.tPush(ktype.id)) return false;
 				ktype.id = VOID_TYPEID;

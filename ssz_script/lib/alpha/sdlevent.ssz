@@ -1,6 +1,6 @@
 ﻿lib cfg = "../../save/config.ssz";
 lib sdl = <alpha/sdlplugin.ssz>;
-lib sh = <shell.ssz>;
+lib sh = <shell>;
 
 uint nexttime = 0x0, lastdraw = 0x0;
 float nexttimeFractionalPart = 0.0;

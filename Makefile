@@ -123,6 +123,15 @@ MAIN_SRCS = \
 
 MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 
+# Native (C++) SSZ libraries — compiled into the engine and registered
+# into the SSZ native-lib registry (main/ssz/native_lib.hpp) so that
+# `lib name = <name>` resolves without a .ssz file.
+NATIVE_LIB_SRCS = \
+  ssz_script/lib/time.cpp \
+  ssz_script/lib/shell.cpp
+
+NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
+
 # Static plugin registration headers — included only by main.cpp.
 # Each header maps one plugin's exported functions into the SSZ static registry.
 PLUGIN_HEADERS = \
@@ -610,9 +619,9 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
-$(TARGET): $(MAIN_OBJS) $(ALL_LIBS)
+$(TARGET): $(MAIN_OBJS) $(NATIVE_LIB_OBJS) $(ALL_LIBS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) $(NATIVE_LIB_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
 ifeq ($(CONFIG),Release)
 	$(W64DEVKIT)/bin/strip --strip-all $@
 endif
@@ -623,9 +632,29 @@ $(BLD)/main/%.o: $(MAIN)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+# SSZ compiler headers — ssz.cpp / bridge.cpp include them directly, so
+# rebuild those objects whenever any of them changes.
+SSZ_HEADERS = \
+  $(SSZ)/sourcetree.hpp \
+  $(SSZ)/jitcompiler.hpp \
+  $(SSZ)/x86.hpp \
+  $(SSZ)/source.hpp \
+  $(SSZ)/tokenkind.h \
+  $(SSZ)/typeid.h \
+  $(SSZ)/sszdef.h \
+  $(SSZ)/native_lib.hpp
+
+$(BLD)/main/ssz/ssz.o: $(SSZ_HEADERS)
+$(BLD)/main/ssz/bridge.o: $(SSZ_HEADERS)
+
 # main.cpp includes every plugin registration header, so rebuild it when
 # any of them changes.
 $(BLD)/main/main.o: $(PLUGIN_HEADERS)
+
+# ---- Native SSZ libraries (C++) ----
+$(BLD)/nativelib/%.o: ssz_script/lib/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 
 # ---- SDL2 (C) ----

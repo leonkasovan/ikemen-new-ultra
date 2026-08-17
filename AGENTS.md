@@ -57,6 +57,68 @@ away from `<dll/xxx.dll>` when the static plugin system replaced the DLLs.
 
 ---
 
+## Native SSZ Libraries (C++)
+
+SSZ **library modules** (`lib ... = <name>;` statements) can also be implemented
+entirely in C++ instead of `.ssz` files. When a script writes
+
+```ssz
+lib time = <time>;
+```
+
+and no `lib/time.ssz` file exists, the compiler resolves `<time>` through the
+**native library registry** (`main/ssz/native_lib.hpp`) and synthesizes a module
+from C++ function pointers — no `.ssz` file is required. This is how the SSZ
+script libraries are progressively converted to native code:
+
+| Declaration | Resolution |
+|---|---|
+| `lib time = <time.ssz>;` | Read the script file `lib/time.ssz` |
+| `lib time = <time>;` (no `.ssz`) | Native C++ library via `NativeLib::FindLibrary("time")` — falls back to a file read if no such native library is registered |
+
+### Anatomy of a native library
+
+Each native library lives in `ssz_script/lib/<name>.cpp` and follows the plugin
+ABI (see `main/ssz/native_lib.hpp`):
+
+```cpp
+// ssz_script/lib/time.cpp
+static uint32_t SSZ_STDCALL TickCount(PluginUtil*);   // first arg is always PluginUtil*
+static int64_t  SSZ_STDCALL UnixTime(PluginUtil*);
+
+extern "C" bool time_lib_register()
+{
+    NativeLib::NativeFunction funcs[] = {
+        { "tickCount", "uint ()",        (void*)TickCount },   // name, SSZ signature, fn ptr
+        { "unixTime",  "long ()",        (void*)UnixTime  },
+    };
+    NativeLib::NativeLibrary lib;
+    lib.name = "time";
+    for (auto& f : funcs) lib.functions.push_back(f);
+    return NativeLib::RegisterLibrary(lib);
+}
+```
+
+The signature strings describe the SSZ view of each function (e.g. `"long (long,
+long)"` for `long div(long, long)`) and are tokenized into a plugin-typed
+henshuu, so calls like `time.tickCount()` are type-checked and JIT-compiled
+exactly like `plugin` calls. Native members accept both `(:` and plain `(` call
+syntax.
+
+### Wiring a new native library
+
+1. Create `ssz_script/lib/<name>.cpp` with `extern "C" bool <name>_lib_register()`.
+2. Add it to `NATIVE_LIB_SRCS` in the `Makefile`.
+3. Declare and call `<name>_lib_register()` in `main/main.cpp` before the SSZ
+   compiler runs (alongside the plugin registrations).
+4. Change the consuming script to `lib <name> = <name>;` and keep the original
+   `.ssz` aside (e.g. `time.ssz.bak`) for comparison.
+
+Current native libraries: `time` (`ssz_script/lib/time.cpp`), `shell`
+(`ssz_script/lib/shell.cpp`).
+
+---
+
 ## Build Instructions
 
 ### Windows — w64devkit (MinGW/GCC, recommended)

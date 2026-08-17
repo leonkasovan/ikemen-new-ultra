@@ -20,6 +20,10 @@
 #include "thread/thread_plugin.hpp"
 #include "time/time_plugin.hpp"
 
+// Native (C++) SSZ libraries (e.g. ssz_script/lib/time.cpp).
+extern "C" bool time_lib_register();
+extern "C" bool shell_lib_register();
+
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -405,6 +409,19 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");
+
+	// ── Native (C++) SSZ libraries ────────────────────────────────
+	// Registered into the native-lib registry (main/ssz/native_lib.hpp)
+	// so `lib name = <name>` resolves to C++ code (e.g. ssz_script/lib/time.cpp).
+	if (!time_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'time'");
+		return 1;
+	}
+	if (!shell_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'shell'");
+		return 1;
+	}
+	LOG_DEBUG("SSZ", "Native SSZ libraries registered successfully");
 
 	updateCharInSelectDef("data/select.def");
 	updateStageInSelectDef("data/select.def");

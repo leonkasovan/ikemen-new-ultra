@@ -4,7 +4,7 @@ lib cfg = "../save/config.ssz";
 lib consts = <consts.ssz>;
 lib file = <file.ssz>;
 lib m = <math.ssz>;
-lib sh = <shell.ssz>;
+lib sh = <shell>;
 lib s = <string.ssz>;
 
 //Load "lib/alpha/" Scripts
