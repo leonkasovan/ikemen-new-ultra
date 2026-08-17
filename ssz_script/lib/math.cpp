@@ -1,13 +1,14 @@
 // ============================================================================
 // math.cpp — native (C++) implementation of the SSZ `math` PRNG core.
 //
-// Consumed from ssz_script/lib/math.ssz, which keeps the template functions
-// (min/max/inRange/limMax/limMin/limRange/swap) and the trig plugin wrappers
-// in SSZ and delegates its PRNG core here:
+// Consumed from ssz_script/lib/math.ssz, which keeps only the template
+// functions (min/max/inRange/limMax/limMin/limRange/swap) in SSZ and
+// delegates everything else here:
 //
 //     lib mn = <math>;
 //     ...
 //     public int random() { ret .mn.random(); }
+//     public double sin(double x) { ret .mn.sin(x); }
 //
 // The module is resolved by the native-lib registry (main/ssz/native_lib.hpp).
 // Every function below follows the plugin ABI:
@@ -22,9 +23,12 @@
 // The PRNG is the Park–Miller minimal standard generator, ported verbatim
 // from the original math.ssz (same constants and update rule, seed derived
 // from the current time).  `randseed` is also registered as a module variable
-// for interface parity with the original module.
+// for interface parity with the original module.  The trig/round/classification
+// functions wrap <cmath> (isfinite/isinf/isnan via std::, replacing the
+// Windows-only _finite/_isnan used by the old main/math plugin).
 // ============================================================================
 
+#include <cmath>
 #include <cstdint>
 #include <ctime>
 
@@ -108,6 +112,52 @@ static float SSZ_STDCALL MathLibRandF(PluginUtil*, float y, float x)
 }
 
 // ---------------------------------------------------------------------------
+// Trigonometry and rounding (plugin ABI — args arrive reversed)
+// ---------------------------------------------------------------------------
+
+// SSZ: public double sin(double x)  (and cos/tan/asin/acos/atan)
+static double SSZ_STDCALL MathLibSin(PluginUtil*, double x)  { return std::sin(x);  }
+static double SSZ_STDCALL MathLibCos(PluginUtil*, double x)  { return std::cos(x);  }
+static double SSZ_STDCALL MathLibTan(PluginUtil*, double x)  { return std::tan(x);  }
+static double SSZ_STDCALL MathLibASin(PluginUtil*, double x) { return std::asin(x); }
+static double SSZ_STDCALL MathLibACos(PluginUtil*, double x) { return std::acos(x); }
+static double SSZ_STDCALL MathLibATan(PluginUtil*, double x) { return std::atan(x); }
+
+// SSZ: public double log(double x, double y)  — logarithm of x in base y
+static double SSZ_STDCALL MathLibLog(PluginUtil*, double y, double x)
+{
+	return std::log(x) / std::log(y);
+}
+
+// SSZ: public double ln(double x)
+static double SSZ_STDCALL MathLibLn(PluginUtil*, double x) { return std::log(x); }
+
+// SSZ: public double exp(double x)
+static double SSZ_STDCALL MathLibExp(PluginUtil*, double x) { return std::exp(x); }
+
+// SSZ: public double sqrt(double x)
+static double SSZ_STDCALL MathLibSqrt(PluginUtil*, double x) { return std::sqrt(x); }
+
+// SSZ: public double ceil(double x)
+static double SSZ_STDCALL MathLibCeil(PluginUtil*, double x) { return std::ceil(x); }
+
+// SSZ: public double floor(double x)
+static double SSZ_STDCALL MathLibFloor(PluginUtil*, double x) { return std::floor(x); }
+
+// SSZ: public double round(double x)  — half away from zero, ported verbatim
+// from the original math.ssz:  x < 0 ? -.floor(0.5 - x) : .floor(0.5 + x)
+static double SSZ_STDCALL MathLibRound(PluginUtil*, double x)
+{
+	return x < 0.0 ? -std::floor(0.5 - x) : std::floor(0.5 + x);
+}
+
+// SSZ: public bool isfinite(double x)  (and isinf/isnan)
+static bool SSZ_STDCALL MathLibIsFinite(PluginUtil*, double x) { return std::isfinite(x); }
+static bool SSZ_STDCALL MathLibIsInf(PluginUtil*, double x)    { return std::isinf(x);    }
+static bool SSZ_STDCALL MathLibIsNaN(PluginUtil*, double x)    { return std::isnan(x);    }
+
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -121,6 +171,22 @@ extern "C" bool math_lib_register()
 		{ "rand",   "int (int, int)",     (void*)MathLibRand   },
 		{ "randI",  "int (int, int)",     (void*)MathLibRandI  },
 		{ "randF",  "float (float, float)", (void*)MathLibRandF },
+		{ "sin",    "double (double)",      (void*)MathLibSin     },
+		{ "cos",    "double (double)",      (void*)MathLibCos     },
+		{ "tan",    "double (double)",      (void*)MathLibTan     },
+		{ "asin",   "double (double)",      (void*)MathLibASin    },
+		{ "acos",   "double (double)",      (void*)MathLibACos    },
+		{ "atan",   "double (double)",      (void*)MathLibATan    },
+		{ "log",    "double (double, double)", (void*)MathLibLog  },
+		{ "ln",     "double (double)",      (void*)MathLibLn      },
+		{ "exp",    "double (double)",      (void*)MathLibExp     },
+		{ "sqrt",   "double (double)",      (void*)MathLibSqrt    },
+		{ "ceil",   "double (double)",      (void*)MathLibCeil    },
+		{ "floor",  "double (double)",      (void*)MathLibFloor   },
+		{ "round",  "double (double)",      (void*)MathLibRound   },
+		{ "isfinite", "bool (double)",      (void*)MathLibIsFinite },
+		{ "isinf",    "bool (double)",      (void*)MathLibIsInf   },
+		{ "isnan",    "bool (double)",      (void*)MathLibIsNaN   },
 	};
 	static const NativeLib::NativeVariable vars[] = {
 		// Private, like the original math.ssz declaration.  The PRNG state

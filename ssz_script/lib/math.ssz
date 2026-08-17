@@ -1,7 +1,9 @@
 lib consts = <consts.ssz>;
-// Native PRNG core (random/srand/rand/randI/randF + randseed state) —
-// implemented in C++ at ssz_script/lib/math.cpp.  The template functions
-// (min/max/...) and trig plugin wrappers below stay in SSZ.
+// Native core — PRNG (random/srand/rand/randI/randF + randseed state),
+// trig (sin/cos/tan/asin/acos/atan/log/ln/exp/sqrt/ceil/floor/round), and
+// classification (isfinite/isinf/isnan) — implemented in C++ at
+// ssz_script/lib/math.cpp.  Only the template functions (min/max/...) stay
+// in SSZ.
 lib mn = <math>;
 
 const double PI = 3.141592653589793238462643383279502884197;
@@ -9,98 +11,82 @@ const double E  = 2.718281828459045235360287471352662497757;
 
 public double sin(double x)
 {
-  plugin double Sin(:double:) = <math>;
-  ret Sin(:x:);
+  ret .mn.sin(x);
 }
 
 public double cos(double x)
 {
-  plugin double Cos(:double:) = <math>;
-  ret Cos(:x:);
+  ret .mn.cos(x);
 }
 
 public double tan(double x)
 {
-  plugin double Tan(:double:) = <math>;
-  ret Tan(:x:);
+  ret .mn.tan(x);
 }
 
 public double asin(double x)
 {
-  plugin double ASin(:double:) = <math>;
-  ret ASin(:x:);
+  ret .mn.asin(x);
 }
 
 public double acos(double x)
 {
-  plugin double ACos(:double:) = <math>;
-  ret ACos(:x:);
+  ret .mn.acos(x);
 }
 
 public double atan(double x)
 {
-  plugin double ATan(:double:) = <math>;
-  ret ATan(:x:);
+  ret .mn.atan(x);
 }
 
 public double log(double x, double y)
 {
-  plugin double Log(:double, double:) = <math>;
-  ret Log(:x, y:);
+  ret .mn.log(x, y);
 }
 
 public double ln(double x)
 {
-  plugin double Ln(:double:) = <math>;
-  ret Ln(:x:);
+  ret .mn.ln(x);
 }
 
 public double exp(double x)
 {
-  plugin double Exp(:double:) = <math>;
-  ret Exp(:x:);
+  ret .mn.exp(x);
 }
 
 public double sqrt(double x)
 {
-  plugin double Sqrt(:double:) = <math>;
-  ret Sqrt(:x:);
+  ret .mn.sqrt(x);
 }
 
 public double ceil(double x)
 {
-  plugin double Ceil(:double:) = <math>;
-  ret Ceil(:x:);
+  ret .mn.ceil(x);
 }
 
 public double floor(double x)
 {
-  plugin double Floor(:double:) = <math>;
-  ret Floor(:x:);
+  ret .mn.floor(x);
 }
 
 public double round(double x)
 {
-  double fx = x, cx = x;
-  ret x < 0.0 ? -.floor(0.5 - x) : .floor(0.5 + x);
+  ret .mn.round(x);
 }
 
 public bool isfinite(double x)
 {
-  plugin bool IsFinite(:double:) = <math>;
-  ret IsFinite(:x:);
+  ret .mn.isfinite(x);
 }
 
 public bool isinf(double x)
 {
-  plugin bool IsInf(:double:) = <math>;
-  ret IsInf(:x:);
+  ret .mn.isinf(x);
 }
 
 public bool isnan(double x)
 {
-  plugin bool IsNaN(:double:) = <math>;
-  ret IsNaN(:x:);
+  ret .mn.isnan(x);
 }
 
 const int RANDMAX = .consts.int_t::MAX;
