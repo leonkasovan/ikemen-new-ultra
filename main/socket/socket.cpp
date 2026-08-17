@@ -114,23 +114,22 @@ intptr_t socrecv(SOCKET &soc, char *buf, intptr_t len)
 #ifdef _WIN32
 WSAData g_wdata;
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
+// In the static exe build this file is linked into the engine, so DllMain
+// never runs and WSAStartup was never called — connect()/listen() always
+// failed with WSANOTINITIALISED.  A static initializer covers both builds:
+// it runs at program start for the exe and at DLL load for a dynamic build
+// (the same point as DLL_PROCESS_ATTACH), and cleans up at exit.
+struct WinsockInit
 {
-	switch(fdwReason)
+	WinsockInit()
 	{
-	case DLL_PROCESS_ATTACH:
 		WSAStartup(MAKEWORD(2,2), &g_wdata);
-		break;
-	case DLL_PROCESS_DETACH:
-		WSACleanup();
-		break;
-	case DLL_THREAD_ATTACH:
-		break;
-	case DLL_THREAD_DETACH:
-		break;
 	}
-	return TRUE;
-}
+	~WinsockInit()
+	{
+		WSACleanup();
+	}
+} g_winsockInit;
 #endif
 
 void SSZ_STDCALL SocketClose(SOCKET *psoc)
