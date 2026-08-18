@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**17 native libraries registered (16 conversions + 1 test fixture), 3 libraries intentionally remain in SSZ.**
+**17 native libraries registered (16 conversions + 1 test fixture), 2 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -31,13 +31,13 @@ stay in SSZ" below).
 | 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) native; stateful `event()`/`eventUpdate()` stay in SSZ |
 | 17 | `tmpl` | `tmpl.cpp` | 🧪 **Test fixture** | Demonstrates native `_t` (TYPE_TOKEN) generic signatures — JIT call-site inference: `_t min/add(_t,_t)`, `void inc(_t v=)` out-param, `void fill(^_t buf=, _t)`, `^_t make(_t)` ref return; `long` (8-byte) instantiations |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
-| — | `stack` | — | ⏸ **Stays in SSZ** | 100% template data structure (`&Stack<_t>`/`&Node<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
+| — | `stack` | — | 🗑 **Removed** | Was 100% template data structure (`&Stack<_t>`/`&Node<_t>`) with **zero consumers** in the codebase — deleted as dead code; see "Why … stay in SSZ" for why it could never be native |
 
-Legend: ✅ fully native · 🔀 native core with SSZ delegation wrapper · ⏸ stays in SSZ
+Legend: ✅ fully native · 🔀 native core with SSZ delegation wrapper · ⏸ stays in SSZ · 🗑 removed (dead code)
 
-Every library that *can* be native is now native — the three remaining are
-template-bound by design (see below).
+Every library that *can* be native is now native — the remaining SSZ surface is
+template-bound by design (see below), and the zero-consumer `stack` was removed.
 
 ## Conversion phases (commit history)
 
@@ -107,13 +107,17 @@ public &File
 Template methods and whole-object moves keep their in-body `plugin` declarations
 (the static registry and native registry coexist).
 
-## Why `consts` / `stack` / `alert` stay in SSZ
+## Why `consts` / `alert` stay in SSZ (and `stack` was removed)
 
 Verified empirically (documented in AGENTS.md):
 
 - **`alert`** — 3-line wrapper; `_t` only feeds compile-time `typeid(_t)`.
-- **`stack`** / **`table`** — pure template data structures with
-  template-typed *fields* (`^_t data`) and delegate params (`each`/`forEach`).
+- **`table`** — pure template data structure with template-typed *fields*
+  (`^_t data`) and delegate params (`each`/`forEach`).
+- **`stack`** — same template-bound shape (`&Stack<_t>`/`&Node<_t>`, `^_t
+  data` fields), and it had **zero consumers** in the codebase, so it was
+  **removed** as dead code rather than ported.  The port analysis below
+  records why it could never go native anyway.
 - **Native `_t` signatures now work (call-site inference)** — the JIT binds
   `_t` from the first argument whose parameter mentions `TYPE_TOKEN`, then
   substitutes every `TYPE_TOKEN` in the signature (params and return) before
@@ -143,10 +147,12 @@ instead.
 ## `lib/alpha/*` — status after `|Enum`/`&Struct` support
 
 `ssz_script/lib/alpha/` holds **bridge/type-definition libs**, not logic libs —
-`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`, `sdlplugin.ssz`.  Each is
-a thin `plugin` bridge to an already-static plugin (`<lua>`, `<mesdialog>`,
-`<ogg>`, `<sdlplugin>`) plus the enums/structs that give the game its type
-vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
+`lua.ssz`, `mesdialog.ssz`, `sdlevent.ssz`, `sdlplugin.ssz` (`ogg.ssz` was
+removed — dead code, see below).  Each is a thin `plugin` bridge to an
+already-static plugin (`<lua>`, `<mesdialog>`, `<sdlplugin>`, and the
+still-registered static `<ogg>`) plus the enums/structs that give the game
+its type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
+`&Rect`, …).
 
 `TypeNameToTokens` now understands `|Enum` and `&Struct` (encoded as
 AND_TOKEN/OR_TOKEN + the type's funclist class id, resolved like
@@ -170,9 +176,11 @@ referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
 - **`mesdialog.ssz`** — `|CodePage`-typed signatures are now expressible, but
   the `veryUnsafeCopy` template (used by `common.ssz`/`char.ssz`) is
   template-bound by definition.
-- **`ogg.ssz`** — structurally convertible, but **dead code** — `ssz/sound.ssz`
-  removed the import ("SDL_mixer handles OGG").  Converting it would only
-  duplicate the static plugin it bridges.
+- **`ogg.ssz`** — **removed** (was dead code): `ssz/sound.ssz` had dropped the
+  import ("SDL_mixer handles OGG"), and converting it would only duplicate the
+  static `<ogg>` plugin it bridged.  The `&OggVorbis` type is no longer
+  defined; `lib ogg = <alpha/ogg.ssz>;` now fails at compile time if a script
+  still tries it.
 
 Bridge libs are already static C++ behind the scenes; the remaining SSZ
 type-vocabulary surface stays put.
@@ -207,28 +215,29 @@ type-vocabulary surface stays put.
 - The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` is a
   native bridge and `sdlevent`'s `&Key` methods are native (`|Enum`/`&Struct`
   landed in `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful
-  event loop, `lua`/`mesdialog` (need `ref`/`func` signatures), `ogg` (dead
-  code), and the template-bound `consts`/`stack`/`alert`.
+  event loop, `lua`/`mesdialog` (need `ref`/`func` signatures), and the
+  template-bound `consts`/`alert`.  `ogg.ssz` (dead) and `stack.ssz`
+  (zero-consumer) were removed.
 - **Native `_t` (TYPE_TOKEN) signatures landed** — the JIT binds the
   placeholder from the call-site arguments in `KansuuPointer` and substitutes
   it through the signature (params + return).  That covers generic *function*
   calls.
-- **`stack` port attempted with the `_t` machinery — still blocked.**  With
-  call-site inference working, a `&Stack<_t>`/`&Node<_t>` port was tried and
-  ruled out on four structural grounds (all still true after `_t`): (1) the
-  struct's *fields* are template-typed (`^_t data`, `^&Node!_t? topNode`,
-  `^self next`) and a native signature resolves once at import — it cannot
-  name a per-instantiation class like `&Node!int`; (2) `pop()`/`top()` return
-  `^_t` with no parameters, so there is no call-site argument to bind `_t`
-  from (the binding needs the first param mentioning `TYPE_TOKEN`); (3) the
-  method bodies are pure SSZ heap/ref manipulation (allocate a node via
-  `typesize(&Node!_t)`, link `n~next`, swap `topNode`) — no concrete C++
-  core exists to extract, and the `&X` field-out-param pattern cannot apply
-  when the fields themselves are template-typed; (4) **`stack.ssz` has zero
-  consumers** in this codebase (no `lib stack` import or `&Stack!`
-  instantiation anywhere), so a port would be API-completeness work with no
-  runtime payoff.  `table` is blocked by the same field/delegate reasons
-  plus its `func` delegate params (`each`/`forEach`/`operate`).
+- **`stack` port attempted with the `_t` machinery — still blocked, then
+  removed.**  With call-site inference working, a `&Stack<_t>`/`&Node<_t>`
+  port was tried and ruled out on four structural grounds (all still true
+  after `_t`): (1) the struct's *fields* are template-typed (`^_t data`,
+  `^&Node!_t? topNode`, `^self next`) and a native signature resolves once at
+  import — it cannot name a per-instantiation class like `&Node!int`; (2)
+  `pop()`/`top()` return `^_t` with no parameters, so there is no call-site
+  argument to bind `_t` from (the binding needs the first param mentioning
+  `TYPE_TOKEN`); (3) the method bodies are pure SSZ heap/ref manipulation
+  (allocate a node via `typesize(&Node!_t)`, link `n~next`, swap `topNode`)
+  — no concrete C++ core exists to extract, and the `&X` field-out-param
+  pattern cannot apply when the fields themselves are template-typed; (4)
+  `stack.ssz` had **zero consumers**, so the port had no runtime payoff —
+  and the file was deleted as dead code.  `table` is blocked by the same
+  field/delegate reasons plus its `func` delegate params
+  (`each`/`forEach`/`operate`).
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
   exercised across all three element sizes in `basetest` (`long` added with a
   `0x12345678` round-trip).  `float` is intentionally not covered — the wide

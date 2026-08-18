@@ -155,14 +155,15 @@ fully native; `math`, `string`, `md5`, `arcfour`, `file`, `regex`, `sound`,
 `ssz`, `socket`, `base64`, `table`, `sdlplugin`, `sdlevent` are native cores
 consumed via delegation from a thin `.ssz` wrapper (which keeps templates,
 list-returners, `&Format`-style struct containers, and — for the alpha
-bridges — the enums/structs/constants in SSZ); `consts`, `stack`, `alert`
-stay in SSZ entirely (template-bound, see below).  `sdlplugin`/`sdlevent` are
+bridges — the enums/structs/constants in SSZ); `consts`, `alert` stay in SSZ
+entirely (template-bound, see below), and the zero-consumer `stack` was
+removed as dead code.  `sdlplugin`/`sdlevent` are
 the first alpha-lib bridges to go native, enabled by `|Enum`/`&Struct`
 support in `TypeNameToTokens` (native_lib.hpp).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
-### Why the template libraries (`stack`, `table`, `alert`) stay in SSZ
+### Why the template libraries (`table`, `alert`, `consts`) stay in SSZ
 
 The remaining SSZ libraries are template-bound and **cannot** be ported to
 native code. This was investigated and verified empirically:
@@ -170,11 +171,13 @@ native code. This was investigated and verified empirically:
 - **`alert.ssz`** is a 3-line wrapper whose only use of `_t` is
   `typeid(_t)` — a compile-time constant. The plugin call itself is fully
   concrete; there is no runtime logic to move to C++.
-- **`stack.ssz`** (`&Stack<_t>`/`&Node<_t>`) and **`table.ssz`**
-  (`&NameTable<_t>`/`&IntTable<int_t,_t>`) are pure template data
-  structures: their *fields* are template-typed (`^_t data`, `&Table!_t,
-  node_t? t`) and their methods take delegate parameters
+- **`table.ssz`** (`&NameTable<_t>`/`&IntTable<int_t,_t>`) is a pure
+  template data structure: its *fields* are template-typed (`^_t data`,
+  `&Table!_t, node_t? t`) and its methods take delegate parameters
   (`each`/`forEach`/`operate`), so no concrete core exists to extract.
+  (`stack.ssz` — the same shape with `&Stack<_t>`/`&Node<_t>` — had **zero
+  consumers** and was removed as dead code; see PROGRESS.md for the port
+  analysis.)
 - **Native `_t` signatures now work — but only for generic *functions*.**
   Registering a native function with `_t` in its signature string (encoding
   `TYPE_TOKEN` in the plugin type) is supported: the JIT binds `_t` to the
@@ -197,8 +200,8 @@ native code. This was investigated and verified empirically:
   `^_t` with no parameters, so there is no call-site argument to bind `_t`
   from; (3) the method bodies are pure SSZ heap/ref manipulation (allocate
   via `typesize(&Node!_t)`, link `n~next`, swap `topNode`) — no concrete
-  C++ core exists to extract; (4) `stack.ssz` has **zero consumers** in the
-  codebase, so the port has no runtime payoff.
+  C++ core exists to extract; (4) `stack.ssz` had **zero consumers**, so the
+  port had no runtime payoff — and the file was removed as dead code.
 - **`^null` (DYNREF) can't store data.** DYNREF params/returns work as
   *transients* in native calls (a concrete ref converts via `refToDref`),
   but `^null` locals and `^null` struct fields both fail to compile — the
@@ -220,11 +223,13 @@ sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
 ### `lib/alpha/*` — bridge/type libs (sdlplugin now native)
 
-`ssz_script/lib/alpha/` (`lua.ssz`, `mesdialog.ssz`, `ogg.ssz`, `sdlevent.ssz`,
-`sdlplugin.ssz`) are **bridge/type-definition libs**: each is a thin `plugin`
-bridge to an already-static plugin (`<lua>`, `<mesdialog>`, `<ogg>`,
-`<sdlplugin>`) plus the enums/structs that form the game's type vocabulary
-(`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`, `&Rect`, …).
+`ssz_script/lib/alpha/` (`lua.ssz`, `mesdialog.ssz`, `sdlevent.ssz`,
+`sdlplugin.ssz`; `ogg.ssz` was removed as dead code) are
+**bridge/type-definition libs**: each is a thin `plugin`
+bridge to an already-static plugin (`<lua>`, `<mesdialog>`, `<sdlplugin>`, and
+the still-registered static `<ogg>`) plus the enums/structs that form the
+game's type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
+`&Rect`, …).
 
 - ✅ **`sdlplugin.ssz`** — **converted**: `TypeNameToTokens` now supports
   `|Enum`/`&Struct` (AND_TOKEN/OR_TOKEN + class id) via a
@@ -239,8 +244,9 @@ bridge to an already-static plugin (`<lua>`, `<mesdialog>`, `<ogg>`,
   SSZ (module-variable state).
 - **`lua.ssz`** / **`mesdialog.ssz`** — still blocked: signatures need `ref` /
   `func` delegates (and `mesdialog`'s `veryUnsafeCopy` is template-bound).
-- **`ogg.ssz`** — structurally convertible but dead code (`ssz/sound.ssz`
-  dropped its import — SDL_mixer handles OGG).
+- **`ogg.ssz`** — **removed**: dead code (`ssz/sound.ssz` dropped its import
+  — SDL_mixer handles OGG). The static `<ogg>` plugin stays registered but
+  has no SSZ consumer.
 
 Full research write-up in `PROGRESS.md`.
 
