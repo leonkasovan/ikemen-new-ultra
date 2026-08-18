@@ -1,5 +1,0 @@
-public void sleep(uint milliseconds)
-{
-	plugin bool Delay(:uint:) = <thread>;
-	Delay(:milliseconds:);
-}

@@ -8,7 +8,6 @@ lib s = <string.ssz>;
 lib tbl = <table.ssz>;
 
 //Load "lib/alpha/" Scripts
-//lib ogg = <alpha/ogg.ssz>;  // No longer needed – SDL_mixer handles OGG
 lib sdl = <alpha/sdlplugin.ssz>;
 
 //Load "script/ssz/" Scripts
