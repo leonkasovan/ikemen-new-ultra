@@ -1,0 +1,49 @@
+// mesdialog regression test — native bridge (ssz_script/lib/alpha/mesdialog.cpp).
+// Exercises the non-interactive module surface: shared-string round trip,
+// ini string/int write+read, ASCII-to-local passthrough, and the
+// CodePage byte<->string conversions.  (YesNo/InputStr/GetClipboardStr are
+// interactive and not exercised.)
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib mes = <alpha/mesdialog.ssz>;
+
+^/char r = "";
+
+// Case 1: setSharedString / getSharedString round trip
+.mes.SetSharedString(:"md_roundtrip":);
+^char ss;
+.mes.GetSharedString(:ss=:);
+r = r + .s.uToSx((ulong)(.s.equ(ss, "md_roundtrip")));
+r = r + "|";
+
+// Case 2: ini write + read back (work-dir file, removed after)
+// SSZ view is (file, app, key, value) — args arrive reversed.
+r = r + .s.uToSx((ulong).mes.WriteInifileString(:"md_test.ini", "mdapp", "mdkey", "42":));
+r = r + "|";
+^char is;
+.mes.GetInifileString(:"md_test.ini", "mdapp", "mdkey", "-1", is=:);
+r = r + .s.uToSx((ulong)(.s.equ(is, "42")));
+r = r + "|";
+r = r + .s.uToSx((ulong).mes.GetInifileInt(:"md_test.ini", "mdapp", "mdkey", -1:));
+r = r + "|";
+r = r + .s.uToSx((ulong).f.remove("md_test.ini"));
+r = r + "|";
+
+// Case 3: asciiToLocal passthrough (ASCII maps to itself)
+^char al;
+.mes.AsciiToLocal(:al=, "ascii":);
+r = r + .s.uToSx((ulong)(.s.equ(al, "ascii")));
+r = r + "|";
+
+// Case 4: strToUbytes/ubytesToStr UTF-8 round trip (ASCII passthrough)
+^ubyte ub;
+.mes.StrToUbytes(:.mes.CodePage::UTF8, ub=, "cafe":);
+^char bs;
+.mes.UbytesToStr(:.mes.CodePage::UTF8, bs=, ub:);
+r = r + .s.uToSx((ulong)(.s.equ(bs, "cafe")));
+r = r + "|";
+
+// Case 5: tajuuCheck fresh mutex name -> false (0)
+r = r + .s.uToSx((ulong).mes.tajuuCheck("md_tajuu_test"));
+
+.f.saveAsciiText("mesdialogtest_out.txt", r);

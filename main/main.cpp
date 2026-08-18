@@ -40,6 +40,7 @@ extern "C" bool funcref_lib_register();
 extern "C" bool sdlplugin_lib_register();
 extern "C" bool sdlevent_lib_register();
 extern "C" bool lua_lib_register();
+extern "C" bool mesdialog_lib_register();
 
 
 #include <stdio.h>
@@ -500,6 +501,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!lua_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'lua'");
+		return 1;
+	}
+	if (!mesdialog_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'mesdialog'");
 		return 1;
 	}
 	if (!sdlevent_lib_register()) {

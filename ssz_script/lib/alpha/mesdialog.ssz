@@ -1,16 +1,3 @@
-plugin bool YesNo(:^/char:) = <mesdialog>;
-plugin bool GetClipboardStr(:^char=:) = <mesdialog>;
-plugin void GetInifileString(:^/char, ^/char, ^/char, ^/char, ^char=:) = <mesdialog>;
-plugin int GetInifileInt(:^/char, ^/char, ^/char, int:) = <mesdialog>;
-plugin bool WriteInifileString(:^/char, ^/char, ^/char, ^/char:) = <mesdialog>;
-plugin void InputStr(:^/char, ^char=:) = <mesdialog>;
-plugin bool UnCompress(:^ubyte=, ^/ubyte:) = <mesdialog>;
-plugin void UbytesToStr(:|CodePage, ^char=, ^/ubyte:) = <mesdialog>;
-plugin void StrToUbytes(:|CodePage, ^ubyte=, ^/char:) = <mesdialog>;
-plugin void AsciiToLocal(:^char=, ^/char:) = <mesdialog>;
-plugin void SetSharedString(:^/char:) = <mesdialog>;
-plugin void GetSharedString(:^char=:) = <mesdialog>;
-
 |CodePage
 {
   ACP        = 0,           // default to ANSI code page
@@ -29,8 +16,76 @@ plugin void GetSharedString(:^char=:) = <mesdialog>;
   UTF8       = 65001        // UTF-8 translation
 }
 
-lib al = <alert.ssz>;
+// Native `mesdialog` library (ssz_script/lib/alpha/mesdialog.cpp) — re-exports
+// the static <mesdialog> plugin's fnptrs (the main/ssz/bridge.cpp wrappers),
+// so the module functions below can delegate here instead of declaring their
+// own `plugin` calls.  `|CodePage` must be declared before this import (its
+// enum type is referenced by the ubytesToStr/strToUbytes signatures).
+lib md = <mesdialog>;
 
+public bool YesNo(^/char r)
+{
+  ret .md.yesNo(r);
+}
+
+public bool GetClipboardStr(^char s=)
+{
+  ret .md.getClipboardStr(s=);
+}
+
+public void GetInifileString(^/char def, ^/char key, ^/char app, ^/char file, ^char s=)
+{
+  .md.getInifileString(def, key, app, file, s=);
+}
+
+public int GetInifileInt(^/char def, ^/char key, ^/char app, int n)
+{
+  ret .md.getInifileInt(def, key, app, n);
+}
+
+public bool WriteInifileString(^/char s, ^/char key, ^/char app, ^/char file)
+{
+  ret .md.writeInifileString(s, key, app, file);
+}
+
+public void InputStr(^/char title, ^char s=)
+{
+  .md.inputStr(title, s=);
+}
+
+public bool UnCompress(^ubyte out=, ^/ubyte src)
+{
+  ret .md.unCompress(out=, src);
+}
+
+public void UbytesToStr(|.CodePage cp, ^char s=, ^/ubyte b)
+{
+  .md.ubytesToStr(cp, s=, b);
+}
+
+public void StrToUbytes(|.CodePage cp, ^ubyte out=, ^/char s)
+{
+  .md.strToUbytes(cp, out=, s);
+}
+
+public void AsciiToLocal(^char s=, ^/char src)
+{
+  .md.asciiToLocal(s=, src);
+}
+
+public void SetSharedString(^/char s)
+{
+  .md.setSharedString(s);
+}
+
+public void GetSharedString(^char s=)
+{
+  .md.getSharedString(s=);
+}
+
+// Template-bound by definition (`dst_t`/`src_t` are re-parsed per
+// instantiation); keeps its in-body plugin declaration, resolved from the
+// static plugin registry (which coexists with the native registry).
 public void veryUnsafeCopy<dst_t, src_t>(dst_t d=, src_t s=)
 {
   lib math = <math.ssz>;
@@ -42,8 +97,7 @@ index thandle = 0;
 
 public bool tajuuCheck(^/char name)
 {
-  plugin index TazyuuCheck(:^/char:) = <mesdialog>;
-  if(.thandle == 0) .thandle = TazyuuCheck(:name:);
+  if(.thandle == 0) .thandle = .md.tazyuuCheck(name);
   ret .thandle == 0;
 }
 
@@ -51,8 +105,7 @@ public bool tajuuCheck(^/char name)
 {
   delete()
   {
-    plugin void CloseTazyuuHandle(:index:) = <mesdialog>;
-    if(.thandle != 0) CloseTazyuuHandle(:.thandle:);
+    if(.thandle != 0) .md.closeTazyuuHandle(.thandle);
   }
 }
 &Releaser rls;

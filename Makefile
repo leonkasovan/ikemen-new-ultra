@@ -145,7 +145,8 @@ NATIVE_LIB_SRCS = \
   ssz_script/lib/funcref.cpp \
   ssz_script/lib/alpha/sdlplugin.cpp \
   ssz_script/lib/alpha/sdlevent.cpp \
-  ssz_script/lib/alpha/lua.cpp
+  ssz_script/lib/alpha/lua.cpp \
+  ssz_script/lib/alpha/mesdialog.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 

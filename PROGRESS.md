@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**19 native libraries registered (17 conversions + 2 test fixtures), 2 libraries intentionally remain in SSZ.**
+**20 native libraries registered (18 conversions + 2 test fixtures), 2 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -32,6 +32,7 @@ stay in SSZ" below).
 | 17 | `tmpl` | `tmpl.cpp` | 🧪 **Test fixture** | Demonstrates native `_t` (TYPE_TOKEN) generic signatures — JIT call-site inference: `_t min/add(_t,_t)`, `void inc(_t v=)` out-param, `void fill(^_t buf=, _t)`, `^_t make(_t)` ref return; `long` (8-byte) instantiations |
 | 18 | `lua` | `alpha/lua.cpp` | 🔀 **Hybrid** | Bridge to the static `<lua>` plugin; enabled by `ref`/`func` support in `TypeNameToTokens`.  `&State` methods delegate natively (`ref=`/`func` params arrive as `DynamicRef*`/`intptr_t`); `init()` (signature-value params) and `register` (self-capturing func param) stay in SSZ |
 | 19 | `funcref` | `funcref.cpp` | 🧪 **Test fixture** | Exercises native `ref`/`func` delegate signatures — `ref=` out-params (`DynamicRef*`), `ref` values (`DynamicRef`), `func$void(int)`/`func$void(int=)` params (`intptr_t`); 4-byte heap-cell round-trip |
+| 20 | `mesdialog` | `alpha/mesdialog.cpp` | 🔀 **Hybrid** | Bridge to the static `<mesdialog>` plugin; enabled by `|CodePage` enum support in `TypeNameToTokens`.  Module functions delegate natively; the `veryUnsafeCopy` template stays in SSZ (template-bound) |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
 | — | `stack` | — | 🗑 **Removed** | Was 100% template data structure (`&Stack<_t>`/`&Node<_t>`) with **zero consumers** in the codebase — deleted as dead code; see "Why … stay in SSZ" for why it could never be native |
@@ -65,6 +66,7 @@ template-bound by design (see below), and the zero-consumer `stack` was removed.
 | sdlevent &Key | `e2e8e02` | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
 | Native `_t` (TYPE_TOKEN) | — | JIT call-site type inference for native generic signatures (`KansuuPointer` binding in jitcompiler.hpp); `TypeNameToTokens` encodes `_t`; `FuncRetToken`/`RefToken` learn `TYPE_TOKEN`; `tmpl` fixture + `tmpltest` regression |
 | `ref`/`func` delegates | — | `TypeNameToTokens` encodes `ref` (DYNREF) and `func$ret(params)` (FUNC_TOKEN + signature); paren-aware param splitting in `BuildPluginType`; `funcref` fixture + `funcreftest` regression; `lua` bridge lib converted (`&State` methods native, `register`/`init` stay in SSZ) |
+| mesdialog bridge | — | `alpha/mesdialog.cpp` re-exports the static `<mesdialog>` plugin's fnptrs (`|CodePage` enum sigs); `mesdialogtest` regression; `veryUnsafeCopy` template stays in SSZ |
 
 ## Architecture
 
@@ -185,9 +187,20 @@ referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
   SSZ: `init()` (passes `func X.signature` *signature* values, not delegates)
   and `register` (its `func$void(`self=, int=)` param captures the enclosing
   class — a per-instantiation class id a native signature cannot name).
-- **`mesdialog.ssz`** — `|CodePage`-typed signatures are now expressible, but
-  the `veryUnsafeCopy` template (used by `common.ssz`/`char.ssz`) is
-  template-bound by definition.
+- ✅ **`mesdialog.ssz`** — **converted** (native bridge `alpha/mesdialog.cpp`
+  re-exports the static `<mesdialog>` plugin's fnptrs via
+  `mesdialog_plugin.hpp`).  The `|CodePage` enum (referenced by the
+  `ubytesToStr`/`strToUbytes` signatures) must be declared before the
+  `lib md = <mesdialog>;` import — same rule as sdlplugin's `|SDLKey`.
+  Module functions delegate natively (`YesNo`/`GetClipboardStr`/
+  `GetInifileString`/`GetInifileInt`/`WriteInifileString`/`InputStr`/
+  `UnCompress`/`UbytesToStr`/`StrToUbytes`/`AsciiToLocal`/
+  `SetSharedString`/`GetSharedString`, plus `tazyuuCheck`/
+  `closeTazyuuHandle` for the `thandle`/`&Releaser` module state).  The
+  `veryUnsafeCopy` template (used by `common.ssz`/`char.ssz`) stays in SSZ
+  with its in-body plugin declaration — template-bound by definition.
+  Verified by `test/ssz/mesdialogtest.ssz` (shared-string round trip, ini
+  write/read, CodePage conversions, asciiToLocal, tajuuCheck).
 - **`ogg.ssz`** — **removed** (was dead code): `ssz/sound.ssz` had dropped the
   import ("SDL_mixer handles OGG"), and converting it would only duplicate the
   static `<ogg>` plugin it bridged.  The `&OggVorbis` type is no longer
@@ -234,11 +247,12 @@ type-vocabulary surface stays put.
 ## Testing
 
 - **SSZ suite**: `test/ssz/*.ssz` with frozen `test/ssz/*.expected` references,
-  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  15 tests cover
-  14 of the 16 converted libs (sound is device-dependent — checks completion,
+  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  16 tests cover
+  15 of the 18 converted libs (sound is device-dependent — checks completion,
   not values; `shell`/`string` have no dedicated test — `string`'s
   `sToU8`/`u8ToS` are exercised indirectly by `basetest`/`md5test`;
-  `sdleventtest` covers the native `&Key` methods).  `tmpltest` exercises the
+  `sdleventtest` covers the native `&Key` methods and `mesdialogtest` the
+  native bridge module functions).  `tmpltest` exercises the
   native `_t` (TYPE_TOKEN) generic machinery; `funcreftest` exercises the
   `ref`/`func` delegate machinery.
 - **C++ smoke test**: `test/test_file.cpp` (40 checks) — `make test-file`.
@@ -247,14 +261,14 @@ type-vocabulary surface stays put.
 
 ## Remaining / next steps
 
-- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` and
-  `lua` are native bridges and `sdlevent`'s `&Key` methods are native
-  (`|Enum`/`&Struct` and `ref`/`func` both landed in `TypeNameToTokens`).
-  Remaining SSZ surface: `sdlevent`'s stateful event loop, `mesdialog`
-  (`veryUnsafeCopy` is template-bound by definition), `lua`'s `init()`
-  (signature-value params) and `register` (self-capturing func param), and
-  the template-bound `consts`/`alert`.  `ogg.ssz` (dead) and `stack.ssz`
-  (zero-consumer) were removed.  **The full game now boots** (Debug and
+- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin`,
+  `lua`, and `mesdialog` are native bridges and `sdlevent`'s `&Key` methods
+  are native (`|Enum`/`&Struct`, `ref`/`func`, and `|CodePage` all landed in
+  `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful event
+  loop, `mesdialog`'s `veryUnsafeCopy` (template-bound by definition),
+  `lua`'s `init()` (signature-value params) and `register` (self-capturing
+  func param), and the template-bound `consts`/`alert`.  `ogg.ssz` (dead)
+  and `stack.ssz` (zero-consumer) were removed.  **The full game now boots** (Debug and
   Release): the SSZ script compiles with `error size=0` and the fight
   renders — the long-standing `luaL_newstate` boot crash was the Lua FFI
   `EnableExecute` read-after-flip (see Known fixes above), not the bridge

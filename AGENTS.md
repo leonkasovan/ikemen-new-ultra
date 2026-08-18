@@ -150,17 +150,17 @@ variable is for SSZ-side interface parity.
 
 **Conversion status:** the full per-library breakdown (native surface, what
 stays in SSZ, phase history, known gotchas) lives in **`PROGRESS.md`**.  In
-short: **19 native libraries registered** (17 conversions + 2 test fixtures)
+short: **20 native libraries registered** (18 conversions + 2 test fixtures)
 — `time`, `shell`, `thread` are fully native; `math`, `string`, `md5`,
 `arcfour`, `file`, `regex`, `sound`, `ssz`, `socket`, `base64`, `table`,
-`sdlplugin`, `sdlevent`, `lua` are native cores consumed via delegation from
-a thin `.ssz` wrapper (which keeps templates, list-returners,
-`&Format`-style struct containers, and — for the alpha bridges — the
-enums/structs/constants in SSZ); `consts`, `alert` stay in SSZ entirely
-(template-bound, see below), and the zero-consumer `stack` was removed as
-dead code.  The alpha-lib bridges (`sdlplugin`, `sdlevent`, `lua`) went
-native via `|Enum`/`&Struct` and `ref`/`func` support in
-`TypeNameToTokens` (native_lib.hpp).  Sources live in
+`sdlplugin`, `sdlevent`, `lua`, `mesdialog` are native cores consumed via
+delegation from a thin `.ssz` wrapper (which keeps templates,
+list-returners, `&Format`-style struct containers, and — for the alpha
+bridges — the enums/structs/constants in SSZ); `consts`, `alert` stay in
+SSZ entirely (template-bound, see below), and the zero-consumer `stack`
+was removed as dead code.  The alpha-lib bridges (`sdlplugin`, `sdlevent`,
+`lua`, `mesdialog`) went native via `|Enum`/`&Struct`, `ref`/`func`, and
+`|CodePage` enum support in `TypeNameToTokens` (native_lib.hpp).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
@@ -236,7 +236,7 @@ concrete type from each call site instead.
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
 
-### `lib/alpha/*` — bridge/type libs (sdlplugin now native)
+### `lib/alpha/*` — bridge/type libs (sdlplugin/lua/mesdialog now native)
 
 `ssz_script/lib/alpha/` (`lua.ssz`, `mesdialog.ssz`, `sdlevent.ssz`,
 `sdlplugin.ssz`; `ogg.ssz` was removed as dead code) are
@@ -269,8 +269,13 @@ game's type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
   after the conversion because both paths call the same C code.  Root cause
   was the Lua FFI's `EnableExecute` macro (see Known fixes below); it is now
   **fixed** and the full game boots.
-- **`mesdialog.ssz`** — remaining alpha lib: `|CodePage`-typed signatures
-  are expressible but `veryUnsafeCopy` is template-bound by definition.
+- ✅ **`mesdialog.ssz`** — **converted** (native bridge `alpha/mesdialog.cpp`
+  re-exports the static `<mesdialog>` plugin's fnptrs).  The `|CodePage`
+  enum must be declared before `lib md = <mesdialog>;` (its type is
+  referenced by the `ubytesToStr`/`strToUbytes` signatures); module
+  functions delegate natively.  `veryUnsafeCopy` stays in SSZ with its
+  in-body plugin declaration — template-bound by definition.  Verified by
+  `test/ssz/mesdialogtest.ssz`.
 - **`ogg.ssz`** — **removed**: dead code (`ssz/sound.ssz` dropped its import
   — SDL_mixer handles OGG). The static `<ogg>` plugin stays registered but
   has no SSZ consumer.
@@ -328,6 +333,7 @@ conversions, each comparing its output against a frozen reference
 | `ssztest` | `ssz` | compileString + run a snippet, memMark |
 | `tmpltest` | `tmpl` | native `_t` (TYPE_TOKEN) generics — scalar params/returns, `_t v=` out-param, `^_t buf=` array, `^_t` return, `long` instantiations |
 | `funcreftest` | `funcref` | native `ref`/`func` delegates — `ref=` out-params, `ref` values, `func$void(int)` / `func$void(int=)` params |
+| `mesdialogtest` | `mesdialog` | shared-string round trip, ini write/read, CodePage byte<->string conversions, asciiToLocal, tajuuCheck |
 
 Run with `bash test/run_ssz_tests.sh` (defaults to
 `install/ikemen-debug.exe`, then `build/Debug/ikemen-debug.exe`); the
