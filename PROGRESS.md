@@ -7,6 +7,9 @@ library registry (`main/ssz/native_lib.hpp`).  The goal: replace interpreted
 is concrete, while keeping template-bound code in SSZ (see "Why some libraries
 stay in SSZ" below).
 
+**For the complete reference** (ABI contract, signature encoding, writing new
+native libs, gotchas, and patterns), see [`SSZ_CONVERSION.md`](SSZ_CONVERSION.md).
+
 ## Status summary
 
 **20 native libraries registered (18 conversions + 2 test fixtures), 2 libraries intentionally remain in SSZ.**

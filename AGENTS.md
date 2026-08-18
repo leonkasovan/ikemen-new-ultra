@@ -17,7 +17,7 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 
 **External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, PortAudio, OpenGL.
 
-**See also:** [`PROGRESS.md`](PROGRESS.md) — the SSZ→native library conversion status (per-library breakdown, phase history, gotchas).
+**See also:** [`PROGRESS.md`](PROGRESS.md) — the SSZ→native library conversion status (per-library breakdown, phase history, gotchas).  [`SSZ_CONVERSION.md`](SSZ_CONVERSION.md) — complete reference for the native library ABI, signature encoding, JIT extensions, and conversion patterns.
 
 ---
 
