@@ -264,9 +264,11 @@ game's type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
   Two methods stay in SSZ: `init()` (passes `func X.signature` *signature*
   values, not delegates) and `register` (its `func$void(`self=, int=)` param
   captures the enclosing class — a per-instantiation class id a native
-  signature cannot name).  Note: converting the bridge does **not** fix the
-  pre-existing boot crash in `luaL_newstate` (Lua C runtime) — verified
-  empirically, the same segfault occurs before and after the conversion.
+  signature cannot name).  Note: the old `luaL_newstate()` boot crash was
+  **not** a bridge-conversion issue — it reproduced identically before and
+  after the conversion because both paths call the same C code.  Root cause
+  was the Lua FFI's `EnableExecute` macro (see Known fixes below); it is now
+  **fixed** and the full game boots.
 - **`mesdialog.ssz`** — remaining alpha lib: `|CodePage`-typed signatures
   are expressible but `veryUnsafeCopy` is template-bound by definition.
 - **`ogg.ssz`** — **removed**: dead code (`ssz/sound.ssz` dropped its import
@@ -288,6 +290,21 @@ value of a *different* concrete type (`(_t)` casts only work on
 `TYPE_TOKEN`-typed values).  `(*_t)` casts work universally.  The fix was
 one character (`(_t)ub[i]` → `(*_t)ub[i]`, `ssz_script/lib/base64.ssz`);
 all four element types now round-trip (`ubyte`, `byte`, `short`, `int`).
+
+**Lua FFI `EnableExecute` read-after-flip (fixed bug, unblocks full-game
+boot):** the Lua FFI's `EnableExecute` macro
+(`external/lua-5.2.4/ffi/ffi.h`, Windows branch) flips a JIT code page to
+`PAGE_EXECUTE` (0x10 — execute-only, reads fault on x86 Windows) and then
+calls `FlushInstructionCache(GetCurrentProcess(), data, size)`, re-reading
+`size` from memory.  When `size` is `page->size` — a read through the very
+page just flipped — compilers that reload the value after the call (GCC at
+-O0, and GCC -O2 at some call sites) fault on that reload.  This was the
+root cause of the pre-existing `luaL_newstate()` boot crash (reached via
+`luaopen_ffi` → `compile_globals` → `commit_code`); the crash reproduced
+identically before/after the `lua.ssz` bridge conversion because both paths
+call the same C code.  Fix: capture `size` in a local **before** the
+`VirtualProtect` call so no read ever happens through the execute-only
+page.  Both Debug and Release now boot the full game (fight renders).
 
 ### Regression test suite
 

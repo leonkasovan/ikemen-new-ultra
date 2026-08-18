@@ -176,7 +176,13 @@ static char* luaL_prepbuffsize(luaL_Buffer* B, size_t sz) {
 #   define LIB_FORMAT_1 "%s.dll"
 #   define AllocPage(size) VirtualAlloc(NULL, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE)
 #   define FreePage(data, size) VirtualFree(data, 0, MEM_RELEASE)
-#   define EnableExecute(data, size) do {DWORD old; VirtualProtect(data, size, PAGE_EXECUTE, &old); FlushInstructionCache(GetCurrentProcess(), data, size);} while (0)
+/* Capture `size` in a local BEFORE flipping the page to PAGE_EXECUTE.
+ * PAGE_EXECUTE (0x10) is execute-only on Windows x86 — reads fault.  The
+ * caller's `size` argument is usually `page->size`, i.e. a read through the
+ * very page being flipped; compilers that re-load it from memory after the
+ * VirtualProtect call (GCC with -O0, unlike MSVC which keeps it in a
+ * callee-saved register) fault on that reload. */
+#   define EnableExecute(data, size) do {DWORD old; size_t _sz = (size); VirtualProtect((data), _sz, PAGE_EXECUTE, &old); FlushInstructionCache(GetCurrentProcess(), (data), _sz);} while (0)
 #   define EnableWrite(data, size) do {DWORD old; VirtualProtect(data, size, PAGE_READWRITE, &old);} while (0)
 
 #else

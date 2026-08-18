@@ -202,6 +202,28 @@ type-vocabulary surface stays put.
 - **`(_t)` vs `(*_t)` casts in templates**: bare `(_t)` casts fail at
   instantiation unless the operand is already `_t`-typed; `(*_t)` works
   universally.  `decBase64`'s byte path was fixed with this one-character change.
+- **Lua FFI `EnableExecute` read-after-flip (fixed — this was the
+  `luaL_newstate` boot crash).**  `external/lua-5.2.4/ffi/ffi.h` (Windows
+  branch) defines `EnableExecute(data, size)` as `VirtualProtect(data, size,
+  PAGE_EXECUTE, &old)` followed by `FlushInstructionCache(GetCurrentProcess(),
+  data, size)`.  `PAGE_EXECUTE` (0x10) is **execute-only** on x86 Windows —
+  reads fault.  When the caller passes `page->size` (a read through the page
+  being flipped), a compiler that re-loads the value after the call (GCC at
+  -O0; GCC -O2 at some call sites; MSVC keeps it in a callee-saved register,
+  which is why the original DLL build never crashed) faults on that reload.
+  The crash was `commit_code` (call.c:218) — deterministic in Debug
+  (`mov (ebx),esi` reloading `page->size` right after the `VirtualProtect`
+  call), and also reproducible in Release at a later `EnableExecute` call
+  site.  It manifested as `&.lua.State` construction crashing inside
+  `luaL_newstate` → `luaopen_ffi` → `compile_globals` → `commit_code`.
+  Fix: capture `size` in a local **before** the flip (`size_t _sz = (size);
+  VirtualProtect((data), _sz, PAGE_EXECUTE, &old); FlushInstructionCache(
+  GetCurrentProcess(), (data), _sz);`).  **Result: both Debug and Release
+  now boot the full game** — the entire SSZ game script compiles with
+  `error size=0`, Lua system scripts run, and the fight renders.  Root-caused
+  via VEH instrumentation: the stack dump captured the exact `VirtualProtect`
+  args (`page=…, size=65536, flProtect=0x10, &old` with `oldProtect=0x04`)
+  and the faulting instruction window disassembled to the reload.
 - **`md5str(digest)` re-hashes** — `md5str` hashes its input; render a digest
   with `toHex!ubyte?` instead.
 - **Test scripts must live in `test/ssz/`** — the exe resolves `lib/x.ssz`
@@ -232,7 +254,11 @@ type-vocabulary surface stays put.
   (`veryUnsafeCopy` is template-bound by definition), `lua`'s `init()`
   (signature-value params) and `register` (self-capturing func param), and
   the template-bound `consts`/`alert`.  `ogg.ssz` (dead) and `stack.ssz`
-  (zero-consumer) were removed.
+  (zero-consumer) were removed.  **The full game now boots** (Debug and
+  Release): the SSZ script compiles with `error size=0` and the fight
+  renders — the long-standing `luaL_newstate` boot crash was the Lua FFI
+  `EnableExecute` read-after-flip (see Known fixes above), not the bridge
+  conversion.
 - **Native `_t` (TYPE_TOKEN) signatures landed** — the JIT binds the
   placeholder from the call-site arguments in `KansuuPointer` and substitutes
   it through the signature (params + return).  That covers generic *function*
