@@ -7,7 +7,10 @@
 // `(_t)ub[i]` cast in the byte-sized branch, which fails at template
 // instantiation (the JIT has no per-instantiation resolution for bare `(_t)`
 // casts; `(*_t)` works). Fixed by using `(*_t)ub[i]`. Round-trips below
-// verify enc -> dec across byte, short, and int element types.
+// verify enc -> dec across byte (ubyte), short, int, and long element types.
+// (float is intentionally not covered: the wide path bit-packs the integer
+// value, and float->int casts convert the value, not the bit pattern, so a
+// float round-trip cannot be bit-exact.)
 lib f = <file.ssz>;
 lib s = <string.ssz>;
 lib b = <base64.ssz>;
@@ -56,4 +59,12 @@ vi .= (int)0x12345678;
 r = r + .s.uToSx((ulong)#d4);
 r = r + "|";
 if(#d4 > 0) r = r + .s.uToSx((ulong)d4[0]);
+r = r + "|";
+// long round trip (wide path): 0x12345678 -> bit-packed -> 12345678
+%long vl;
+vl .= (long)0x12345678;
+^long d5 = .b.decBase64!long?(.b.encBase64!long?(vl));
+r = r + .s.uToSx((ulong)#d5);
+r = r + "|";
+if(#d5 > 0) r = r + .s.uToSx((ulong)d5[0]);
 .f.saveAsciiText("basetest_out.txt", r);

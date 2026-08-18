@@ -108,6 +108,7 @@ inline bool TypeNameToTokens(
 		out.push_back(~DAINYUU_TOKEN);
 		return true;
 	}
+	if(t == "_t")    { out.push_back(TYPE_TOKEN);   return true; }
 	if(t == "void")   { out.push_back(VOID_TOKEN);   return true; }
 	if(t == "bool")   { out.push_back(BOOL_TOKEN);   return true; }
 	if(t == "byte")   { out.push_back(BYTE_TOKEN);   return true; }

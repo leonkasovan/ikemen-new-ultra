@@ -1490,6 +1490,32 @@ class JITer
 			}
 			sizee = 0;
 			tmprefl.clear();
+			// Native `_t` (TYPE_TOKEN) support: a native signature may carry
+			// TYPE_TOKEN in its parameter/return types (e.g. "_t min(_t, _t)").
+			// The concrete type is inferred from the call-site arguments — the
+			// first parameter that mentions TYPE_TOKEN binds _t to that
+			// argument's compiled type, then every TYPE_TOKEN in the signature
+			// is substituted with the binding before type-checking/emitting.
+			std::basic_string<intptr_t> tbinding;
+			intptr_t tbindIdx = -1;
+			for(size_t tw = 1; tw < waketa.size(); tw++){
+				bool has = false;
+				for(size_t tk = 0; tk < waketa[tw].size(); tk++){
+					if(waketa[tw][tk] == TYPE_TOKEN){ has = true; break; }
+				}
+				if(has){ tbindIdx = (intptr_t)tw - 1; break; }  // 0-based arg index
+			}
+			auto tSubstitute = [&tbinding](std::basic_string<intptr_t>& ts){
+				if(tbinding.empty()) return;
+				std::basic_string<intptr_t> to;
+				to.reserve(ts.size() + tbinding.size());
+				for(auto t : ts){
+					if(t == TYPE_TOKEN) to += tbinding;
+					else to += t;
+				}
+				ts.swap(to);
+			};
+			const size_t tystackStart = tystack.size();
 			intptr_t ii = 0;
 			while(iap[i] != SHOUKAKKOCLOSE_TOKEN){
 				if(ii+1 >= IDX(waketa.size())){
@@ -1497,7 +1523,11 @@ class JITer
 					return -1;
 				}
 				typ = TokenToTypeId(waketa[ii+1].data(), idx=0);
-				tystack += typ;
+				// For the _t binding argument the param type is still unknown; push
+				// WILDCARD so literal args compile in their natural type (the
+				// CONST_TOKEN path skips the CastConst when the type stack top is
+				// WILDCARD).  The entry is rewritten with the bound type below.
+				tystack += (ii == tbindIdx ? WILDCARD_TYPEID : typ);
 				pjtr->bin.tPush(ktype.id);
 				ktype.id = VOID_TYPEID;
 				do{
@@ -1507,6 +1537,64 @@ class JITer
 					i++;
 				}while(
 					iap[i] != SHOUKAKKOCLOSE_TOKEN && iap[i] != COMMA_TOKEN);
+				// Bind _t from the binding parameter's argument.
+				if(ii == tbindIdx){
+					size_t tp = 0;
+					while(
+						tp < waketa[ii+1].size()
+						&& waketa[ii+1][tp] != TYPE_TOKEN) tp++;
+					if(tp == 0){
+						// _t is the whole parameter type — bind to the whole
+						// argument type (kwsk), or synthesize a token from the
+						// argument's type id for scalars.
+						if(!ktype.kwsk.empty()){
+							tbinding = ktype.kwsk;
+						}else{
+							intptr_t toki = 0;
+							switch(ktype.id){
+							case BOOL_TYPEID: toki = BOOL_TOKEN; break;
+							case BYTE_TYPEID: toki = BYTE_TOKEN; break;
+							case UBYTE_TYPEID: toki = UBYTE_TOKEN; break;
+							case SHORT_TYPEID: toki = SHORT_TOKEN; break;
+							case USHORT_TYPEID: toki = USHORT_TOKEN; break;
+							case CHAR_TYPEID: toki = CHAR_TOKEN; break;
+							case INT_TYPEID: toki = INT_TOKEN; break;
+							case UINT_TYPEID: toki = UINT_TOKEN; break;
+							case LONG_TYPEID: toki = LONG_TOKEN; break;
+							case ULONG_TYPEID: toki = ULONG_TOKEN; break;
+							case ADDRESS_TYPEID: toki = INDEX_TOKEN; break;
+							case FLOAT_TYPEID: toki = FLOAT_TOKEN; break;
+							case DOUBLE_TYPEID: toki = DOUBLE_TOKEN; break;
+							case REF_TYPEID: toki = REF_TOKEN; break;
+							case LIST_TYPEID: toki = LIST_TOKEN; break;
+							}
+						if(toki == 0){
+							pjtr->addErrMes(L("Cannot infer template type."));
+							return -1;
+						}
+							tbinding += toki;
+						}
+					}else{
+						// ^_t / %_t / similar — the argument must be a ref/list
+						// whose element tokens sit past the marker.
+						if(ktype.kwsk.size() < tp){
+							pjtr->addErrMes(L("Type error."));
+							return -1;
+						}
+					tbinding.assign(
+						ktype.kwsk.begin() + tp, ktype.kwsk.end());
+				}
+				// Substitute every TYPE_TOKEN in the signature (params and
+					// return) with the binding.
+					for(size_t tw = 0; tw < waketa.size(); tw++){
+						tSubstitute(waketa[tw]);
+					}
+					// Recompute this parameter's type now that _t is bound, and
+					// fix up the type-stack entry pushed above.
+					typ = TokenToTypeId(waketa[ii+1].data(), idx=0);
+					if(typ == UNKNOWN_TYPEID) return -1;
+					tystack[tystackStart + ii*2] = typ;
+				}
 				if(typ == UNKNOWN_TYPEID) return -1;
 				if(waketa[ii+1].back() == ~DAINYUU_TOKEN){
 					sizee += Aliszof<intptr_t>();

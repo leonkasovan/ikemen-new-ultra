@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**16 native libraries registered, 3 libraries intentionally remain in SSZ.**
+**17 native libraries registered (16 conversions + 1 test fixture), 3 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -29,6 +29,7 @@ stay in SSZ" below).
 | 14 | `table` | `table.cpp` | 🔀 **Hybrid** | Concrete `hash` only; `NameTable`/`IntTable`/`intHash<_t>` stay in SSZ |
 | 15 | `sdlplugin` | `alpha/sdlplugin.cpp` | 🔀 **Hybrid** | Bridge to the static `<sdlplugin>` plugin; enabled by `|Enum`/`&Struct` support in `TypeNameToTokens`.  Module functions delegate natively; `&Surface`/`&Font`/`&GlTexture` methods keep in-body plugin decls, enums/structs/constants stay in SSZ |
 | 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) native; stateful `event()`/`eventUpdate()` stay in SSZ |
+| 17 | `tmpl` | `tmpl.cpp` | 🧪 **Test fixture** | Demonstrates native `_t` (TYPE_TOKEN) generic signatures — JIT call-site inference: `_t min/add(_t,_t)`, `void inc(_t v=)` out-param, `void fill(^_t buf=, _t)`, `^_t make(_t)` ref return; `long` (8-byte) instantiations |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
 | — | `stack` | — | ⏸ **Stays in SSZ** | 100% template data structure (`&Stack<_t>`/`&Node<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
@@ -59,7 +60,8 @@ template-bound by design (see below).
 | decBase64 fix | `a644791` | `(_t)` → `(*_t)` cast fix — `decBase64<_t>` compiles; suite covers round-trips |
 | Makefile test wiring | `d717a0f` | `make test` / `test-file` / `test-ssz` |
 | Enum/Struct native types | `6f49edd` | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
-| sdlevent &Key | *(next commit)* | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
+| sdlevent &Key | `e2e8e02` | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
+| Native `_t` (TYPE_TOKEN) | — | JIT call-site type inference for native generic signatures (`KansuuPointer` binding in jitcompiler.hpp); `TypeNameToTokens` encodes `_t`; `FuncRetToken`/`RefToken` learn `TYPE_TOKEN`; `tmpl` fixture + `tmpltest` regression |
 
 ## Architecture
 
@@ -112,17 +114,31 @@ Verified empirically (documented in AGENTS.md):
 - **`alert`** — 3-line wrapper; `_t` only feeds compile-time `typeid(_t)`.
 - **`stack`** / **`table`** — pure template data structures with
   template-typed *fields* (`^_t data`) and delegate params (`each`/`forEach`).
-- **Native `_t` signatures provably fail** — a registered signature with `_t`
-  compiles the module, but every call site dies with "Compilation Error."
-  (`KansuuKata`/`TokenToTypeId` have no `TYPE_TOKEN` resolution; module
-  henshuu are synthesized once, never re-parsed per instantiation).
+- **Native `_t` signatures now work (call-site inference)** — the JIT binds
+  `_t` from the first argument whose parameter mentions `TYPE_TOKEN`, then
+  substitutes every `TYPE_TOKEN` in the signature (params and return) before
+  type-checking and code emission (`KansuuPointer` in jitcompiler.hpp;
+  `TypeNameToTokens` encodes `_t` as `TYPE_TOKEN`; `FuncRetToken`/`RefToken`
+  in tokenkind.h learn `TYPE_TOKEN`).  Verified by `test/ssz/tmpltest.ssz`:
+  scalar params/returns, `_t v=` out-params, `^_t buf=` array out-params,
+  `^_t` ref returns, and `long` instantiations (value args and the return use
+  full 8-byte slots, so the C++ side declares `int64_t`; an `int`-element
+  function would declare `int32_t` per the 32-bit-slot rule — one C
+  implementation serves one element type).  Module henshuu are still
+  synthesized once at import; the binding happens per call site.
+- **Stack/table still blocked by template-typed *fields* and delegate params**
+  — `&Stack<_t>`/`&Node<_t>`/`&NameTable<_t>` declare `^_t data` fields, and
+  `each`/`forEach`/`operate` take `func` delegate params; neither is
+  expressible in a native signature (no struct-generic fields, no `ref`/`func`
+  in `TypeNameToTokens`).
 - **`^null` (DYNREF) can't store data** — transient call params/returns only;
   `^null` locals and struct fields fail to compile.
 
 Templates work in SSZ because instantiation (`probe!int?`) **re-parses the body
 from source** with `_t` bound (`BlockOpen`/`MakeTree`, sourcetree.hpp ~5999) —
-that's why socket's in-body plugin declarations work. The native registry has no
-such re-parse.
+that's why socket's in-body plugin declarations work.  Native `_t` signatures
+need no such re-parse: the JIT infers the concrete type from each call site
+instead.
 
 ## `lib/alpha/*` — status after `|Enum`/`&Struct` support
 
@@ -176,11 +192,12 @@ type-vocabulary surface stays put.
 ## Testing
 
 - **SSZ suite**: `test/ssz/*.ssz` with frozen `test/ssz/*.expected` references,
-  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  13 tests cover
-  13 of the 16 native libs (sound is device-dependent — checks completion, not
-  values; `shell`/`string` have no dedicated test — `string`'s `sToU8`/`u8ToS`
-  are exercised indirectly by `basetest`/`md5test`; `sdleventtest` covers the
-  native `&Key` methods).
+  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  14 tests cover
+  13 of the 16 converted libs (sound is device-dependent — checks completion,
+  not values; `shell`/`string` have no dedicated test — `string`'s
+  `sToU8`/`u8ToS` are exercised indirectly by `basetest`/`md5test`;
+  `sdleventtest` covers the native `&Key` methods).  `tmpltest` exercises the
+  native `_t` (TYPE_TOKEN) generic machinery end to end.
 - **C++ smoke test**: `test/test_file.cpp` (40 checks) — `make test-file`.
 - **Makefile**: `make test` = `test-file` + `test-ssz` (the latter forces a
   `CONFIG=Debug install` so the runner finds `install/ikemen-debug.exe`).
@@ -191,10 +208,29 @@ type-vocabulary surface stays put.
   native bridge and `sdlevent`'s `&Key` methods are native (`|Enum`/`&Struct`
   landed in `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful
   event loop, `lua`/`mesdialog` (need `ref`/`func` signatures), `ogg` (dead
-  code), and the template-bound `consts`/`stack`/`alert`.  Future engine work
-  would require JIT support for `TYPE_TOKEN` resolution in native signatures
-  (to port `stack`/`table`) or `DynamicRef` frame slots (to hold `^null`
-  data), and `ref`/`func` in `TypeNameToTokens` for `lua.ssz`.
+  code), and the template-bound `consts`/`stack`/`alert`.
+- **Native `_t` (TYPE_TOKEN) signatures landed** — the JIT binds the
+  placeholder from the call-site arguments in `KansuuPointer` and substitutes
+  it through the signature (params + return).  That covers generic *function*
+  calls.
+- **`stack` port attempted with the `_t` machinery — still blocked.**  With
+  call-site inference working, a `&Stack<_t>`/`&Node<_t>` port was tried and
+  ruled out on four structural grounds (all still true after `_t`): (1) the
+  struct's *fields* are template-typed (`^_t data`, `^&Node!_t? topNode`,
+  `^self next`) and a native signature resolves once at import — it cannot
+  name a per-instantiation class like `&Node!int`; (2) `pop()`/`top()` return
+  `^_t` with no parameters, so there is no call-site argument to bind `_t`
+  from (the binding needs the first param mentioning `TYPE_TOKEN`); (3) the
+  method bodies are pure SSZ heap/ref manipulation (allocate a node via
+  `typesize(&Node!_t)`, link `n~next`, swap `topNode`) — no concrete C++
+  core exists to extract, and the `&X` field-out-param pattern cannot apply
+  when the fields themselves are template-typed; (4) **`stack.ssz` has zero
+  consumers** in this codebase (no `lib stack` import or `&Stack!`
+  instantiation anywhere), so a port would be API-completeness work with no
+  runtime payoff.  `table` is blocked by the same field/delegate reasons
+  plus its `func` delegate params (`each`/`forEach`/`operate`).
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
-  exercised but only `int`/`short` are in the regression test — `long`/`float`
-  round-trips could be added.
+  exercised across all three element sizes in `basetest` (`long` added with a
+  `0x12345678` round-trip).  `float` is intentionally not covered — the wide
+  path bit-packs the integer value, and float→int casts convert the value, not
+  the bit pattern, so a float round-trip cannot be bit-exact.

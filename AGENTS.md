@@ -175,12 +175,30 @@ native code. This was investigated and verified empirically:
   structures: their *fields* are template-typed (`^_t data`, `&Table!_t,
   node_t? t`) and their methods take delegate parameters
   (`each`/`forEach`/`operate`), so no concrete core exists to extract.
-- **Native `_t` signatures don't work.** Registering a native function with
-  `_t` in its signature string (encoding `TYPE_TOKEN` in the plugin type)
-  compiles the module, but every call site fails with a generic
-  "Compilation Error.": `KansuuKata`/`TokenToTypeId` in the JIT have no
-  `TYPE_TOKEN` resolution, and a native module's henshuu are synthesized
-  once at import — never re-parsed per instantiation.
+- **Native `_t` signatures now work — but only for generic *functions*.**
+  Registering a native function with `_t` in its signature string (encoding
+  `TYPE_TOKEN` in the plugin type) is supported: the JIT binds `_t` to the
+  first argument whose parameter mentions `TYPE_TOKEN`, then substitutes
+  every `TYPE_TOKEN` in the signature (params and return) before
+  type-checking and code emission (`KansuuPointer` in `jitcompiler.hpp`;
+  `TypeNameToTokens` encodes `_t`; `FuncRetToken`/`RefToken` in
+  `tokenkind.h` learn `TYPE_TOKEN`). Verified end-to-end by
+  `test/ssz/tmpltest.ssz` (`ssz_script/lib/tmpl.cpp`): scalar params/
+  returns, `_t v=` out-params, `^_t buf=` array out-params, `^_t` ref
+  returns, and `long` (8-byte-slot) instantiations. The module's henshuu are
+  still synthesized once at import — the binding happens per call site, not
+  per template instantiation, and only function parameters/returns
+  participate (no struct-generic fields, no `func` delegate params).
+- **A `stack` port was attempted with the `_t` machinery and still blocked**
+  — four structural reasons survive call-site inference: (1) the struct's
+  *fields* are template-typed (`^_t data`, `^&Node!_t? topNode`, `^self
+  next`) and a native signature resolves once at import, so it cannot name a
+  per-instantiation class like `&Node!int`; (2) `pop()`/`top()` return
+  `^_t` with no parameters, so there is no call-site argument to bind `_t`
+  from; (3) the method bodies are pure SSZ heap/ref manipulation (allocate
+  via `typesize(&Node!_t)`, link `n~next`, swap `topNode`) — no concrete
+  C++ core exists to extract; (4) `stack.ssz` has **zero consumers** in the
+  codebase, so the port has no runtime payoff.
 - **`^null` (DYNREF) can't store data.** DYNREF params/returns work as
   *transients* in native calls (a concrete ref converts via `refToDref`),
   but `^null` locals and `^null` struct fields both fail to compile — the
@@ -194,7 +212,8 @@ with the template param bound as `TYPE_TOKEN + <concrete type>`
 `socket` templates (`send<_t>`/`recv<_t>`/…) work — their `plugin`
 declarations sit *inside* the template body and are re-parsed per
 instantiation with `_t` bound, then resolved through the static plugin
-registry. The native-lib registry has no equivalent re-parse.
+registry. Native `_t` signatures need no such re-parse — the JIT infers the
+concrete type from each call site instead.
 
 `consts.ssz` is also intentionally left in SSZ — it is pure type-system
 sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`).
@@ -251,7 +270,7 @@ conversions, each comparing its output against a frozen reference
 | `arcfourtest` | `arcfour` | RFC 6229 vectors (`Key`/`Plaintext`, `Secret`/`Attack at dawn`), streaming == one-shot |
 | `regextest` | `regex` | match groups, no-match, invalid pattern |
 | `filetest` | `file` | save/load/copy/move/remove, dirs, int write/readAry round trip |
-| `basetest` | `base64` | `encBase64` of `hello`/`Man`/`Ma`, char<->uint helpers, `decBase64` round-trips (ubyte/short/int) |
+| `basetest` | `base64` | `encBase64` of `hello`/`Man`/`Ma`, char<->uint helpers, `decBase64` round-trips (ubyte/short/int/long) |
 | `mathtest` | `math` | seeded PRNG sequence (deterministic LCG), sqrt/floor/ceil/isnan/isinf |
 | `tabletest` | `table` | `hash` values matching the original SSZ algorithm |
 | `timetest` | `time` | unixTime range, tickCount monotonic |

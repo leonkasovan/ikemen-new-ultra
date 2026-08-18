@@ -1,0 +1,46 @@
+// Native _t (TYPE_TOKEN) regression test — generic functions in
+// ssz_script/lib/tmpl.cpp.  The concrete element type is inferred from the
+// call-site arguments by the JIT (KansuuPointer binding in jitcompiler.hpp):
+// the first parameter mentioning _t binds it to that argument's type, then
+// every TYPE_TOKEN in the signature (params and return) is substituted.
+//   _t min(_t, _t)   — scalar params + scalar return (inferred _t = long)
+//   void inc(_t v=)  — scalar out-param write-back
+//   void fill(^_t=, _t) — ^_t array field out-param (the &X pattern shape)
+//   ^_t make(_t)     — ref return with a substituted return type
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib t = <tmpl>;
+
+^/char r = "";
+// _t min(_t, _t) — _t = long (decimal literals are long; the C++ side
+// declares int64_t, matching the full 8-byte arg slots)
+r = r + .s.uToSx((ulong)(.t.min(3, 5)));
+r = r + "|";
+r = r + .s.uToSx((ulong)(.t.min(5, 3)));
+r = r + "|";
+r = r + .s.uToSx((ulong)(.t.min(7, 2)));
+r = r + "|";
+// _t add(_t, _t)
+r = r + .s.uToSx((ulong)(.t.add(10, 20)));
+r = r + "|";
+// void inc(_t v=) — scalar out-param
+long v = 41;
+.t.inc(v=);
+r = r + .s.uToSx((ulong)v);
+r = r + "|";
+// void fill(^_t buf=, _t item) — ^_t array field out-param + _t param
+^long arr;
+arr.new(3);
+.t.fill(arr=, 7);
+r = r + .s.uToSx((ulong)arr[0]);
+r = r + "|";
+r = r + .s.uToSx((ulong)arr[1]);
+r = r + "|";
+r = r + .s.uToSx((ulong)arr[2]);
+r = r + "|";
+// ^_t make(_t v) — ref return with substituted ^_t type
+^long m = .t.make(99);
+r = r + .s.uToSx((ulong)#m);
+r = r + "|";
+if(#m > 0) r = r + .s.uToSx((ulong)m[0]);
+.f.saveAsciiText("tmpltest_out.txt", r);

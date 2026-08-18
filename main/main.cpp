@@ -35,6 +35,7 @@ extern "C" bool ssz_lib_register();
 extern "C" bool socket_lib_register();
 extern "C" bool base64_lib_register();
 extern "C" bool table_lib_register();
+extern "C" bool tmpl_lib_register();
 extern "C" bool sdlplugin_lib_register();
 extern "C" bool sdlevent_lib_register();
 
@@ -481,6 +482,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!table_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'table'");
+		return 1;
+	}
+	if (!tmpl_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'tmpl'");
 		return 1;
 	}
 	if (!sdlplugin_lib_register()) {

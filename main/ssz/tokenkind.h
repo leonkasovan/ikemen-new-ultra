@@ -139,6 +139,9 @@ static bool RefToken(
 	case NULL_TOKEN:
 		type += iap[i++];
 		break;
+	case TYPE_TOKEN:
+		type += iap[i++];
+		break;
 	case AND_TOKEN:
 	case OR_TOKEN:
 		type += iap[i++];
@@ -211,6 +214,9 @@ static bool FuncRetToken(
 	case FUNC_TOKEN:
 		type += iap[i++];
 		if(!FuncToken(type, iap, i)) return false;
+		break;
+	case TYPE_TOKEN:
+		type += iap[i++];
 		break;
 	default:
 		return false;
