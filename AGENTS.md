@@ -150,16 +150,17 @@ variable is for SSZ-side interface parity.
 
 **Conversion status:** the full per-library breakdown (native surface, what
 stays in SSZ, phase history, known gotchas) lives in **`PROGRESS.md`**.  In
-short: **16 native libraries registered** — `time`, `shell`, `thread` are
-fully native; `math`, `string`, `md5`, `arcfour`, `file`, `regex`, `sound`,
-`ssz`, `socket`, `base64`, `table`, `sdlplugin`, `sdlevent` are native cores
-consumed via delegation from a thin `.ssz` wrapper (which keeps templates,
-list-returners, `&Format`-style struct containers, and — for the alpha
-bridges — the enums/structs/constants in SSZ); `consts`, `alert` stay in SSZ
-entirely (template-bound, see below), and the zero-consumer `stack` was
-removed as dead code.  `sdlplugin`/`sdlevent` are
-the first alpha-lib bridges to go native, enabled by `|Enum`/`&Struct`
-support in `TypeNameToTokens` (native_lib.hpp).  Sources live in
+short: **19 native libraries registered** (17 conversions + 2 test fixtures)
+— `time`, `shell`, `thread` are fully native; `math`, `string`, `md5`,
+`arcfour`, `file`, `regex`, `sound`, `ssz`, `socket`, `base64`, `table`,
+`sdlplugin`, `sdlevent`, `lua` are native cores consumed via delegation from
+a thin `.ssz` wrapper (which keeps templates, list-returners,
+`&Format`-style struct containers, and — for the alpha bridges — the
+enums/structs/constants in SSZ); `consts`, `alert` stay in SSZ entirely
+(template-bound, see below), and the zero-consumer `stack` was removed as
+dead code.  The alpha-lib bridges (`sdlplugin`, `sdlevent`, `lua`) went
+native via `|Enum`/`&Struct` and `ref`/`func` support in
+`TypeNameToTokens` (native_lib.hpp).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
@@ -191,17 +192,31 @@ native code. This was investigated and verified empirically:
   returns, and `long` (8-byte-slot) instantiations. The module's henshuu are
   still synthesized once at import — the binding happens per call site, not
   per template instantiation, and only function parameters/returns
-  participate (no struct-generic fields, no `func` delegate params).
+  participate (no struct-generic fields).
+- **`ref`/`func` delegate signatures now work.** `TypeNameToTokens` encodes
+  `ref` as `REF_TOKEN NULL_TOKEN` (DYNREF) and `func$<ret>(<params>)` as
+  `FUNC_TOKEN SIGNATURE_TOKEN <ret> ( <params> )`, with paren-depth-aware
+  parameter splitting in `BuildPluginType` (func params contain commas).
+  `ref=` out-params arrive as `DynamicRef*`, `ref` values as `DynamicRef`,
+  `func` values as `intptr_t` delegate slots. Verified by
+  `test/ssz/funcreftest.ssz` (`ssz_script/lib/funcref.cpp`) and by the
+  `lua.ssz` conversion (`alpha/lua.cpp` re-exports the static `<lua>`
+  plugin's fnptrs; `&State` methods delegate natively). A *captured-self*
+  func type (`func$void(`self=, …)`) is still unnameable in a native
+  signature — the class id is per-instantiation, so `lua`'s `register` keeps
+  its in-body plugin declaration (and `init` keeps its `func X.signature`
+  signature-value params).
 - **A `stack` port was attempted with the `_t` machinery and still blocked**
-  — four structural reasons survive call-site inference: (1) the struct's
-  *fields* are template-typed (`^_t data`, `^&Node!_t? topNode`, `^self
-  next`) and a native signature resolves once at import, so it cannot name a
-  per-instantiation class like `&Node!int`; (2) `pop()`/`top()` return
-  `^_t` with no parameters, so there is no call-site argument to bind `_t`
-  from; (3) the method bodies are pure SSZ heap/ref manipulation (allocate
-  via `typesize(&Node!_t)`, link `n~next`, swap `topNode`) — no concrete
-  C++ core exists to extract; (4) `stack.ssz` had **zero consumers**, so the
-  port had no runtime payoff — and the file was removed as dead code.
+  — four structural reasons survive call-site inference (and `ref`/`func`
+  support): (1) the struct's *fields* are template-typed (`^_t data`,
+  `^&Node!_t? topNode`, `^self next`) and a native signature resolves once
+  at import, so it cannot name a per-instantiation class like `&Node!int`;
+  (2) `pop()`/`top()` return `^_t` with no parameters, so there is no
+  call-site argument to bind `_t` from; (3) the method bodies are pure SSZ
+  heap/ref manipulation (allocate via `typesize(&Node!_t)`, link `n~next`,
+  swap `topNode`) — no concrete C++ core exists to extract; (4) `stack.ssz`
+  had **zero consumers**, so the port had no runtime payoff — and the file
+  was removed as dead code.
 - **`^null` (DYNREF) can't store data.** DYNREF params/returns work as
   *transients* in native calls (a concrete ref converts via `refToDref`),
   but `^null` locals and `^null` struct fields both fail to compile — the
@@ -242,8 +257,18 @@ game's type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
   (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) delegate to
   `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop stays in
   SSZ (module-variable state).
-- **`lua.ssz`** / **`mesdialog.ssz`** — still blocked: signatures need `ref` /
-  `func` delegates (and `mesdialog`'s `veryUnsafeCopy` is template-bound).
+- ✅ **`lua.ssz`** — **converted** (enabled by `ref`/`func` support in
+  `TypeNameToTokens`): the native bridge `alpha/lua.cpp` re-exports the
+  static `<lua>` plugin's fnptrs, and `&State`'s methods delegate natively.
+  `ref=` out-params arrive as `DynamicRef*`, `func` values as `intptr_t`.
+  Two methods stay in SSZ: `init()` (passes `func X.signature` *signature*
+  values, not delegates) and `register` (its `func$void(`self=, int=)` param
+  captures the enclosing class — a per-instantiation class id a native
+  signature cannot name).  Note: converting the bridge does **not** fix the
+  pre-existing boot crash in `luaL_newstate` (Lua C runtime) — verified
+  empirically, the same segfault occurs before and after the conversion.
+- **`mesdialog.ssz`** — remaining alpha lib: `|CodePage`-typed signatures
+  are expressible but `veryUnsafeCopy` is template-bound by definition.
 - **`ogg.ssz`** — **removed**: dead code (`ssz/sound.ssz` dropped its import
   — SDL_mixer handles OGG). The static `<ogg>` plugin stays registered but
   has no SSZ consumer.
@@ -284,6 +309,8 @@ conversions, each comparing its output against a frozen reference
 | `sockettest` | `socket` | graceful connect failure, listen |
 | `soundtest` | `sound` | `&Client` calls complete (results are device-dependent) |
 | `ssztest` | `ssz` | compileString + run a snippet, memMark |
+| `tmpltest` | `tmpl` | native `_t` (TYPE_TOKEN) generics — scalar params/returns, `_t v=` out-param, `^_t buf=` array, `^_t` return, `long` instantiations |
+| `funcreftest` | `funcref` | native `ref`/`func` delegates — `ref=` out-params, `ref` values, `func$void(int)` / `func$void(int=)` params |
 
 Run with `bash test/run_ssz_tests.sh` (defaults to
 `install/ikemen-debug.exe`, then `build/Debug/ikemen-debug.exe`); the

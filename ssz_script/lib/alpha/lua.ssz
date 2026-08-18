@@ -37,42 +37,46 @@ public &SszCompiler
   }
 }
 
+// Native `lua` library (ssz_script/lib/alpha/lua.cpp) — re-exports the
+// static <lua> plugin's fnptrs (the main/ssz/bridge.cpp wrappers), so the
+// &State methods below can delegate here instead of declaring their own
+// in-body `plugin` calls.  `init()`/`refSetNull`/`refCopy` stay in SSZ (they
+// pass `func X.signature` values — signature references, not delegates) and
+// `register` keeps its in-body plugin declaration because its func param
+// captures the enclosing class (func$void(`self=, int=)) — a per-
+// instantiation class id that a native signature cannot name.
+lib lua = <lua>;
+
 public &State
 {
   index ptr = 0;
   new()
   {
-    plugin index NewState(::) = <lua>;
-    `ptr = NewState(::);
+    `ptr = .lua.newState();
   }
   delete()
   {
     if (`ptr != 0) {
-      plugin void Close(:index:) = <lua>;
       index tmp = `ptr;
       `ptr = 0;
-      Close(:tmp:);
+      .lua.close(tmp);
     }
   }
   public bool runFile(^/char str)
   {
-    plugin bool RunFile(:index, ^/char:) = <lua>;
-    ret RunFile(:`ptr, str:);
+    ret .lua.runFile(`ptr, str);
   }
   public bool runString(^/char str)
   {
-    plugin bool RunString(:index, ^/char:) = <lua>;
-    ret RunString(:`ptr, str:);
+    ret .lua.runString(`ptr, str);
   }
   public int getTop()
   {
-    plugin int GetTop(:index:) = <lua>;
-    ret GetTop(:`ptr:);
+    ret .lua.getTop(`ptr);
   }
   public void getGlobal(^/char var)
   {
-    plugin void GetGlobal(:index, ^/char:) = <lua>;
-    GetGlobal(:`ptr, var:);
+    .lua.getGlobal(`ptr, var);
   }
   public void register(^/char n, func$void(`self=, int=) f)
   {
@@ -82,72 +86,59 @@ public &State
   }
   public bool pcall(int nargs, int nresults)
   {
-    plugin bool Pcall(:index, int, int:) = <lua>;
-    ret Pcall(:`ptr, nargs, nresults:);
+    ret .lua.pcall(`ptr, nargs, nresults);
   }
   public void pop(int n)
   {
-    plugin void Pop(:index, int:) = <lua>;
-    Pop(:`ptr, n:);
+    .lua.pop(`ptr, n);
   }
   public void pushNumber(double n)
   {
-    plugin void PushNumber(:index, double:) = <lua>;
-    PushNumber(:`ptr, n:);
+    .lua.pushNumber(`ptr, n);
   }
   public bool isNumber(int idx)
   {
-    plugin bool IsNumber(:index, int:) = <lua>;
-    ret IsNumber(:`ptr, idx:);
+    ret .lua.isNumber(`ptr, idx);
   }
   public double toNumber(int idx)
   {
-    plugin double ToNumber(:index, int:) = <lua>;
-    ret ToNumber(:`ptr, idx:);
+    ret .lua.toNumber(`ptr, idx);
   }
   public void pushBoolean(bool b)
   {
-    plugin void PushBoolean(:index, bool:) = <lua>;
-    PushBoolean(:`ptr, b:);
+    .lua.pushBoolean(`ptr, b);
   }
   public bool isBoolean(int idx)
   {
-    plugin bool IsBoolean(:index, int:) = <lua>;
-    ret IsBoolean(:`ptr, idx:);
+    ret .lua.isBoolean(`ptr, idx);
   }
   public bool toBoolean(int idx)
   {
-    plugin bool ToBoolean(:index, int:) = <lua>;
-    ret ToBoolean(:`ptr, idx:);
+    ret .lua.toBoolean(`ptr, idx);
   }
   public void pushString(^/char s)
   {
-    plugin void PushString(:index, ^/char:) = <lua>;
-    PushString(:`ptr, s:);
+    .lua.pushString(`ptr, s);
   }
   public bool isString(int idx)
   {
-    plugin bool IsString(:index, int:) = <lua>;
-    ret IsString(:`ptr, idx:);
+    ret .lua.isString(`ptr, idx);
   }
   public ^char toString(int idx)
   {
-    plugin void ToString(:index, ^char=, int:) = <lua>;
     ^char tmp;
-    ToString(:`ptr, tmp=, idx:);
+    .lua.toString(`ptr, tmp=, idx);
     ret tmp;
   }
   public void pushRef(ref r)
   {
-    plugin void PushRef(:index, ref=:) = <lua>;
     ref tmp = r;
-    PushRef(:`ptr, tmp=:);
+    .lua.pushRef(`ptr, tmp=);
   }
   public ref toRef(int idx)
   {
-    plugin void ToRef(:index, ref=, int:) = <lua>;
     ref tmp;
-    ToRef(:`ptr, tmp=, idx:);
+    .lua.toRef(`ptr, tmp=, idx);
     ret tmp;
   }
 }

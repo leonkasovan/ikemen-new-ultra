@@ -109,6 +109,56 @@ inline bool TypeNameToTokens(
 		return true;
 	}
 	if(t == "_t")    { out.push_back(TYPE_TOKEN);   return true; }
+	if(t == "ref")   {
+		// Bare `ref` (dynamic reference) — encoded exactly like the parser's
+		// TypeNanika REF_TOKEN case (REF_TOKEN + NULL_TOKEN = DYNREF).
+		out.push_back(REF_TOKEN);
+		out.push_back(NULL_TOKEN);
+		return true;
+	}
+	if(t.rfind("func", 0) == 0){
+		// func$<ret>(<params>) — delegate type, encoded like the parser's
+		// TypeNanika FUNC_TOKEN + DOLLAR_TOKEN cases:
+		//   FUNC_TOKEN SIGNATURE_TOKEN <ret> ( <p1> , <p2> ... )
+		// Params may themselves be func types (nested parens) or carry
+		// out-param `=` markers (trailing ~DAINYUU_TOKEN).
+		auto rest = trim(t.substr(4));
+		if(rest.size() == 0 || rest[0] != '$') return false;
+		rest = trim(rest.substr(1));
+		auto paren = rest.find('(');
+		if(paren == std::string::npos || rest.back() != ')') return false;
+		auto fret = trim(rest.substr(0, paren));
+		auto fparams = rest.substr(paren + 1, rest.size() - paren - 2);
+		out.push_back(FUNC_TOKEN);
+		out.push_back(SIGNATURE_TOKEN);
+		if(!TypeNameToTokens(fret, out, ctx)) return false;
+		out.push_back(SHOUKAKKOOPEN_TOKEN);
+		// Split params on commas at paren-depth 0 (nested func parens and
+		// the `=` marker don't open depth; only '(' / ')' do).
+		int depth = 0;
+		size_t start = 0;
+		bool first = true;
+		auto fflush = [&](size_t end, bool& ok){
+			auto piece = trim(fparams.substr(start, end - start));
+			if(piece.size() == 0) return;
+			if(!first) out.push_back(COMMA_TOKEN);
+			if(!TypeNameToTokens(piece, out, ctx)){ ok = false; return; }
+			first = false;
+		};
+		bool fok = true;
+		for(size_t i = 0; i <= fparams.size(); i++){
+			char c = i < fparams.size() ? fparams[i] : ',';
+			if(c == '('){ depth++; continue; }
+			if(c == ')'){ depth--; continue; }
+			if(c == ',' && depth == 0){
+				fflush(i, fok);
+				if(!fok) return false;
+				start = i + 1;
+			}
+		}
+		out.push_back(SHOUKAKKOCLOSE_TOKEN);
+		return true;
+	}
 	if(t == "void")   { out.push_back(VOID_TOKEN);   return true; }
 	if(t == "bool")   { out.push_back(BOOL_TOKEN);   return true; }
 	if(t == "byte")   { out.push_back(BYTE_TOKEN);   return true; }
@@ -177,8 +227,25 @@ inline bool BuildPluginType(
 	const std::string& sig, std::vector<intptr_t>& type,
 	const NativeTypeContext* ctx = nullptr)
 {
-	// Split "<ret> (<params>)" at the first '(' .
-	auto paren = sig.find('(');
+	// Split "<ret> (<params>)" at the top-level '(' — the one whose
+	// matching ')' is the final character.  A func-typed return
+	// (e.g. "func$void(int) (int)") has its own parens before it, so a
+	// plain first-'(' split would land inside the return type.
+	size_t paren = std::string::npos;
+	{
+		int depth = 0;
+		for(size_t i = sig.size(); i-- > 0; ){
+			if(sig[i] == ')') depth++;
+			else if(sig[i] == '('){
+				if(depth > 0){
+					depth--;
+					if(depth == 0){ paren = i; break; }  // matches the final ')'
+				}else{
+					break;
+				}
+			}
+		}
+	}
 	if(paren == std::string::npos || sig.back() != ')') return false;
 	auto ret = sig.substr(0, paren);
 	std::string params;
@@ -198,21 +265,25 @@ inline bool BuildPluginType(
 	type.push_back(SIGNATURE_TOKEN);
 	if(!TypeNameToTokens(ret, type, ctx)) return false;
 	type.push_back(SHOUKAKKOOPEN_TOKEN);
-	if(params.size() > 0){
+	if(params.size() > 0 && trim(params).size() > 0){
+		// Split on commas at paren-depth 0 so func-typed params
+		// ("func$void(int, int)") stay intact.
+		int depth = 0;
 		size_t pos = 0;
 		bool first = true;
-		while(pos <= params.size()){
-			auto comma = params.find(',', pos);
-			auto piece = params.substr(
-				pos, comma == std::string::npos ? std::string::npos : comma - pos);
-			piece = trim(piece);
-			if(piece.size() > 0){
-				if(!first) type.push_back(COMMA_TOKEN);
-				if(!TypeNameToTokens(piece, type, ctx)) return false;
-				first = false;
+		for(size_t i = 0; i <= params.size(); i++){
+			char c = i < params.size() ? params[i] : ',';
+			if(c == '('){ depth++; continue; }
+			if(c == ')'){ depth--; continue; }
+			if(c == ',' && depth == 0){
+				auto piece = trim(params.substr(pos, i - pos));
+				if(piece.size() > 0){
+					if(!first) type.push_back(COMMA_TOKEN);
+					if(!TypeNameToTokens(piece, type, ctx)) return false;
+					first = false;
+				}
+				pos = i + 1;
 			}
-			if(comma == std::string::npos) break;
-			pos = comma + 1;
 		}
 	}
 	type.push_back(SHOUKAKKOCLOSE_TOKEN);

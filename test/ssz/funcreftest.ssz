@@ -1,0 +1,39 @@
+// Native ref/func regression test — ssz_script/lib/funcref.cpp.
+// Exercises the two new TypeNameToTokens signature encodings:
+//   ref                       -> DYNREF (REF_TOKEN NULL_TOKEN)
+//   func$void(int)            -> FUNC_TOKEN SIGNATURE_TOKEN VOID_TOKEN ( INT_TOKEN )
+//   func$void(int=)           -> same with a ~DAINYUU_TOKEN out-param marker
+// Shapes covered: ref out-params (DynamicRef*), ref value params
+// (DynamicRef by value), func value params (intptr_t delegate slot).
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib fr = <funcref>;
+
+^/char r = "";
+// ref out-param: refNull(ref o=) — writes a null DynamicRef through the ptr
+ref r1;
+.fr.refNull(r1=);
+r = r + .s.uToSx((ulong)(.fr.refIsNull(r1) ? 1 : 0));
+r = r + "|";
+// ref out-param with data: setRefInt(ref o=, int v) then read back
+.fr.setRefInt(r1=, 42);
+r = r + .s.uToSx((ulong)(.fr.getRefInt(r1)));
+r = r + "|";
+r = r + .s.uToSx((ulong)(.fr.refIsNull(r1) ? 1 : 0));
+r = r + "|";
+// refCopy(ref o=, ref r) — value ref param + out-param
+ref r2;
+.fr.setRefInt(r2=, 7);
+.fr.refCopy(r1=, r2);
+r = r + .s.uToSx((ulong)(.fr.getRefInt(r1)));
+r = r + "|";
+// func value param: callVoid(func$void(int) f) — record the delegate handle
+void cb(int x) {}
+.fr.callVoid(.cb);
+r = r + .s.uToSx((ulong)(.fr.lastFunc() == 0 ? 1 : 0));
+r = r + "|";
+// func with an out-param inside the signature: callOut(func$void(int=) f)
+void cbOut(int x=) {}
+.fr.callOut(.cbOut);
+r = r + "done";
+.f.saveAsciiText("funcreftest_out.txt", r);

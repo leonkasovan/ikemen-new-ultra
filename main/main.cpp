@@ -36,8 +36,10 @@ extern "C" bool socket_lib_register();
 extern "C" bool base64_lib_register();
 extern "C" bool table_lib_register();
 extern "C" bool tmpl_lib_register();
+extern "C" bool funcref_lib_register();
 extern "C" bool sdlplugin_lib_register();
 extern "C" bool sdlevent_lib_register();
+extern "C" bool lua_lib_register();
 
 
 #include <stdio.h>
@@ -488,8 +490,16 @@ int main(int argc, char *argv[]) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'tmpl'");
 		return 1;
 	}
+	if (!funcref_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'funcref'");
+		return 1;
+	}
 	if (!sdlplugin_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'sdlplugin'");
+		return 1;
+	}
+	if (!lua_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'lua'");
 		return 1;
 	}
 	if (!sdlevent_lib_register()) {

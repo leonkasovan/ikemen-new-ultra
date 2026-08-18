@@ -9,7 +9,7 @@ stay in SSZ" below).
 
 ## Status summary
 
-**17 native libraries registered (16 conversions + 1 test fixture), 2 libraries intentionally remain in SSZ.**
+**19 native libraries registered (17 conversions + 2 test fixtures), 2 libraries intentionally remain in SSZ.**
 
 | # | Library | Native source | Status | Notes |
 |---|---|---|---|---|
@@ -30,6 +30,8 @@ stay in SSZ" below).
 | 15 | `sdlplugin` | `alpha/sdlplugin.cpp` | 🔀 **Hybrid** | Bridge to the static `<sdlplugin>` plugin; enabled by `|Enum`/`&Struct` support in `TypeNameToTokens`.  Module functions delegate natively; `&Surface`/`&Font`/`&GlTexture` methods keep in-body plugin decls, enums/structs/constants stay in SSZ |
 | 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) native; stateful `event()`/`eventUpdate()` stay in SSZ |
 | 17 | `tmpl` | `tmpl.cpp` | 🧪 **Test fixture** | Demonstrates native `_t` (TYPE_TOKEN) generic signatures — JIT call-site inference: `_t min/add(_t,_t)`, `void inc(_t v=)` out-param, `void fill(^_t buf=, _t)`, `^_t make(_t)` ref return; `long` (8-byte) instantiations |
+| 18 | `lua` | `alpha/lua.cpp` | 🔀 **Hybrid** | Bridge to the static `<lua>` plugin; enabled by `ref`/`func` support in `TypeNameToTokens`.  `&State` methods delegate natively (`ref=`/`func` params arrive as `DynamicRef*`/`intptr_t`); `init()` (signature-value params) and `register` (self-capturing func param) stay in SSZ |
+| 19 | `funcref` | `funcref.cpp` | 🧪 **Test fixture** | Exercises native `ref`/`func` delegate signatures — `ref=` out-params (`DynamicRef*`), `ref` values (`DynamicRef`), `func$void(int)`/`func$void(int=)` params (`intptr_t`); 4-byte heap-cell round-trip |
 | — | `consts` | — | ⏸ **Stays in SSZ** | Pure type-system sugar (`&Signed<_t>`, `&Unsigned<_t>`, `null<_t>`) |
 | — | `alert` | — | ⏸ **Stays in SSZ** | 3-line wrapper; `_t` only feeds compile-time `typeid(_t)` |
 | — | `stack` | — | 🗑 **Removed** | Was 100% template data structure (`&Stack<_t>`/`&Node<_t>`) with **zero consumers** in the codebase — deleted as dead code; see "Why … stay in SSZ" for why it could never be native |
@@ -62,6 +64,7 @@ template-bound by design (see below), and the zero-consumer `stack` was removed.
 | Enum/Struct native types | `6f49edd` | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
 | sdlevent &Key | `e2e8e02` | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
 | Native `_t` (TYPE_TOKEN) | — | JIT call-site type inference for native generic signatures (`KansuuPointer` binding in jitcompiler.hpp); `TypeNameToTokens` encodes `_t`; `FuncRetToken`/`RefToken` learn `TYPE_TOKEN`; `tmpl` fixture + `tmpltest` regression |
+| `ref`/`func` delegates | — | `TypeNameToTokens` encodes `ref` (DYNREF) and `func$ret(params)` (FUNC_TOKEN + signature); paren-aware param splitting in `BuildPluginType`; `funcref` fixture + `funcreftest` regression; `lua` bridge lib converted (`&State` methods native, `register`/`init` stay in SSZ) |
 
 ## Architecture
 
@@ -130,11 +133,13 @@ Verified empirically (documented in AGENTS.md):
   function would declare `int32_t` per the 32-bit-slot rule — one C
   implementation serves one element type).  Module henshuu are still
   synthesized once at import; the binding happens per call site.
-- **Stack/table still blocked by template-typed *fields* and delegate params**
-  — `&Stack<_t>`/`&Node<_t>`/`&NameTable<_t>` declare `^_t data` fields, and
-  `each`/`forEach`/`operate` take `func` delegate params; neither is
-  expressible in a native signature (no struct-generic fields, no `ref`/`func`
-  in `TypeNameToTokens`).
+- **Stack/table still blocked by template-typed *fields*** — `&Stack<_t>`/
+  `&Node<_t>`/`&NameTable<_t>` declare `^_t data` fields, and a native
+  signature resolves once at import — it cannot name a per-instantiation
+  class or hold a template-typed field.  (`func` delegate params like
+  `each`/`forEach`/`operate` are now expressible — see `ref`/`func` support
+  below — but the fields are the hard blocker, and `pop()`/`top()` still
+  return `^_t` with no call-site argument to bind from.)
 - **`^null` (DYNREF) can't store data** — transient call params/returns only;
   `^null` locals and struct fields fail to compile.
 
@@ -171,8 +176,15 @@ referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
   native `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop
   (module-variable state: `nexttime`, `lastdraw`, dozens of key flags, the
   `sdle` event struct) stays in SSZ.  Verified by `test/ssz/sdleventtest.ssz`.
-- **`lua.ssz`** — core is `ref`/`func` delegates (`refSetNull`/`refCopy`,
-  `register(^/char, func$void(...))`) — still not expressible.
+- ✅ **`lua.ssz`** — **converted** (native bridge `alpha/lua.cpp` re-exports
+  the static `<lua>` plugin's fnptrs via `lua_plugin.hpp`).  Enabled by
+  `ref`/`func` support in `TypeNameToTokens` (see below): `ref=` out-params
+  arrive as `DynamicRef*`, `ref` values as `DynamicRef`, `func` values as
+  `intptr_t` delegate slots.  `&State`'s methods delegate to the native lib
+  (`newState`/`runFile`/`toString`/`pushRef`/`toRef`/…).  Two methods stay in
+  SSZ: `init()` (passes `func X.signature` *signature* values, not delegates)
+  and `register` (its `func$void(`self=, int=)` param captures the enclosing
+  class — a per-instantiation class id a native signature cannot name).
 - **`mesdialog.ssz`** — `|CodePage`-typed signatures are now expressible, but
   the `veryUnsafeCopy` template (used by `common.ssz`/`char.ssz`) is
   template-bound by definition.
@@ -200,44 +212,60 @@ type-vocabulary surface stays put.
 ## Testing
 
 - **SSZ suite**: `test/ssz/*.ssz` with frozen `test/ssz/*.expected` references,
-  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  14 tests cover
-  13 of the 16 converted libs (sound is device-dependent — checks completion,
+  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  15 tests cover
+  14 of the 16 converted libs (sound is device-dependent — checks completion,
   not values; `shell`/`string` have no dedicated test — `string`'s
   `sToU8`/`u8ToS` are exercised indirectly by `basetest`/`md5test`;
   `sdleventtest` covers the native `&Key` methods).  `tmpltest` exercises the
-  native `_t` (TYPE_TOKEN) generic machinery end to end.
+  native `_t` (TYPE_TOKEN) generic machinery; `funcreftest` exercises the
+  `ref`/`func` delegate machinery.
 - **C++ smoke test**: `test/test_file.cpp` (40 checks) — `make test-file`.
 - **Makefile**: `make test` = `test-file` + `test-ssz` (the latter forces a
   `CONFIG=Debug install` so the runner finds `install/ikemen-debug.exe`).
 
 ## Remaining / next steps
 
-- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` is a
-  native bridge and `sdlevent`'s `&Key` methods are native (`|Enum`/`&Struct`
-  landed in `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful
-  event loop, `lua`/`mesdialog` (need `ref`/`func` signatures), and the
-  template-bound `consts`/`alert`.  `ogg.ssz` (dead) and `stack.ssz`
+- The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin` and
+  `lua` are native bridges and `sdlevent`'s `&Key` methods are native
+  (`|Enum`/`&Struct` and `ref`/`func` both landed in `TypeNameToTokens`).
+  Remaining SSZ surface: `sdlevent`'s stateful event loop, `mesdialog`
+  (`veryUnsafeCopy` is template-bound by definition), `lua`'s `init()`
+  (signature-value params) and `register` (self-capturing func param), and
+  the template-bound `consts`/`alert`.  `ogg.ssz` (dead) and `stack.ssz`
   (zero-consumer) were removed.
 - **Native `_t` (TYPE_TOKEN) signatures landed** — the JIT binds the
   placeholder from the call-site arguments in `KansuuPointer` and substitutes
   it through the signature (params + return).  That covers generic *function*
   calls.
+- **`ref`/`func` delegate signatures landed** — `TypeNameToTokens` now encodes
+  `ref` as `REF_TOKEN NULL_TOKEN` (DYNREF) and `func$<ret>(<params>)` as
+  `FUNC_TOKEN SIGNATURE_TOKEN <ret> ( <params> )`, with paren-depth-aware
+  parameter splitting in `BuildPluginType` (func params contain commas) and a
+  top-level-`(` scan that tolerates func-typed returns.  `ref=` out-params
+  arrive as `DynamicRef*`, `ref` values as `DynamicRef`, `func` values as
+  `intptr_t` delegate slots.  Verified by `test/ssz/funcreftest.ssz` (ref
+  out-params/values round-trip a 4-byte cell through the heap; func values and
+  out-param func signatures type-check and pass) and by the `lua.ssz`
+  conversion above.  What still needs a *captured-self* func type
+  (`func$void(`self=, …)`) is unnameable in a native signature — the class id
+  is per-instantiation.
 - **`stack` port attempted with the `_t` machinery — still blocked, then
   removed.**  With call-site inference working, a `&Stack<_t>`/`&Node<_t>`
   port was tried and ruled out on four structural grounds (all still true
-  after `_t`): (1) the struct's *fields* are template-typed (`^_t data`,
-  `^&Node!_t? topNode`, `^self next`) and a native signature resolves once at
-  import — it cannot name a per-instantiation class like `&Node!int`; (2)
-  `pop()`/`top()` return `^_t` with no parameters, so there is no call-site
-  argument to bind `_t` from (the binding needs the first param mentioning
-  `TYPE_TOKEN`); (3) the method bodies are pure SSZ heap/ref manipulation
-  (allocate a node via `typesize(&Node!_t)`, link `n~next`, swap `topNode`)
-  — no concrete C++ core exists to extract, and the `&X` field-out-param
-  pattern cannot apply when the fields themselves are template-typed; (4)
-  `stack.ssz` had **zero consumers**, so the port had no runtime payoff —
-  and the file was deleted as dead code.  `table` is blocked by the same
-  field/delegate reasons plus its `func` delegate params
-  (`each`/`forEach`/`operate`).
+  after `_t` and `ref`/`func`): (1) the struct's *fields* are template-typed
+  (`^_t data`, `^&Node!_t? topNode`, `^self next`) and a native signature
+  resolves once at import — it cannot name a per-instantiation class like
+  `&Node!int`; (2) `pop()`/`top()` return `^_t` with no parameters, so there
+  is no call-site argument to bind `_t` from (the binding needs the first
+  param mentioning `TYPE_TOKEN`); (3) the method bodies are pure SSZ
+  heap/ref manipulation (allocate a node via `typesize(&Node!_t)`, link
+  `n~next`, swap `topNode`) — no concrete C++ core exists to extract, and
+  the `&X` field-out-param pattern cannot apply when the fields themselves
+  are template-typed; (4) `stack.ssz` had **zero consumers**, so the port
+  had no runtime payoff — and the file was deleted as dead code.  `table`
+  is blocked by the same template-typed *fields* (`^_t data`,
+  `&Table!_t,node_t? t`); its `func` delegate params
+  (`each`/`forEach`/`operate`) are now expressible.
 - `decBase64` wide-type fallback (bit-packing for `short`/`int`/`long`) is
   exercised across all three element sizes in `basetest` (`long` added with a
   `0x12345678` round-trip).  `float` is intentionally not covered — the wide
