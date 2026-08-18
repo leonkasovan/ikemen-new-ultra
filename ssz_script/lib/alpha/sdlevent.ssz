@@ -3,9 +3,11 @@ lib sdl = <alpha/sdlplugin.ssz>;
 lib sh = <shell>;
 
 // ── Native sdlevent library ───────────────────────────────────────────────
-// The &Key methods below delegate to ssz_script/lib/alpha/sdlevent.cpp; the
-// stateful event()/eventUpdate() functions stay in SSZ (they drive module
-// state through the event struct and dozens of key flags).
+// The &Key methods and the event(fps) timing core (nexttime/lastdraw/
+// nexttimeFractionalPart/fskip branch) delegate to
+// ssz_script/lib/alpha/sdlevent.cpp; the stateful eventUpdate() event pump
+// and the key-flag clears stay in SSZ (they drive module state through the
+// event struct and dozens of key flags).
 lib ev = <sdlevent>;
 
 uint nexttime = 0x0, lastdraw = 0x0;
@@ -468,37 +470,20 @@ public bool eventUpdate()
   ret !.end;
 }
 
+// The timing core, exposed for the regression test (deterministic with an
+// explicit `now` instead of .sdl.GetTicks).
+public void eventTiming(int fps, uint now, uint nexttime=, uint lastdraw=, float frac=, bool fskip=)
+{
+  .ev.eventTiming(fps, now, nexttime=, lastdraw=, frac=, fskip=);
+}
+
 public bool event(int fps)
 {
-  uint uWait = (uint)1000 / (uint)fps;
-  void nexttimeNext()
-  {
-    .nexttime += `uWait;
-    .nexttimeFractionalPart += (float)(1000 % `fps) / (float)`fps;
-    if(.nexttimeFractionalPart >= 1.0){
-      .nexttime++;
-      .nexttimeFractionalPart -= 1.0;
-    }
-  }
-  branch{
-    uint now = .sdl.GetTicks(::);
-    uint dif = .nexttime - now;
-    nexttimeNext();
-  cond dif < uWait + 0x2:
-    .sdl.Delay(:dif:);
-  cond now - .lastdraw > 0d250:
-  cond dif+0d17 < 0d17:
-  else:
-    if(-dif > 0d150){
-      .nexttime = now;
-      nexttimeNext();
-    }
-    .fskip = true;
-    break;
-  comm:
-    .lastdraw = now;
-    .fskip = false;
-  }
+  // Timing core (native): the `nexttime`/`lastdraw`/`nexttimeFractionalPart`/
+  // `fskip` branch of the original event() — see ssz_script/lib/alpha/
+  // sdlevent.cpp.  `now` is read here so the native arithmetic is
+  // deterministic; the key-flag clears and the eventUpdate() pump stay in SSZ.
+  .ev.eventTiming(fps, .sdl.GetTicks(::), .nexttime=, .lastdraw=, .nexttimeFractionalPart=, .fskip=);
   .esc = false;
   .paste = false;
   .upKey = false;

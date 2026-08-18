@@ -1,0 +1,62 @@
+// sdlevent timing-core regression test — the event(fps) `branch` transcribed
+// to native (ssz_script/lib/alpha/sdlevent.cpp eventTiming).  With `now`
+// passed explicitly (instead of .sdl.GetTicks) the arithmetic is fully
+// deterministic: fps=60 gives uWait=1000/60=16 and frac step 40/60=0.6667.
+//
+// Covered branch paths (all uint wraparound, probed semantics):
+//   Case 1/6: on time (dif < uWait+2) -> Delay + comm (lastdraw=now, fskip=false)
+//   Case 2:   >250ms since last draw -> empty cond -> comm
+//   Case 3:   nexttime just behind now (dif+17 wraps < 17) -> empty cond -> comm
+//   Case 4:   else, far ahead (-dif wraps > 150) -> resync nexttime=now, fskip=true, no comm
+//   Case 5:   else, -dif <= 150 -> no resync, fskip=true, no comm
+//   Case 6:   three on-time frames -> frac carry adds +1 to nexttime
+lib f = <file.ssz>;
+lib s = <string.ssz>;
+lib sdl = <alpha/sdlplugin.ssz>;
+lib ev = <alpha/sdlevent.ssz>;
+
+^/char r = "";
+uint nt = 0x0, ld = 0x0;
+float fr = 0.0;
+bool fs = false;
+
+// Case 1: on time — dif = 100-90 = 10 < 18 -> Delay(10), comm
+nt = 0x64; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0x5A, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+// Case 2: >250ms since last draw — now-lastdraw = 300 > 250 -> comm
+nt = 0x64; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0x12C, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+// Case 3: nexttime just behind now — dif = 10-20 = 0xFFFFFFF6, dif+17 = 7 < 17 -> comm
+nt = 0xA; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0x14, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+// Case 4: far ahead — dif = 500, -dif = 0-500 wraps huge > 150 -> resync to now, fskip, no comm
+nt = 0x1F4; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0x0, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+// Case 5: slightly behind by 100ms — dif = 0xFFFFFF9C, -dif = 100 <= 150 -> no resync, fskip, no comm
+nt = 0x64; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0xC8, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+// Case 6: three on-time frames with now advancing 16ms each — frac carries
+// 0.6667 * 3 = 2.0 -> nexttime gains 16*3 + 2 = 50 (0x32)
+nt = 0x64; ld = 0x0; fr = 0.0; fs = false;
+.ev.eventTiming(60, 0x5A, nt=, ld=, fr=, fs=);
+.ev.eventTiming(60, 0x6A, nt=, ld=, fr=, fs=);
+.ev.eventTiming(60, 0x7A, nt=, ld=, fr=, fs=);
+r = r + s.uToSx(nt) + "|" + s.uToSx(ld) + "|" + s.uToSx(fs ? 0x1 : 0x0) + "|" + s.uToSx((ulong)fr);
+r = r + "|";
+
+.f.saveAsciiText("sdleventtimingtest_out.txt", r);

@@ -160,7 +160,10 @@ bridges — the enums/structs/constants in SSZ); `consts`, `alert` stay in
 SSZ entirely (template-bound, see below), and the zero-consumer `stack`
 was removed as dead code.  The alpha-lib bridges (`sdlplugin`, `sdlevent`,
 `lua`, `mesdialog`) went native via `|Enum`/`&Struct`, `ref`/`func`, and
-`|CodePage` enum support in `TypeNameToTokens` (native_lib.hpp).  Sources live in
+`|CodePage` enum support in `TypeNameToTokens` (native_lib.hpp) —
+`sdlevent`'s remaining SSZ surface is the stateful `eventUpdate()` pump,
+whose module-variable state is the game's public `.se.*` API (not
+convertible without breaking it).  Sources live in
 `ssz_script/lib/<name>.cpp`; registration order is `NATIVE_LIB_SRCS` in the
 Makefile and `*_lib_register()` calls in `main/main.cpp`.
 
@@ -253,9 +256,13 @@ game's type vocabulary (`|EventType`, `|SDLKey`, `|K`, `|CodePage`, `&Event`,
   and the `.ssz` delegates module functions while keeping the types.  The
   importing module must declare the referenced types before
   `lib sdlp = <sdlplugin>;`, and call sites use the `(::)`/`(:` forms.
-- ✅ **`sdlevent.ssz`** — **partially converted**: the `&Key` methods
-  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) delegate to
-  `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop stays in
+- ✅ **`sdlevent.ssz`** — **converted (timing core)**: the `&Key` methods
+  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) AND the
+  `event(fps)` timing core (`eventTiming(fps, now, nexttime=, lastdraw=,
+  frac=, fskip=)`) delegate to `alpha/sdlevent.cpp`.  `now` is passed in by
+  the wrapper (`.sdl.GetTicks(::)`) so the arithmetic is deterministic and
+  regression-testable; all branch conds are uint wraparound (verified by
+  probe).  The stateful `eventUpdate()` pump and key-flag clears stay in
   SSZ (module-variable state).
 - ✅ **`lua.ssz`** — **converted** (enabled by `ref`/`func` support in
   `TypeNameToTokens`): the native bridge `alpha/lua.cpp` re-exports the
@@ -334,6 +341,8 @@ conversions, each comparing its output against a frozen reference
 | `tmpltest` | `tmpl` | native `_t` (TYPE_TOKEN) generics — scalar params/returns, `_t v=` out-param, `^_t buf=` array, `^_t` return, `long` instantiations |
 | `funcreftest` | `funcref` | native `ref`/`func` delegates — `ref=` out-params, `ref` values, `func$void(int)` / `func$void(int=)` params |
 | `mesdialogtest` | `mesdialog` | shared-string round trip, ini write/read, CodePage byte<->string conversions, asciiToLocal, tajuuCheck |
+| `sdleventtest` | `sdlevent` | `&Key` reset/checkDown (dot-qualified `|.sdl.K` enum params), modifier-mask matching |
+| `sdleventtimingtest` | `sdlevent` | deterministic `event(fps)` timing core — every branch path, uint-wraparound conds, frac carry across frames |
 
 Run with `bash test/run_ssz_tests.sh` (defaults to
 `install/ikemen-debug.exe`, then `build/Debug/ikemen-debug.exe`); the

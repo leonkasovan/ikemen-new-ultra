@@ -28,7 +28,7 @@ stay in SSZ" below).
 | 13 | `base64` | `base64.cpp` | 🔀 **Hybrid** | Byte-level core (`uintToB64Char`/`b64CharToUint`/`encB64`/`decB64`); templates delegate for byte-sized types, SSZ bit-packing fallback for wide types |
 | 14 | `table` | `table.cpp` | 🔀 **Hybrid** | Concrete `hash` only; `NameTable`/`IntTable`/`intHash<_t>` stay in SSZ |
 | 15 | `sdlplugin` | `alpha/sdlplugin.cpp` | 🔀 **Hybrid** | Bridge to the static `<sdlplugin>` plugin; enabled by `|Enum`/`&Struct` support in `TypeNameToTokens`.  Module functions delegate natively; `&Surface`/`&Font`/`&GlTexture` methods keep in-body plugin decls, enums/structs/constants stay in SSZ |
-| 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) native; stateful `event()`/`eventUpdate()` stay in SSZ |
+| 16 | `sdlevent` | `alpha/sdlevent.cpp` | 🔀 **Hybrid** | `&Key` methods (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) + the `event(fps)` timing core (`nexttime`/`lastdraw`/`nexttimeFractionalPart`/`fskip` branch, deterministic with `now` passed in) native; stateful `eventUpdate()` pump + key-flag clears stay in SSZ |
 | 17 | `tmpl` | `tmpl.cpp` | 🧪 **Test fixture** | Demonstrates native `_t` (TYPE_TOKEN) generic signatures — JIT call-site inference: `_t min/add(_t,_t)`, `void inc(_t v=)` out-param, `void fill(^_t buf=, _t)`, `^_t make(_t)` ref return; `long` (8-byte) instantiations |
 | 18 | `lua` | `alpha/lua.cpp` | 🔀 **Hybrid** | Bridge to the static `<lua>` plugin; enabled by `ref`/`func` support in `TypeNameToTokens`.  `&State` methods delegate natively (`ref=`/`func` params arrive as `DynamicRef*`/`intptr_t`); `init()` (signature-value params) and `register` (self-capturing func param) stay in SSZ |
 | 19 | `funcref` | `funcref.cpp` | 🧪 **Test fixture** | Exercises native `ref`/`func` delegate signatures — `ref=` out-params (`DynamicRef*`), `ref` values (`DynamicRef`), `func$void(int)`/`func$void(int=)` params (`intptr_t`); 4-byte heap-cell round-trip |
@@ -64,6 +64,7 @@ template-bound by design (see below), and the zero-consumer `stack` was removed.
 | Makefile test wiring | `d717a0f` | `make test` / `test-file` / `test-ssz` |
 | Enum/Struct native types | `6f49edd` | `TypeNameToTokens` learns `|Enum`/`&Struct` (AND/OR_TOKEN + class id) via a `NativeTypeContext` resolver callback; `sdlplugin` bridge lib converted |
 | sdlevent &Key | `e2e8e02` | `&Key` methods native (dot-qualified `|.sdl.K` params); stateful event loop stays in SSZ |
+| sdlevent timing core | — | `event(fps)` timing branch native (`eventTiming(fps, now, nexttime=, lastdraw=, frac=, fskip=)` — deterministic with `now` passed in; uint-wraparound conds probed); `sdleventtimingtest` regression; stateful `eventUpdate()` pump stays in SSZ |
 | Native `_t` (TYPE_TOKEN) | — | JIT call-site type inference for native generic signatures (`KansuuPointer` binding in jitcompiler.hpp); `TypeNameToTokens` encodes `_t`; `FuncRetToken`/`RefToken` learn `TYPE_TOKEN`; `tmpl` fixture + `tmpltest` regression |
 | `ref`/`func` delegates | — | `TypeNameToTokens` encodes `ref` (DYNREF) and `func$ret(params)` (FUNC_TOKEN + signature); paren-aware param splitting in `BuildPluginType`; `funcref` fixture + `funcreftest` regression; `lua` bridge lib converted (`&State` methods native, `register`/`init` stay in SSZ) |
 | mesdialog bridge | — | `alpha/mesdialog.cpp` re-exports the static `<mesdialog>` plugin's fnptrs (`|CodePage` enum sigs); `mesdialogtest` regression; `veryUnsafeCopy` template stays in SSZ |
@@ -173,11 +174,19 @@ referenced types (`lib sdlp = <sdlplugin>;` sits after the type defs).
   constants and delegates module functions like `PollEvent`/`KeyState`/
   `renderMugenZoom`).  Verified: probe resolves `&Event=` out-params and
   `(::)`/`(:` call sites; full game compiles clean.
-- ✅ **`sdlevent.ssz`** — **partially converted**: the `&Key` methods
-  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) delegate to the
-  native `alpha/sdlevent.cpp`; the stateful `event()`/`eventUpdate()` loop
-  (module-variable state: `nexttime`, `lastdraw`, dozens of key flags, the
-  `sdle` event struct) stays in SSZ.  Verified by `test/ssz/sdleventtest.ssz`.
+- ✅ **`sdlevent.ssz`** — **converted (timing core)**: the `&Key` methods
+  (`reset`/`checkDown`, dot-qualified `|.sdl.K` enum params) AND the
+  `event(fps)` timing core delegate to `alpha/sdlevent.cpp`.  The timing
+  core (`eventTiming(fps, now, nexttime=, lastdraw=, frac=, fskip=)`) is a
+  faithful transcription of the original `branch` — verified by probe that
+  all conds are uint wraparound arithmetic (`0d250`/`0d17` literals coerce
+  to uint in the mixed conds), cond bodies fall to `comm` (lastdraw=now,
+  fskip=false), and the `else` body's `break` skips it (fskip=true).  `now`
+  is passed in (wrapper calls `.sdl.GetTicks(::)`) so the arithmetic is
+  deterministic and testable.  The stateful `eventUpdate()` event pump, the
+  `sdle` event struct, and the key-flag clears stay in SSZ.  Verified by
+  `test/ssz/sdleventtest.ssz` (methods) and `test/ssz/sdleventtimingtest.ssz`
+  (timing core, all branch paths).
 - ✅ **`lua.ssz`** — **converted** (native bridge `alpha/lua.cpp` re-exports
   the static `<lua>` plugin's fnptrs via `lua_plugin.hpp`).  Enabled by
   `ref`/`func` support in `TypeNameToTokens` (see below): `ref=` out-params
@@ -247,11 +256,12 @@ type-vocabulary surface stays put.
 ## Testing
 
 - **SSZ suite**: `test/ssz/*.ssz` with frozen `test/ssz/*.expected` references,
-  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  16 tests cover
+  run by `test/run_ssz_tests.sh` from gitignored `test/work/`.  17 tests cover
   15 of the 18 converted libs (sound is device-dependent — checks completion,
   not values; `shell`/`string` have no dedicated test — `string`'s
   `sToU8`/`u8ToS` are exercised indirectly by `basetest`/`md5test`;
-  `sdleventtest` covers the native `&Key` methods and `mesdialogtest` the
+  `sdleventtest` covers the native `&Key` methods, `sdleventtimingtest` the
+  native `event(fps)` timing core, and `mesdialogtest` the
   native bridge module functions).  `tmpltest` exercises the
   native `_t` (TYPE_TOKEN) generic machinery; `funcreftest` exercises the
   `ref`/`func` delegate machinery.
@@ -263,11 +273,14 @@ type-vocabulary surface stays put.
 
 - The 14 convertible `lib/` libs are done; in `lib/alpha/`, `sdlplugin`,
   `lua`, and `mesdialog` are native bridges and `sdlevent`'s `&Key` methods
-  are native (`|Enum`/`&Struct`, `ref`/`func`, and `|CodePage` all landed in
-  `TypeNameToTokens`).  Remaining SSZ surface: `sdlevent`'s stateful event
-  loop, `mesdialog`'s `veryUnsafeCopy` (template-bound by definition),
-  `lua`'s `init()` (signature-value params) and `register` (self-capturing
-  func param), and the template-bound `consts`/`alert`.  `ogg.ssz` (dead)
+  + `event(fps)` timing core are native (`|Enum`/`&Struct`, `ref`/`func`,
+  and `|CodePage` all landed in `TypeNameToTokens`).  Remaining SSZ
+  surface: `sdlevent`'s stateful `eventUpdate()` pump (module-variable
+  event-loop state, not convertible without breaking the public `.se.*`
+  variable API), `mesdialog`'s `veryUnsafeCopy` (template-bound by
+  definition), `lua`'s `init()` (signature-value params) and `register`
+  (self-capturing func param), and the template-bound `consts`/`alert`.
+  `ogg.ssz` (dead)
   and `stack.ssz` (zero-consumer) were removed.  **The full game now boots** (Debug and
   Release): the SSZ script compiles with `error size=0` and the fight
   renders — the long-standing `luaL_newstate` boot crash was the Lua FFI
