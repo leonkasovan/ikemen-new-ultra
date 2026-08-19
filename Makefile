@@ -147,7 +147,8 @@ NATIVE_LIB_SRCS = \
   ssz_script/lib/alpha/sdlevent.cpp \
   ssz_script/lib/alpha/lua.cpp \
   ssz_script/lib/alpha/mesdialog.cpp \
-  ssz_script/lib/video.cpp
+  ssz_script/lib/video.cpp \
+  ssz_script/lib/sound_game.cpp
 
 NATIVE_LIB_OBJS = $(patsubst ssz_script/lib/%.cpp,$(BLD)/nativelib/%.o,$(NATIVE_LIB_SRCS))
 

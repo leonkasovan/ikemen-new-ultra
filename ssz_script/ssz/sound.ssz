@@ -13,6 +13,8 @@ lib sdl = <alpha/sdlplugin.ssz>;
 //Load "script/ssz/" Scripts
 lib com = "common.ssz";
 
+// Native game-script library (Bgm, Sound.setVol)
+lib snd_native = <sound_game>;
 
 .sdl.setVolume(.cfg.GlVol, .cfg.SEVol, .cfg.BGMVol);
 
@@ -172,11 +174,7 @@ public &Sound
   const float frametime = 1.0 / (float).sdl.SNDFREQ;
   public void setVol(int v)
   {
-    branch{
-    cond v < 0: `volume = 0;
-    cond v > 512: `volume = 512;
-    else: `volume = v;
-    }
+    .snd_native.Sound_setVol(`volume=, v);
   }
   public void setPan(float p)
   {
@@ -334,18 +332,15 @@ public &Bgm
   /^/char fileName;
   public void play(^/char file)
   {
-    `clear();
-    if(.sdl.playBGM("", file)) `fileName = file;
+    .snd_native.Bgm_play(`fileName=, file);
   }
   public void write()
   {
-    // BGM playback is handled by SDL_mixer – nothing to pump.
+    .snd_native.Bgm_write();
   }
   public void clear()
   {
-    `fileName = "";
-    // playBGM("") with empty filename stops current track.
-    .sdl.playBGM("", "");
+    .snd_native.Bgm_clear(`fileName=);
   }
 }
 public ^&Bgm bgm.new(1);

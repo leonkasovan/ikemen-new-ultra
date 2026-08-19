@@ -44,8 +44,8 @@ while keeping template-bound code in SSZ.
 
 **Final result:** 20 native libraries registered (16 conversions + 4 alpha
 bridges + 2 test fixtures), 17 regression tests, full game boots in Debug
-and Release. Plus 1 game script (video.ssz) converted to native C++ via the
-SSZ-to-C++ transpiler.
+and Release. Plus 2 game scripts (video.ssz, sound.ssz) converted to native
+C++ via the SSZ-to-C++ transpiler pattern.
 
 ---
 
@@ -843,7 +843,7 @@ bash test/run_ssz_tests.sh
 | SSZ regression tests | 17 |
 | Fully native libs | 3 (time, shell, thread) |
 | Hybrid libs | 15 (native core + thin SSZ wrapper) |
-| Converted game scripts | 1 (video.ssz) |
+| Converted game scripts | 2 (video.ssz, sound.ssz) |
 | Intentionally SSZ-only | 2 (consts, alert) |
 | Removed (dead code) | 2 (stack, ogg) |
 
@@ -907,7 +907,9 @@ Game scripts in `ssz_script/ssz/` are classified by conversion safety:
 | Safety | Scripts | Reason |
 |---|---|---|
 | ✅ **Converted** | `video.ssz` (56 lines) | Leaf node, no game-script deps beyond `common`. Methods use basic types + static plugin calls only. |
-| 🟡 **Risky** | `sound.ssz` (406), `font.ssz` (408), `bg.ssz` (725) | Leaf structurally, but referenced by statebuilder compiled code or loader pipeline |
+| ✅ **Converted (partial)** | `sound.ssz` (406 lines) | `&Bgm.play/clear/write` and `&Sound.setVol` delegated to `sound_game` native lib. Audio mixing, file parsing, and struct definitions stay in SSZ (use `^&.Wave`, `&.file.File`, typed tables). |
+| 🔴 **Not convertible** | `font.ssz` (408 lines) | Every method uses SSZ-specific types (`&.sff.Sprite`, `&.tbl.IntTable`, `&.re.Regex`, delegates, closures). No method body can be expressed with basic-type native signatures. |
+| 🟡 **Risky** | `bg.ssz` (725) | Leaf structurally, but referenced by statebuilder compiled code or loader pipeline |
 | 🔴 **Blocked** | `char.ssz` (7,664), `fight.ssz` (3,577), `statebuilder.ssz` (9,333), `command.ssz` (1,571), `sff.ssz` (1,412), `common.ssz` (1,198), `stage.ssz` (735), `fighting.ssz` (670) | In the `compileString`/`sszc~run()` pipeline; types/functions referenced by runtime-generated SSZ code |
 
 **The hard constraint:** The game's loading pipeline (`loader.ssz`) builds SSZ
@@ -1052,6 +1054,7 @@ types from the static plugin registry or basic types.
 | Lua FFI fix | `ced08f4` | `EnableExecute` read-after-flip — unblocks full-game boot |
 | Mesdialog bridge | `81b3fca` | `mesdialog.cpp` re-exports static plugin fnptrs; `|CodePage` enum sigs |
 | Transpiler + game scripts | `3d966a2`, `b6b36c2` | SSZ-to-C++ transpiler with branch/cond/comm/break; video.ssz first game script converted |
-| Deferred type resolution | `pending` | `NativeLibFrom` defers `BuildPluginType` failures; retries after `MakeTree()` — enables forward-declared native lib types |
+| sound.ssz conversion | `(current)` | `sound_game` native lib: `&Bgm.play/clear/write` + `&Sound.setVol`; font.ssz analyzed and found not convertible |
+| Deferred type resolution | `(current)` | `NativeLibFrom` defers `BuildPluginType` failures; retries after `MakeTree()` — enables forward-declared native lib types |
 | sdlevent timing core | `d105f38` | `event(fps)` timing branch native; deterministic with `now` param |
 | Dead file cleanup | `cb82864` | Removed `.bak` files and commented-out `ogg.ssz` import |
