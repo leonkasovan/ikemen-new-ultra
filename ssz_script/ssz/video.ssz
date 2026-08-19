@@ -1,3 +1,11 @@
+// ============================================================================
+// video.ssz — thin wrapper for native video library.
+// Transpiled from original ssz_script/ssz/video.ssz.
+//
+// Types and module-level variables stay here; method bodies delegate
+// to ssz_script/ssz/video.cpp through the native lib registry.
+// ============================================================================
+
 lib cfg = "../save/config.ssz";
 
 //Load "lib/" Scripts
@@ -14,6 +22,9 @@ lib sdl = <alpha/sdlplugin.ssz>;
 //Load "script/ssz/" Scripts
 lib com = "common.ssz";
 
+// Native video library
+lib vid_native = <video_native>;
+
 public void error<_t>(^/char m)
 {
 	.al.alert!_t?(m);
@@ -23,35 +34,14 @@ public bool videoActive = false;
 
 public &Video
 {
-	new()
-	{
-		`clear();
-	}
+	/^/char fileName;
 	public void clear()
 	{
-	//Default Values
-		^/char file = "";
-		^/char capturepath = "";
-		int volume = 100;
-		int audiotrack = 1;
-		int subtitletrack = 0;
+		.vid_native.Video_clear();
 	}
-	/^/char fileName;
 	public void play(^/char file, ^/char capturepath, int volume, int audiotrack)
 	{
-		^/char error;
-		&.file.File f;
-		f.open(file, "rb");
-		if(f.open(file, "rb"))
-		{
-			`fileName = file;
-			.videoActive = true;
-			int result = .sdl.playVideo(audiotrack, volume, capturepath, `fileName);
-			if (result == 0) //ALT+F4 or Close Window Event
-			{
-				//.sdl.End(::); //After end video, also close the engine
-			}
-		}
+		.vid_native.Video_play(`fileName=, file, capturepath, volume, audiotrack);
 	}
 }
 public ^&Video video.new(1);
