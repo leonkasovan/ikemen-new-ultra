@@ -1,10 +1,10 @@
 // ============================================================================
 // action.cpp — native C++ library for action.ssz.
 //
-// Proves that &.Rect type resolution works from child modules.  The key
-// test: action.ssz defines &Rect and imports this native lib, which uses
-// &.Rect in its signature strings.  NativeTypeID must resolve .Rect from
-// the importing module's scope (not just root).
+// Provides &.Rect utility functions called from the SSZ wrapper.
+// Exercises &.Rect in multiple parameter positions:
+//   - &.Rect=  (out-param, struct pointer)  — fillRect
+//   - &.Rect   (input param, struct pointer) — rectOverlap, rectMerge
 // ============================================================================
 
 #include "sszdef.h"
@@ -13,12 +13,15 @@
 #include "pluginutil.hpp"
 
 // ---------------------------------------------------------------------------
-// fillRect — takes a &.Rect out-param (pointer to struct memory) and fills
-// it with default values.  Matches the ABI of sdlplugin's Fill: the JIT
-// passes a pointer to the caller's struct slot.
+// ActionRect — matches &Rect layout in action.ssz: 4 x int32_t = 16 bytes.
 // ---------------------------------------------------------------------------
 
 struct ActionRect { int32_t l, t, r, b; };
+
+// ---------------------------------------------------------------------------
+// fillRect — fills a &.Rect with default values.
+// Signature: void (&.Rect=)
+// ---------------------------------------------------------------------------
 
 static void SSZ_STDCALL fillRect(PluginUtil* pu, ActionRect* rect)
 {
@@ -30,12 +33,42 @@ static void SSZ_STDCALL fillRect(PluginUtil* pu, ActionRect* rect)
     }
 }
 
+// ---------------------------------------------------------------------------
+// rectOverlap — AABB overlap test between two &.Rect.
+// Signature: bool (&.Rect, &.Rect)
+// ---------------------------------------------------------------------------
+
+static bool SSZ_STDCALL rectOverlap(PluginUtil* pu, ActionRect* a, ActionRect* b)
+{
+    if(!a || !b) return false;
+    return a->l < b->r && b->l < a->r
+        && a->t < b->b && b->t < a->b;
+}
+
+// ---------------------------------------------------------------------------
+// rectMerge — merge (union) two &.Rect into the first.
+// Signature: void (&.Rect=, &.Rect)
+// ---------------------------------------------------------------------------
+
+static void SSZ_STDCALL rectMerge(PluginUtil* pu, ActionRect* out, ActionRect* b)
+{
+    if(!out || !b) return;
+    if(out->l > b->l) out->l = b->l;
+    if(out->t > b->t) out->t = b->t;
+    if(out->r < b->r) out->r = b->r;
+    if(out->b < b->b) out->b = b->b;
+}
+
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+
 extern "C" bool action_lib_register()
 {
     NativeLib::NativeFunction funcs[] = {
-        // &.Rect= is encoded as AND_TOKEN + class_id of Rect, plus
-        // ~DAINYUU_TOKEN.  The JIT passes a pointer to the struct memory.
-        { "fillRect", "void (&.Rect=)", (void*)fillRect },
+        { "fillRect",    "void (&.Rect=)",              (void*)fillRect    },
+        { "rectOverlap", "bool (&.Rect, &.Rect)",       (void*)rectOverlap },
+        { "rectMerge",   "void (&.Rect=, &.Rect)",      (void*)rectMerge   },
     };
     NativeLib::NativeLibrary lib;
     lib.name = "action";
