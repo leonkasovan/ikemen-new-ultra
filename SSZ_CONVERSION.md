@@ -908,9 +908,9 @@ Game scripts in `ssz_script/ssz/` are classified by conversion safety:
 |---|---|---|
 | ✅ **Converted** | `video.ssz` (56 lines) | Leaf node, no game-script deps beyond `common`. Methods use basic types + static plugin calls only. |
 | ✅ **Converted (partial)** | `sound.ssz` (406 lines) | `&Bgm.play/clear/write` and `&Sound.setVol` delegated to `sound_game` native lib. Audio mixing, file parsing, and struct definitions stay in SSZ (use `^&.Wave`, `&.file.File`, typed tables). |
-| 🔴 **Not convertible** | `font.ssz` (408 lines) | Every method uses SSZ-specific types (`&.sff.Sprite`, `&.tbl.IntTable`, `&.re.Regex`, delegates, closures). No method body can be expressed with basic-type native signatures. |
+| 🔴 **Not convertible** | `font.ssz` (408), `system.ssz` (426), `share.ssz` (370), `loader.ssz` (283), `debug-script.ssz` (295), `ikemen.ssz` (238) | All methods use SSZ-specific types (struct dereferences, delegates, closures, typed tables). The few arithmetic helpers (e.g. `getCharNo`) are trivially small and not worth the native bridge overhead. |
 | 🟡 **Risky** | `bg.ssz` (725) | Leaf structurally, but referenced by statebuilder compiled code or loader pipeline |
-| 🔴 **Blocked** | `char.ssz` (7,664), `fight.ssz` (3,577), `statebuilder.ssz` (9,333), `command.ssz` (1,571), `sff.ssz` (1,412), `common.ssz` (1,198), `stage.ssz` (735), `fighting.ssz` (670) | In the `compileString`/`sszc~run()` pipeline; types/functions referenced by runtime-generated SSZ code |
+| 🔴 **Blocked** | `char.ssz` (7,664), `fight.ssz` (3,577), `statebuilder.ssz` (9,333), `command.ssz` (1,571), `sff.ssz` (1,412), `common.ssz` (1,198), `stage.ssz` (735), `fighting.ssz` (670), `system-script.ssz` (2,402), `script.ssz` (2,215), `trigger-script.ssz` (1,632) | In the `compileString`/`sszc~run()` pipeline; types/functions referenced by runtime-generated SSZ code |
 
 **The hard constraint:** The game's loading pipeline (`loader.ssz`) builds SSZ
 code strings via `compileString`/`sszc~run()`. The statebuilder generates
@@ -918,6 +918,14 @@ runtime SSZ code that references types/functions from `char.ssz`, `common.ssz`,
 `command.ssz`, `sff.ssz`, `sound.ssz`, `table.ssz`, and `math.ssz`. Any module
 referenced by dynamically generated code cannot be converted to C++ unless the
 statebuilder's code generation is also rewritten.
+
+**Scan result:** A thorough scan of all 21 game scripts found that only
+`video.ssz` and `sound.ssz` have method signatures expressible with basic
+SSZ types. Every other script uses SSZ-specific types (`&.sff.Sprite`,
+`&.tbl.IntTable`, `&.re.Regex`, delegates, closures, struct dereferences)
+in all its method signatures. The few arithmetic helpers (e.g. `getCharNo`
+in `system.ssz`) are trivially small and not worth the native bridge
+overhead. **Game script conversion is effectively complete.**
 
 ### Type Resolution Limitation (SSZ-Defined Struct Types)
 
