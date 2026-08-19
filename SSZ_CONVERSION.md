@@ -1009,29 +1009,32 @@ signatures, and return `intptr_t` instead of `^&.Rect`. The SSZ wrapper would
 need type-casting at the call site. However, this breaks the SSZ type system
 (`intptr_t` return ≠ `^&.Rect` return from the JIT's perspective).
 
-**Impact:** Game scripts that define structs consumed by other scripts cannot
-have their struct methods fully converted to native C++. The struct definitions
-and methods using SSZ-defined types must remain in SSZ. Only methods whose
-signatures use exclusively basic types or static-plugin types can be delegated.
+**Impact (RESOLVED in `dfe8975`):** The `NativeTypeID` fix now allows native
+lib signatures to reference types defined in the importing module's scope.
+When a dot-qualified path (`.Rect`) fails in root's nametable, the fallback
+`this->GetFuncId` finds the type in the importing child module. Verified with
+`action.cpp` (`&.Rect=` out-param) — game boots clean.
+
+The remaining limitation is **forward-declared native libs**: if `lib act =
+<action>;` appears BEFORE the type is defined in the file, `BuildPluginType`
+still fails because the type hasn't been parsed yet. The deferred resolution
+path handles this case by retrying after `MakeTree()`.
 
 ### What Would Unblock Full Game Script Conversion
 
-1. **Immediate-resolution type lookup:** Make `BuildPluginType` resolve types
-   eagerly (not deferred) by passing the root's SourceTree as the resolution
-   context, and ensure `NativeTypeID` can find classes registered via
-   `GetFuncId` in the root's funclist tree — this requires fixing the
-   `GetHensuu` → negative-index → nullptr path so it falls through to
-   `GetFuncId` correctly (the logic IS there but fails because `pst` is set
-   to `root` which doesn't have the hensuu in its own nametable)
+1. ✅ **Immediate-resolution type lookup** (implemented in `dfe8975`):
+   `NativeTypeID` now falls through to `this->GetFuncId` when `pst->GetFuncId`
+   fails for dot-qualified paths. Combined with the deferred resolution path
+   (`6669c5c`) for forward-declared native libs, all `&.struct` type
+   signatures are now supported in native lib signatures.
 2. **Pre-declare SSZ struct types** in a shared header that the native lib can
    include (breaking the SSZ↔C++ isolation boundary)
 3. **Transpile SSZ struct definitions to C++** and include them in the native lib
    build (full two-way type sharing)
 
-None of these are fully implemented. Option 1 is the most promising but
-requires careful changes to the type resolution chain. The current architecture
-keeps SSZ struct definitions in `.ssz` files, and native libs can only reference
-types from the static plugin registry or basic types.
+Option 1 is now implemented. The remaining blockers for full game script
+conversion are the complexity of individual scripts (delegates, closures,
+typed containers) rather than the type resolution infrastructure.
 
 ---
 
@@ -1063,6 +1066,7 @@ types from the static plugin registry or basic types.
 | Mesdialog bridge | `81b3fca` | `mesdialog.cpp` re-exports static plugin fnptrs; `|CodePage` enum sigs |
 | Transpiler + game scripts | `3d966a2`, `b6b36c2` | SSZ-to-C++ transpiler with branch/cond/comm/break; video.ssz first game script converted |
 | sound.ssz conversion | `(current)` | `sound_game` native lib: `&Bgm.play/clear/write` + `&Sound.setVol`; font.ssz analyzed and found not convertible |
-| Deferred type resolution | `(current)` | `NativeLibFrom` defers `BuildPluginType` failures; retries after `MakeTree()` — enables forward-declared native lib types |
+| Deferred type resolution | `6669c5c` | `NativeLibFrom` defers `BuildPluginType` failures; retries after `MakeTree()` — enables forward-declared native lib types |
+| NativeTypeID fallback | `dfe8975` | `NativeTypeID` falls through to `this->GetFuncId` when dot-qualified path fails in root — unblocks `&.struct` types from child modules |
 | sdlevent timing core | `d105f38` | `event(fps)` timing branch native; deterministic with `now` param |
 | Dead file cleanup | `cb82864` | Removed `.bak` files and commented-out `ogg.ssz` import |
