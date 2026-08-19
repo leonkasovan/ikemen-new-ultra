@@ -962,6 +962,38 @@ module's. The callback returns "type not found" and `NativeLibFrom` returns
 nullptr, causing the SSZ compiler to fall back to file resolution (which also
 fails because there's no `lib/action.ssz` file).
 
+**Deep analysis of `NativeTypeID` resolution chain:**
+
+The `NativeTypeID` function (line 5448) resolves `.Rect` through this chain:
+1. Sets `pst = root` for dot-qualified paths (the compilation root, e.g.
+   `ikemen.ssz`)
+2. Calls `pst->GetHensuu("Rect")` — walks from `pst` up to `frp` via the
+   parent chain, checking `NameToIdx` at each level
+3. At the root level, `NameToIdx("Rect")` returns a NEGATIVE index (the `~i`
+   encoding used by `GetChild` for class entries). The `ii >= 0` check in
+   `GetHensuuIndex` fails, so `GetHensuu` returns nullptr
+4. Falls through to `pst->GetFuncId("Rect")` which calls `frp->GetChild(...)`
+   with `fukakutei=true`. This DOES find "Rect" in the root's nametable
+   (negative index → `subfunc[~i]`) and returns the class's `funcid`
+5. Checks `selftype == CLASS_BLOCK` → true → returns the class ID
+
+So `GetFuncId` CAN find the class. The actual failure point is different:
+when `lib act = <action>;` is inside action.ssz (a child module loaded via
+`lib act = "action.ssz"` from char.ssz), `NativeLibFrom` is called with
+`ctx.state = this` (action.ssz). The `BuildPluginType` call resolves `&.Rect`
+via `NativeTypeID(".Rect")`. With `pst = root`, the type IS found through the
+`GetFuncId` fallback. However, the DEFERRED resolution (added in `b6b36c2`)
+stores the function in `pendingNativeFuncs` and retries after `MakeTree()`
+finishes — but by that point the SSZ call site (`.actn.Frame_clsn1(...)`)
+has already been compiled with a VOID_TOKEN placeholder type, causing a
+"Syntax error" at the call site.
+
+**The root cause is a chicken-and-egg problem:** the native lib import
+(`lib actn = <action>;`) happens at line 21, before the struct methods
+that call it (lines 34-41). But the deferred resolution only updates the
+function's type AFTER the entire file is parsed — too late for the call
+sites that reference the function with the placeholder type.
+
 **Workaround:** Use `intptr_t*` for all struct field params in native function
 signatures, and return `intptr_t` instead of `^&.Rect`. The SSZ wrapper would
 need type-casting at the call site. However, this breaks the SSZ type system
@@ -974,16 +1006,22 @@ signatures use exclusively basic types or static-plugin types can be delegated.
 
 ### What Would Unblock Full Game Script Conversion
 
-1. **Extend `NativeTypeIDCallback`** to resolve types from the importing module's
-   own type table (not just the native lib context)
+1. **Immediate-resolution type lookup:** Make `BuildPluginType` resolve types
+   eagerly (not deferred) by passing the root's SourceTree as the resolution
+   context, and ensure `NativeTypeID` can find classes registered via
+   `GetFuncId` in the root's funclist tree — this requires fixing the
+   `GetHensuu` → negative-index → nullptr path so it falls through to
+   `GetFuncId` correctly (the logic IS there but fails because `pst` is set
+   to `root` which doesn't have the hensuu in its own nametable)
 2. **Pre-declare SSZ struct types** in a shared header that the native lib can
    include (breaking the SSZ↔C++ isolation boundary)
 3. **Transpile SSZ struct definitions to C++** and include them in the native lib
    build (full two-way type sharing)
 
-None of these are implemented. The current architecture keeps SSZ struct
-definitions in `.ssz` files, and native libs can only reference types from the
-static plugin registry or basic types.
+None of these are fully implemented. Option 1 is the most promising but
+requires careful changes to the type resolution chain. The current architecture
+keeps SSZ struct definitions in `.ssz` files, and native libs can only reference
+types from the static plugin registry or basic types.
 
 ---
 
@@ -1014,5 +1052,6 @@ static plugin registry or basic types.
 | Lua FFI fix | `ced08f4` | `EnableExecute` read-after-flip — unblocks full-game boot |
 | Mesdialog bridge | `81b3fca` | `mesdialog.cpp` re-exports static plugin fnptrs; `|CodePage` enum sigs |
 | Transpiler + game scripts | `3d966a2`, `b6b36c2` | SSZ-to-C++ transpiler with branch/cond/comm/break; video.ssz first game script converted |
+| Deferred type resolution | `pending` | `NativeLibFrom` defers `BuildPluginType` failures; retries after `MakeTree()` — enables forward-declared native lib types |
 | sdlevent timing core | `d105f38` | `event(fps)` timing branch native; deterministic with `now` param |
 | Dead file cleanup | `cb82864` | Removed `.bak` files and commented-out `ogg.ssz` import |

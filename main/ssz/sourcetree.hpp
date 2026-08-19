@@ -413,6 +413,17 @@ template<typename GC> struct SourceTree
 	BranchExtStruct* extbranch;
 	LoopExtStruct* extloop;
 	std::basic_string<intptr_t>* ptk;//Use only on the spot
+	// Deferred native-lib type resolution: when NativeLibFrom is called
+	// before the importing module has defined all its types (e.g. `lib act
+	// = <action>;` placed before `&Rect` is defined), BuildPluginType fails.
+	// We store the pending resolution here and retry after MakeTree() finishes.
+	struct PendingNativeFunc {
+		SourceTree* module;       // synthesized module whose henshuu needs fixing
+		std::string funcName;     // function name in the module
+		std::string signature;    // original SSZ signature string
+		void* fnptr;              // C function pointer
+	};
+	std::vector<PendingNativeFunc> pendingNativeFuncs;
 	MEMBER SourceTree(
 		STStatic<SourceTree, GC>* st, const std::WSTR* const name = nullptr,
 		SourceTree* const p = nullptr, const bool fukakutei = false)
@@ -5526,8 +5537,22 @@ ELSE:
 				for(auto& fn : lib->functions){
 				std::vector<intptr_t> tyv;
 				if(!NativeLib::BuildPluginType(fn.signature, tyv, &ctx)){
-					delete m;
-					return nullptr;
+					// Type resolution failed — likely because the importing module
+					// hasn't defined the referenced struct/enum types yet (they appear
+					// later in the file).  Defer resolution: create the module with a
+					// placeholder type and retry after MakeTree() finishes.
+					root->pendingNativeFuncs.push_back({m, fn.name, fn.signature, fn.fnptr});
+					// Use a minimal placeholder: just the fnptr so the module compiles.
+					std::basic_string<intptr_t> ty;
+					ty.push_back(VOID_TOKEN);
+					ty += (intptr_t)fn.fnptr;
+					std::WSTR fname;
+					for(char c : fn.name) fname += (WCHR)c;
+					if(!m->AddHensuu(ty, fname, 0, *m->srce)){
+						delete m;
+						return nullptr;
+					}
+					continue;
 				}
 				std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
 				ty += (intptr_t)fn.fnptr;
@@ -8744,6 +8769,30 @@ FOOLABEL:
 					stat->funclist.Get(ti)->CallDel(defdel, tmp);
 				}
 			}
+		}
+		// Resolve deferred native-lib types: when NativeLibFrom was called
+		// before the importing module had defined all its types (e.g. `lib act
+		// = <action>;` placed before `&Rect` is defined), the function types
+		// were left as placeholders.  Now that the file is fully parsed, retry.
+		if(root == this && !pendingNativeFuncs.empty()){
+			NativeLib::NativeTypeContext ctx;
+			ctx.state = this;
+			ctx.resolveType = &SourceTree::NativeTypeIDCallback;
+			for(auto& pnf : pendingNativeFuncs){
+				std::vector<intptr_t> tyv;
+				if(NativeLib::BuildPluginType(pnf.signature, tyv, &ctx)){
+					std::basic_string<intptr_t> ty(tyv.begin(), tyv.end());
+					ty += (intptr_t)pnf.fnptr;
+					// Find the henshuu by name and update its type.
+					std::wstring fname;
+					for(char c : pnf.funcName) fname += (WCHR)c;
+					auto hi = pnf.module->GetHensuu(fname, false);
+					if(hi != nullptr){
+						hi->type = ty;
+					}
+				}
+			}
+			pendingNativeFuncs.clear();
 		}
 		kakutei = true;
 		if(returnshita < 0) returnshita = frp->funchensuu.size();
