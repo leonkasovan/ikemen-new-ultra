@@ -17,3 +17,4 @@ opencode.*
 install/*
 build/*
 test/work/
+tools/__pycache__/
