@@ -43,6 +43,7 @@ extern "C" bool lua_lib_register();
 extern "C" bool mesdialog_lib_register();
 extern "C" bool video_native_lib_register();
 extern "C" bool sound_game_lib_register();
+extern "C" bool action_lib_register();
 
 
 #include <stdio.h>
@@ -515,6 +516,10 @@ int main(int argc, char *argv[]) {
 	}
 	if (!sound_game_lib_register()) {
 		LOG_INFO("Ikemen", "Failed to register native SSZ library 'sound_game'");
+		return 1;
+	}
+	if (!action_lib_register()) {
+		LOG_INFO("Ikemen", "Failed to register native SSZ library 'action'");
 		return 1;
 	}
 	if (!sdlevent_lib_register()) {

@@ -5462,6 +5462,11 @@ ELSE:
 				pos, dot == std::WSTR::npos ? std::WSTR::npos : dot - pos);
 			if(name.empty()) return -1;
 			auto phs = pst->GetHensuu(name, false);
+			// Fallback: when pst was set to root (dot-qualified) and the name isn't
+			// found in root's scope, also search the importing module's scope.
+			if(phs == nullptr && pst != this){
+				phs = this->GetHensuu(name, false);
+			}
 			if(phs != nullptr && phs->type[0] == LIB_TOKEN){
 				if(dot == std::WSTR::npos) return -1;  // a lib is not a type
 				pst = (SourceTree*)phs->type[1];
@@ -5477,6 +5482,13 @@ ELSE:
 				return (int32_t)phs->type[2];
 			}
 			auto ci = pst->GetFuncId(name, false);
+			// Fallback: when pst was set to root (dot-qualified path) and the type
+			// isn't in root's nametable, also search the importing module's scope.
+			// This happens when a child module (e.g. action.ssz) defines types that
+			// a native lib signature references (e.g. &.Rect).
+			if(ci < 0 && pst != this){
+				ci = this->GetFuncId(name, false);
+			}
 			if(ci < 0) return -1;
 			auto pst2 = stat->funclist.Get(ci);
 			if(pst2->selftype != CLASS_BLOCK && pst2->selftype != ENUM_BLOCK){
