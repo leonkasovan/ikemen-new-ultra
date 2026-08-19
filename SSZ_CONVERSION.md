@@ -21,7 +21,8 @@ library registry, or the JIT compiler's interaction with native code.
 10. [Known Gotchas and Fixes](#known-gotchas-and-fixes)
 11. [Testing](#testing)
 12. [Conversion Status](#conversion-status)
-13. [Commit History](#commit-history)
+13. [Game Script Conversion (SSZ → Native C++)](#game-script-conversion-ssz--native-c)
+14. [Commit History](#commit-history)
 
 ---
 
@@ -868,6 +869,119 @@ bash test/run_ssz_tests.sh
 | 18 | mesdialog | 68 | 111 | 🔀 Hybrid |
 | — | consts | — | 29 | ⬜ SSZ-only |
 | — | alert | — | 4 | ⬜ SSZ-only |
+
+---
+
+## Game Script Conversion (SSZ → Native C++)
+
+### SSZ-to-C++ Transpiler (`tools/ssz_to_cpp.py`)
+
+A Python transpiler that reads `.ssz` files and generates:
+1. A **native C++ library** (`.cpp`) with functions following the plugin ABI
+2. A **thin SSZ wrapper** (`.ssz`) that keeps type definitions and delegates
+   method bodies to C++
+
+**Control-flow translation:**
+
+| SSZ Pattern | C++ Translation |
+|---|---|
+| `branch { cond expr: body ... else: body comm: }` | `if/else-if/else` chains |
+| `break` (inside branch) | `goto end_B{N};` |
+| `break, break;` | inner break + outer break (multi-scope exit) |
+| `loop { init; while; do: body continue: post while cond: }` | `{ init; do { body; post; } while(cond); }` |
+| `continue` | `continue;` (targets while condition, same as SSZ) |
+| Nested branch in loop | nested if/else inside do-while |
+| Nested loop in branch | nested do-while inside if/else |
+
+**Usage:**
+```bash
+/c/Python314/python.exe tools/ssz_to_cpp.py <input.ssz> --lib-name <name> --output-dir <dir>
+```
+
+### Game Script Classification
+
+Game scripts in `ssz_script/ssz/` are classified by conversion safety:
+
+| Safety | Scripts | Reason |
+|---|---|---|
+| 🟢 **Safe** | `video.ssz` (56 lines) | Leaf node, no game-script deps beyond `common` |
+| 🟡 **Risky** | `sound.ssz` (406), `font.ssz` (408), `bg.ssz` (725) | Leaf structurally, but referenced by statebuilder compiled code or loader pipeline |
+| 🔴 **Blocked** | `char.ssz` (7,664), `fight.ssz` (3,577), `statebuilder.ssz` (9,333), `command.ssz` (1,571), `sff.ssz` (1,412), `common.ssz` (1,198), `stage.ssz` (735), `fighting.ssz` (670) | In the `compileString`/`sszc~run()` pipeline; types/functions referenced by runtime-generated SSZ code |
+
+**The hard constraint:** The game's loading pipeline (`loader.ssz`) builds SSZ
+code strings via `compileString`/`sszc~run()`. The statebuilder generates
+runtime SSZ code that references types/functions from `char.ssz`, `common.ssz`,
+`command.ssz`, `sff.ssz`, `sound.ssz`, `table.ssz`, and `math.ssz`. Any module
+referenced by dynamically generated code cannot be converted to C++ unless the
+statebuilder's code generation is also rewritten.
+
+### Type Resolution Limitation (SSZ-Defined Struct Types)
+
+**The blocker for game script conversion:** `NativeLibFrom` resolves native lib
+function signatures against the *importing* module's type table. When a native
+library references a type defined in the consuming `.ssz` file (e.g., `&.Rect`
+defined in `action.ssz`), `BuildPluginType` fails because the type isn't in the
+native lib's resolution scope.
+
+**What works:**
+- Basic types: `int`, `uint`, `float`, `bool`, `index`, `short`, `byte`, etc.
+- Types from the static plugin registry: `^/char`, `^&.sdl.Rect`, `|.sdl.K`
+- Opaque `intptr_t*` for struct field params (no type resolution needed)
+
+**What doesn't work:**
+- Types defined in the consuming SSZ script: `^&.Rect` (if `&.Rect` is in the
+  same `.ssz` that imports the native lib)
+- Struct types with SSZ-specific layout: `&.sff.Anim!&.Frame?`
+
+**Example (action.ssz → action.cpp):**
+```ssz
+// action.ssz defines &Rect, &Frame, &Action, &DrawnClsn
+lib act = <action>;   // tries to resolve Frame_clsn1 signature
+
+public &Frame {
+  public ^^&.Rect clsn;
+  public ^&.Rect clsn1() { ret .act.Frame_clsn1(`clsn=); }
+}
+```
+
+```cpp
+// action.cpp — BuildPluginType fails on "^&.Rect (^^&.Rect=)"
+// because &.Rect is defined in action.ssz, not in the native lib context
+static intptr_t SSZ_STDCALL Frame_clsn1(
+    PluginUtil* pu, intptr_t* clsn) { ... }
+```
+
+The `NativeLibFrom` function in `sourcetree.hpp` (line 5492) calls
+`BuildPluginType` which invokes `NativeTypeIDCallback`. This callback resolves
+types against `this` (the importing module). For `lib act = <action>;` inside
+`action.ssz`, the importing module IS `action.ssz` — but the type `&.Rect` is
+being resolved in the native lib's synthesized SourceTree, not the importing
+module's. The callback returns "type not found" and `NativeLibFrom` returns
+nullptr, causing the SSZ compiler to fall back to file resolution (which also
+fails because there's no `lib/action.ssz` file).
+
+**Workaround:** Use `intptr_t*` for all struct field params in native function
+signatures, and return `intptr_t` instead of `^&.Rect`. The SSZ wrapper would
+need type-casting at the call site. However, this breaks the SSZ type system
+(`intptr_t` return ≠ `^&.Rect` return from the JIT's perspective).
+
+**Impact:** Game scripts that define structs consumed by other scripts cannot
+have their struct methods fully converted to native C++. The struct definitions
+and methods using SSZ-defined types must remain in SSZ. Only methods whose
+signatures use exclusively basic types or static-plugin types can be delegated.
+
+### What Would Unblock Full Game Script Conversion
+
+1. **Extend `NativeTypeIDCallback`** to resolve types from the importing module's
+   own type table (not just the native lib context)
+2. **Pre-declare SSZ struct types** in a shared header that the native lib can
+   include (breaking the SSZ↔C++ isolation boundary)
+3. **Transpile SSZ struct definitions to C++** and include them in the native lib
+   build (full two-way type sharing)
+
+None of these are implemented. The current architecture keeps SSZ struct
+definitions in `.ssz` files, and native libs can only reference types from the
+static plugin registry or basic types.
 
 ---
 
