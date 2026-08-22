@@ -15,7 +15,7 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 | 13 plugin sources | `main/*/` | 50–200 each |
 | 13 static headers | `main/*_static.hpp` | 30–240 each |
 
-**External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, PortAudio, OpenGL.
+**External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, OpenGL.
 
 ---
 
@@ -29,10 +29,7 @@ Uses the `x86.hpp` raw-byte emitter for code generation.
 
 ```powershell
 # Prerequisites: Install w64devkit to C:\x86devkit
-
-# Set toolchain PATH
-$env:PATH = "C:\x86devkit\bin;$env:PATH"
-cd C:\Projects\ikemen-plus-ultra-static
+# No $env:PATH setup needed — just call make directly.
 
 # Release build
 make CONFIG=Release           # → build/Release/ikemen.exe
@@ -45,7 +42,7 @@ make clean
 ```
 
 - All 19 external libraries compiled from source (~800 source files) into 19 static archives
-- **Note:** The Makefile sets `PATH` internally for `as` and `ld` — just having `g++.exe` in PATH is sufficient
+- **Note:** The Makefile sets `PATH` internally for the toolchain (`as`, `ld`) — no manual environment setup required
 - Debug exe is copied to `install/ikemen-debug.exe` via `make install`; it also renames the build output with `-debug` suffix
 
 ### Linux (Makefile, experimental)
@@ -60,18 +57,16 @@ make CONFIG=Release
 
 ### Short path for compilation
 
-Pick one — PowerShell session stays in current dir, so no short path needed:
+PowerShell session stays in current dir, so no cd needed inside the sh command:
 
 ```powershell
-$env:PATH = "C:\x86devkit\bin;$env:PATH"
-cd C:\Projects\ikemen-plus-ultra-static
+& C:\x86devkit\bin\sh.exe --login -c 'cd C:/Projects/ikemen-new-ultra && make CONFIG=Debug install -j8'
 ```
 
 ### Build → Run → Capture log (Debug workflow)
 
 ```powershell
 # 1. Build Debug + install (copies exe to install/)
-$env:PATH = "C:\x86devkit\bin;$env:PATH"
 make CONFIG=Debug install -j8
 
 # 2. Run from install/ dir, redirect stdout+stderr to log
@@ -85,7 +80,17 @@ Get-Content -Path "install\ikemen-debug.log" | Select-String "PATTERN"  # grep
 ```
 
 - `make install` copies `build/Debug/ikemen-debug.exe` to `install/ikemen-debug.exe`
-- Lua scripts in `install/script/` are read at runtime — no rebuild needed for Lua-only changes
+- Lua scripts in `install/lua_script/` and `install/ssz_script/` are read at runtime — no rebuild needed for script-only changes
 - C++ changes require rebuild + `make install`
 - `2>&1` merges stderr into stdout so all output goes to the log file
 - `-Encoding ascii` ensures the em-dash in log messages doesn't corrupt the file
+
+### Timed test run (auto-stop)
+
+```sh
+# Runs 15s then force-kills the exe directly (w64devkit coreutils timeout)
+cd install && timeout 15 ./ikemen-debug.exe > ikemen-debug.log 2>&1
+```
+
+- Hard kill skips atexit handlers — no exit-time MEMORY/TIME RANKING reports in the log
+- Need the ranking reports? Run without timeout and quit with ESC (clean exit prints them)
