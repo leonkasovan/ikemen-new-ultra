@@ -32,9 +32,11 @@ void SSZ_STDCALL Alert(const std::wstring& title, const std::wstring& mes)
 		fprintf(stderr, "[Alert] %s\n%s\n", aTitle.c_str(), aMes.c_str());
 		fflush(stderr);
 	}
+# ifdef NDEBUG
 	MessageBox(
 		NULL, mes.c_str(), title.c_str(),
 		MB_OK | MB_ICONWARNING);
+# endif
 #else
 	fprintf(
 		stderr, "%s\n%s\n",
