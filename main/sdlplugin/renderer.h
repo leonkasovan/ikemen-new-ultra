@@ -91,6 +91,11 @@ struct PerfCounters
 	uint32_t glTotalVertices;
 	uint32_t glBatchFlushes;
 	uint32_t glPaletteUploads;
+	// Scissor batching: what caused the last flush?
+	uint32_t glFlushByTexid;
+	uint32_t glFlushByAlpha;
+	uint32_t glFlushByScissor;
+	uint32_t glBatchedSprites;  // sprites that skipped flush (batched)
 
 	// Worst sprite info (the single slowest RenderMugenZoom call)
 	double   worstSpriteUs;
@@ -147,6 +152,10 @@ struct PerfCounters
 		glTotalVertices = 0;
 		glBatchFlushes = 0;
 		glPaletteUploads = 0;
+		glFlushByTexid = 0;
+		glFlushByAlpha = 0;
+		glFlushByScissor = 0;
+		glBatchedSprites = 0;
 		worstSpriteUs = 0.0;
 		worstSpriteSrcW = 0;
 		worstSpriteSrcH = 0;
@@ -355,13 +364,12 @@ inline void perfPrintFrame(const PerfCounters& pc, const RendererInfo& ri)
 		ri.backendName);
 	if (pc.glDrawArraysCalls > 0)
 	{
-		PERF_LOG("GL: drawArrays=%u  vertices=%u  glBufferData=%u UseProgram=%u "
-			"glUniform=%u  BindTex2d=%u  TexSubImage=%u  BlendFunc=%u  Scissor=%u "
-			"BatchFlush=%u  PaletteUpload=%u  avgVerts=%.1f",
+		PERF_LOG("GL: draw=%u vert=%u buf=%u prg=%u BindTex=%u Blend=%u "
+			"Batch=%u  flush:tex=%u alpha=%u scissor=%u batched=%u  avgV=%.1f",
 			pc.glDrawArraysCalls, pc.glTotalVertices, pc.glBufferDataCalls,
-			pc.glUseProgramCalls, pc.glUniformCalls, pc.glBindTex2dCalls,
-			pc.glTexSubImageCalls, pc.glBlendFuncCalls, pc.glScissorCalls,
-			pc.glBatchFlushes, pc.glPaletteUploads,
+			pc.glUseProgramCalls, pc.glBindTex2dCalls, pc.glBlendFuncCalls,
+			pc.glBatchFlushes, pc.glFlushByTexid, pc.glFlushByAlpha,
+			pc.glFlushByScissor, pc.glBatchedSprites,
 		pc.glDrawArraysCalls > 0 ? (double)pc.glTotalVertices / pc.glDrawArraysCalls : 0.0);
 	}
 }

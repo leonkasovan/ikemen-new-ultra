@@ -6371,15 +6371,24 @@ static bool glSpriteBegin(
 	static SDL_Rect prevScissor = {0,0,0,0};
 	static uint32_t prevTexid = 0;
 	static int prevAlpha = 0;
-	bool sameState = (texid == prevTexid) && (alpha == prevAlpha)
-		&& (dstr->x == prevScissor.x) && (dstr->y == prevScissor.y)
+	bool sameScissor = (dstr->x == prevScissor.x) && (dstr->y == prevScissor.y)
 		&& (dstr->w == prevScissor.w) && (dstr->h == prevScissor.h);
+	bool sameTexid = (texid == prevTexid);
+	bool sameAlpha = (alpha == prevAlpha);
+	bool sameState = sameScissor && sameTexid && sameAlpha;
 	if (!sameState)
 	{
 		gl33BatchFlush();
+		if (!sameTexid)   g_perfCounters.glFlushByTexid++;
+		if (!sameAlpha)   g_perfCounters.glFlushByAlpha++;
+		if (!sameScissor) g_perfCounters.glFlushByScissor++;
 		prevScissor = *dstr;
 		prevTexid = texid;
 		prevAlpha = alpha;
+	}
+	else
+	{
+		g_perfCounters.glBatchedSprites++;
 	}
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
