@@ -219,6 +219,132 @@ static void texPoolDrain()
 	g_texDimCount = 0;
 }
 
+// ---------------------------------------------------------------------------
+// Sprite atlas (P5b) — packs sprites into 512x512 atlas pages to reduce
+// per-sprite GL texture objects. Each sprite gets a virtual texid (high bit)
+// that maps to an atlas slot. The atlas UVs are baked into each vertex's
+// UV coords at push time (inside drawQuads), NOT at flush time via globals.
+// ---------------------------------------------------------------------------
+static const int ATLAS_PAGE_SIZE  = 512;
+static const int ATLAS_MAX_PAGES = 64;
+static const int ATLAS_MAX_SLOTS = 32768;
+static const uint32_t ATLAS_VIRT_BIT = 0x80000000u;
+
+struct AtlasPage {
+	GLuint texId;
+	int32_t w, h;
+	GLenum internalFmt;
+	int32_t curX, curY, rowHeight;
+};
+struct AtlasSlot {
+	uint16_t pageIdx, x, y, w, h;
+	uint8_t fmtIdx;
+	bool inUse;
+};
+static AtlasPage g_atlasPages[2][ATLAS_MAX_PAGES];
+static int g_atlasPageCount[2] = {};
+static AtlasSlot g_atlasSlots[ATLAS_MAX_SLOTS];
+static int g_atlasSlotCount = 0;
+
+// Per-sprite atlas UV state — set BEFORE drawTile is called.
+// drawQuads bakes these into each vertex's UV coords at push time.
+static float g_atlasUOff = 0.0f, g_atlasVOff = 0.0f;
+static float g_atlasUScale = 1.0f, g_atlasVScale = 1.0f;
+
+static inline bool IS_ATLAS_TEXID(uint32_t id) { return (id & ATLAS_VIRT_BIT) != 0; }
+static inline int ATLAS_SLOT_IDX(uint32_t id) { return (int)(id & ~ATLAS_VIRT_BIT); }
+static inline int atlasFmtIdx(GLenum fmt) { return (fmt == GL_RGBA) ? 1 : 0; }
+
+static int atlasCreatePage(GLenum internalFmt)
+{
+	int fi = atlasFmtIdx(internalFmt);
+	if (g_atlasPageCount[fi] >= ATLAS_MAX_PAGES) return -1;
+	int idx = g_atlasPageCount[fi]++;
+	AtlasPage& p = g_atlasPages[fi][idx];
+	glGenTextures(1, &p.texId);
+	glBindTexture(GL_TEXTURE_2D, p.texId);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, ATLAS_PAGE_SIZE, ATLAS_PAGE_SIZE, 0,
+		internalFmt, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	p.w = ATLAS_PAGE_SIZE; p.h = ATLAS_PAGE_SIZE; p.internalFmt = internalFmt;
+	p.curX = 0; p.curY = 0; p.rowHeight = 0;
+	return idx;
+}
+
+static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt, const void* pixels)
+{
+	if (w <= 0 || h <= 0 || !pixels) return 0;
+	if (w > ATLAS_PAGE_SIZE || h > ATLAS_PAGE_SIZE) return 0;
+	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
+	int fi = atlasFmtIdx(internalFmt);
+	for (int i = 0; i < g_atlasPageCount[fi]; i++) {
+		AtlasPage& p = g_atlasPages[fi][i];
+		if (p.curX + w <= p.w && p.curY + h <= p.h) {
+			glBindTexture(GL_TEXTURE_2D, p.texId);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, p.curX, p.curY, w, h,
+				internalFmt, GL_UNSIGNED_BYTE, pixels);
+			int si = g_atlasSlotCount++;
+			g_atlasSlots[si] = {(uint16_t)i, (uint16_t)p.curX, (uint16_t)p.curY,
+				(uint16_t)w, (uint16_t)h, (uint8_t)fi, true};
+			p.curX += w;
+			if (h > p.rowHeight) p.rowHeight = h;
+			return (uint32_t)si | ATLAS_VIRT_BIT;
+		}
+		if (p.curX + w > p.w && p.curY + p.rowHeight + h <= p.h) {
+			p.curX = 0; p.curY += p.rowHeight; p.rowHeight = 0;
+			i--; continue;
+		}
+	}
+	int pi = atlasCreatePage(internalFmt);
+	if (pi < 0) return 0;
+	AtlasPage& p = g_atlasPages[fi][pi];
+	glBindTexture(GL_TEXTURE_2D, p.texId);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, internalFmt, GL_UNSIGNED_BYTE, pixels);
+	int si = g_atlasSlotCount++;
+	g_atlasSlots[si] = {(uint16_t)pi, 0, 0, (uint16_t)w, (uint16_t)h, (uint8_t)fi, true};
+	p.curX = w; p.rowHeight = h;
+	return (uint32_t)si | ATLAS_VIRT_BIT;
+}
+
+// Set atlas UV globals for a virtual texid. Called per-sprite BEFORE drawTile.
+static void atlasSetUVs(uint32_t texid)
+{
+	if (!IS_ATLAS_TEXID(texid)) {
+		g_atlasUOff = g_atlasVOff = 0.0f;
+		g_atlasUScale = g_atlasVScale = 1.0f;
+		return;
+	}
+	const AtlasSlot& s = g_atlasSlots[ATLAS_SLOT_IDX(texid)];
+	const AtlasPage& p = g_atlasPages[s.fmtIdx][s.pageIdx];
+	g_atlasUOff   = (float)s.x / (float)p.w;
+	g_atlasVOff   = (float)s.y / (float)p.h;
+	g_atlasUScale = (float)s.w / (float)p.w;
+	g_atlasVScale = (float)s.h / (float)p.h;
+}
+
+static void atlasFreeSlot(uint32_t texid)
+{
+	if (!IS_ATLAS_TEXID(texid)) return;
+	int si = ATLAS_SLOT_IDX(texid);
+	if (si >= 0 && si < g_atlasSlotCount) g_atlasSlots[si].inUse = false;
+}
+
+static void atlasDrain()
+{
+	for (int fi = 0; fi < 2; fi++) {
+		for (int i = 0; i < g_atlasPageCount[fi]; i++)
+			if (g_atlasPages[fi][i].texId) glDeleteTextures(1, &g_atlasPages[fi][i].texId);
+		g_atlasPageCount[fi] = 0;
+	}
+	g_atlasSlotCount = 0;
+}
+
 
 int32_t ransuutane = 0;
 SDL_Window* g_window = nullptr;
@@ -1112,8 +1238,9 @@ static void cleanupGL33Shaders()
 	if (g_gl33_palatlas)      { glDeleteTextures(1, &g_gl33_palatlas); g_gl33_palatlas = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
-	// P5: drain texture pool
+	// P5: drain texture pool + atlas
 	texPoolDrain();
+	atlasDrain();
 	g_useModernGL = false;
 }
 
@@ -5774,7 +5901,12 @@ bool SSZ_STDCALL RenderMugenShadow(Reference* pluginbuf, int32_t rle,
 }	uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 {
 	if (w <= 0 || h <= 0 || !ppxl) return 0;
-	// P5: Try pool first — reuse a texture object of matching dimensions.
+	// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
+	if (useModernRender()) {
+		uint32_t id = atlasAlloc(w, h, GL_LUMINANCE, ppxl);
+		if (id) return id;
+	}
+	// Legacy / atlas-full: P5 pool + individual texture.
 	uint32_t texid = texPoolAcquire(w, h, GL_LUMINANCE);
 	if (texid)
 	{
@@ -5839,7 +5971,13 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
 		png_read_image(png_ptr, pp);
 		delete [] pp;
-		// P5: Try pool first — reuse a texture object of matching dimensions.
+		// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
+		if (useModernRender()) {
+			texid = atlasAlloc(width, height, GL_RGBA, buff);
+			if (texid) { delete [] buff; }
+		}
+		if (!texid) {
+		// Legacy / atlas-full: P5 pool + individual texture.
 		texid = texPoolAcquire(width, height, GL_RGBA);
 		if (texid)
 		{
@@ -5870,6 +6008,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 			texDimRegister(texid, width, height, GL_RGBA);
 		}
+		} // if (!texid)
 	}
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 	return texid;
@@ -5878,6 +6017,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 {
 	if(texid == 0) return;
+	if (IS_ATLAS_TEXID(texid)) { atlasFreeSlot(texid); return; }
 	// Return texture to pool for reuse.
 	int32_t w = 0, h = 0;
 	GLenum fmt = 0;
@@ -6155,17 +6295,23 @@ void drawQuads(
 	static std::vector<float> v;
 	v.clear();
 	v.reserve((size_t)(2*n+2)*4);
-	v.push_back(x1); v.push_back(y1); v.push_back(0.0f); v.push_back(1.0f);
-	v.push_back(x4); v.push_back(y4); v.push_back(0.0f); v.push_back(0.0f);
+	// Bake atlas UV transform into each vertex at push time (P5b fix).
+	// g_atlasUOff/VOff/UScale/VScale are set per-sprite BEFORE drawTile.
+	v.push_back(x1); v.push_back(y1);
+	v.push_back(g_atlasUOff); v.push_back(g_atlasVOff + g_atlasVScale);
+	v.push_back(x4); v.push_back(y4);
+	v.push_back(g_atlasUOff); v.push_back(g_atlasVOff);
 	for(int i = 1; i < n; i++){
 		float u = (float)i/n;
 		v.push_back(x1 + (x2 - x1)*i/n); v.push_back(y1 + (y2 - y1)*i/n);
-		v.push_back(u);                  v.push_back(1.0f);
+		v.push_back(g_atlasUOff + u * g_atlasUScale); v.push_back(g_atlasVOff + g_atlasVScale);
 		v.push_back(x4 + (x3 - x4)*i/n); v.push_back(y4 + (y3 - y4)*i/n);
-		v.push_back(u);                  v.push_back(0.0f);
+		v.push_back(g_atlasUOff + u * g_atlasUScale); v.push_back(g_atlasVOff);
 	}
-	v.push_back(x2); v.push_back(y2); v.push_back(1.0f); v.push_back(1.0f);
-	v.push_back(x3); v.push_back(y3); v.push_back(1.0f); v.push_back(0.0f);
+	v.push_back(x2); v.push_back(y2);
+	v.push_back(g_atlasUOff + g_atlasUScale); v.push_back(g_atlasVOff + g_atlasVScale);
+	v.push_back(x3); v.push_back(y3);
+	v.push_back(g_atlasUOff + g_atlasUScale); v.push_back(g_atlasVOff);
 	// Accumulate into the frame batch as GL_TRIANGLES so a sprite's tiled quads
 	// are one glBufferData + glDrawArrays instead of one per quad (P3).
 	g_batchVerts.reserve(g_batchVerts.size() + v.size());
@@ -6569,7 +6715,17 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 		glBindTex1dCached(g_paltex);
 	}
 	glActiveTextureCached(GL_TEXTURE0);
-	glBindTex2dCached(texid);
+	if (IS_ATLAS_TEXID(texid)) {
+		const AtlasSlot& s = g_atlasSlots[ATLAS_SLOT_IDX(texid)];
+		const AtlasPage& p = g_atlasPages[s.fmtIdx][s.pageIdx];
+		glBindTexture(GL_TEXTURE_2D, p.texId);
+		g_glCache.tex2d_unit0 = p.texId;
+		atlasSetUVs(texid);
+	} else {
+		glBindTex2dCached(texid);
+		g_atlasUOff = g_atlasVOff = 0.0f;
+		g_atlasUScale = g_atlasVScale = 1.0f;
+	}
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
@@ -6599,7 +6755,17 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	glUniform3fARB(modern ? g_gl33fc_uAdd : g_uniformAdd, addr, addg, addb);
 	glUniform3fARB(modern ? g_gl33fc_uMul : g_uniformMul, mulr, mulg, mulb);
 	glActiveTextureCached(GL_TEXTURE0);
-	glBindTex2dCached(texid);
+	if (IS_ATLAS_TEXID(texid)) {
+		const AtlasSlot& s = g_atlasSlots[ATLAS_SLOT_IDX(texid)];
+		const AtlasPage& p = g_atlasPages[s.fmtIdx][s.pageIdx];
+		glBindTexture(GL_TEXTURE_2D, p.texId);
+		g_glCache.tex2d_unit0 = p.texId;
+		atlasSetUVs(texid);
+	} else {
+		glBindTex2dCached(texid);
+		g_atlasUOff = g_atlasVOff = 0.0f;
+		g_atlasUScale = g_atlasVScale = 1.0f;
+	}
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
@@ -6628,7 +6794,17 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 		(float)(color >> 16 & 0xff) / 255, (float)(color >> 8 & 0xff) / 255,
 		(float)(color & 0xff) / 255);
 	glActiveTextureCached(GL_TEXTURE0);
-	glBindTex2dCached(texid);
+	if (IS_ATLAS_TEXID(texid)) {
+		const AtlasSlot& s = g_atlasSlots[ATLAS_SLOT_IDX(texid)];
+		const AtlasPage& p = g_atlasPages[s.fmtIdx][s.pageIdx];
+		glBindTexture(GL_TEXTURE_2D, p.texId);
+		g_glCache.tex2d_unit0 = p.texId;
+		atlasSetUVs(texid);
+	} else {
+		glBindTex2dCached(texid);
+		g_atlasUOff = g_atlasVOff = 0.0f;
+		g_atlasUScale = g_atlasVScale = 1.0f;
+	}
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
