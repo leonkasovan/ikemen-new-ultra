@@ -237,7 +237,7 @@ static void texPoolDrain()
 // ---------------------------------------------------------------------------
 static const int ATLAS_PAGE_SIZE  = 512; // 512×512 atlas pages (reduce GPU cache thrash)
 static const int ATLAS_MAX_PAGES = 64;    // max 64 pages per format
-static const int ATLAS_MAX_SLOTS = 8192;  // max tracked sprite slots
+static const int ATLAS_MAX_SLOTS = 32768;  // max tracked sprite slots
 // Virtual texid high bit — distinguishes atlas slots from real GL texids
 static const uint32_t ATLAS_VIRT_BIT = 0x80000000u;
 
@@ -316,6 +316,10 @@ static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt,
 	const void* pixels)
 {
 	if (w <= 0 || h <= 0 || !pixels) return 0;
+	// Fall back to individual texture if slot array is full.
+	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
+	// Sprites larger than atlas page can't fit — fall back to individual texture.
+	if (w > ATLAS_PAGE_SIZE || h > ATLAS_PAGE_SIZE) return 0;
 	int fi = atlasFmtIdx(internalFmt);
 
 	// Find a page with enough space
@@ -362,6 +366,7 @@ static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt,
 	}
 
 	// No existing page has space — create a new one
+	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
 	int pi = atlasCreatePage(internalFmt);
 	if (pi < 0) return 0; // all pages exhausted
 	AtlasPage& p = g_atlasPages[fi][pi];
@@ -6037,7 +6042,11 @@ uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 	if (w <= 0 || h <= 0 || !ppxl) return 0;
 	// Modern GL path: pack into atlas (dramatically reduces driver metadata).
 	if (useModernRender())
-		return atlasAlloc(w, h, GL_LUMINANCE, ppxl);
+	{
+		uint32_t id = atlasAlloc(w, h, GL_LUMINANCE, ppxl);
+		if (id) return id;
+		// Atlas full — fall through to individual texture path.
+	}
 	// Legacy GL / non-GL: use P5 pool + individual texture objects.
 	uint32_t texid = texPoolAcquire(w, h, GL_LUMINANCE);
 	if (texid)
@@ -6107,9 +6116,10 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		if (useModernRender())
 		{
 			texid = atlasAlloc(width, height, GL_RGBA, buff);
-			delete [] buff;
+			if (texid) { delete [] buff; }
+			else { /* atlas full — fall through to individual texture */ }
 		}
-		else
+		if (!texid)
 		{
 			// Legacy: P5 pool + individual texture.
 			texid = texPoolAcquire(width, height, GL_RGBA);
