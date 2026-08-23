@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <emmintrin.h>   // SSE2: _mm_adds_epu8, _mm_loadu/storeu_si128
 #include <dxgi.h>        // DXGI_ADAPTER_DESC for DirectX renderer info
+#include <d3d9.h>         // D3DCAPS9 for max texture size query
 #include <locale.h>
 #include <process.h>
 #include <stdint.h>
@@ -1440,29 +1441,74 @@ static void fillRendererInfo()
 		const char* d3dName = g_directxVersion == 11 ? "Direct3D 11" : "Direct3D 9";
 		sprintf(g_rendererInfo.backendName, "%s", d3dName);
 		g_rendererInfo.directxVersion = g_directxVersion;
-		// Query GPU adapter info from DXGI if available
-		DXGI_ADAPTER_DESC adapterDesc;
-		ZeroMemory(&adapterDesc, sizeof(adapterDesc));
-		IDXGIFactory* pFactory = nullptr;
-		if (SUCCEEDED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory)))
+
+		if (g_directxVersion == 11)
 		{
-			IDXGIAdapter* pAdapter = nullptr;
-			if (SUCCEEDED(pFactory->EnumAdapters(0, &pAdapter)))
+			// D3D11: query GPU via DXGI
+			DXGI_ADAPTER_DESC adapterDesc;
+			ZeroMemory(&adapterDesc, sizeof(adapterDesc));
+			IDXGIFactory* pFactory = nullptr;
+			if (SUCCEEDED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory)))
 			{
-				pAdapter->GetDesc(&adapterDesc);
-				// Convert wide description to narrow string
-				WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, -1,
-					g_rendererInfo.deviceName, sizeof(g_rendererInfo.deviceName), nullptr, nullptr);
-				pAdapter->Release();
+				IDXGIAdapter* pAdapter = nullptr;
+				if (SUCCEEDED(pFactory->EnumAdapters(0, &pAdapter)))
+				{
+					pAdapter->GetDesc(&adapterDesc);
+					WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, -1,
+						g_rendererInfo.deviceName, sizeof(g_rendererInfo.deviceName), nullptr, nullptr);
+					pAdapter->Release();
+				}
+				pFactory->Release();
 			}
-			pFactory->Release();
+			// D3D11 max texture size is 16384 on most hardware
+			g_rendererInfo.maxTextureSize = 16384;
 		}
+		else
+		{
+			// D3D9: query GPU via IDirect3D9 and device caps
+			IDirect3DDevice9* dev = SDL_RenderGetD3D9Device(g_renderer);
+			if (dev)
+			{
+				IDirect3D9* d3d9 = nullptr;
+				dev->GetDirect3D(&d3d9);
+				if (d3d9)
+				{
+					D3DADAPTER_IDENTIFIER9 adapterId;
+					ZeroMemory(&adapterId, sizeof(adapterId));
+					if (SUCCEEDED(d3d9->GetAdapterIdentifier(0, 0, &adapterId)))
+					{
+						strncpy(g_rendererInfo.deviceName, adapterId.Description,
+							sizeof(g_rendererInfo.deviceName) - 1);
+						sprintf(g_rendererInfo.driverInfo, "%s %d.%d.%d.%d",
+							adapterId.Description,
+							HIWORD(adapterId.DriverVersion.HighPart),
+							LOWORD(adapterId.DriverVersion.HighPart),
+							HIWORD(adapterId.DriverVersion.LowPart),
+							LOWORD(adapterId.DriverVersion.LowPart));
+					}
+					d3d9->Release();
+				}
+				// Query max texture size from D3DCAPS9
+				D3DCAPS9 caps;
+				if (SUCCEEDED(dev->GetDeviceCaps(&caps)))
+				{
+					g_rendererInfo.maxTextureSize = (int)caps.MaxTextureWidth;
+					INIT_LOG("D3D9 MaxTextureWidth: %d", caps.MaxTextureWidth);
+				}
+				else
+				{
+					g_rendererInfo.maxTextureSize = 4096; // D3D9 minimum
+				}
+			}
+			else
+			{
+				g_rendererInfo.maxTextureSize = 4096; // D3D9 minimum
+			}
+		}
+
 		if (g_rendererInfo.deviceName[0] == '\0')
 			strncpy(g_rendererInfo.deviceName, "Unknown GPU", sizeof(g_rendererInfo.deviceName)-1);
-		sprintf(g_rendererInfo.driverInfo, "%s (SDL2 %d.%d.%d)", d3dName,
-			SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
-		g_rendererInfo.maxTextureSize = 8192; // D3D9/D3D11 typical max
-		INIT_LOG("DirectX GPU: %s", g_rendererInfo.deviceName);
+		INIT_LOG("DirectX GPU: %s (max texture: %d)", g_rendererInfo.deviceName, g_rendererInfo.maxTextureSize);
 	}
 }
 
@@ -1511,25 +1557,29 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 			WstrToStr(cap).c_str(),
 			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 			w, h, g_scrflag);
-		if (!g_window)
-		{
-			INIT_LOG("D3D11 window creation failed: %s", SDL_GetError());
-		}
-		else
+		if (g_window)
 		{
 			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
-			if (!g_renderer)
+			if (g_renderer)
+			{
+				g_directxVersion = 11;
+				INIT_LOG("Direct3D 11 renderer created");
+			}
+			else
 			{
 				INIT_LOG("D3D11 renderer creation failed: %s", SDL_GetError());
-				SDL_DestroyWindow(g_window);
-				g_window = nullptr;
 				d3d11 = false;
 			}
 		}
+		else
+		{
+			INIT_LOG("D3D11 window creation failed: %s", SDL_GetError());
+			d3d11 = false;
+		}
 
+		// Fall back to Direct3D 9 if D3D11 failed
 		if (!d3d11 || !g_renderer)
 		{
-			// Fall back to Direct3D 9
 			if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
 			SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d");
 			INIT_LOG("Falling back to Direct3D 9...");
@@ -1538,50 +1588,61 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 				WstrToStr(cap).c_str(),
 				SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 				w, h, g_scrflag);
-			if (!g_window)
+			if (g_window)
+			{
+				g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+				if (g_renderer)
+				{
+					g_directxVersion = 9;
+					INIT_LOG("Direct3D 9 renderer created");
+				}
+				else
+				{
+					INIT_LOG("D3D9 renderer creation failed: %s", SDL_GetError());
+					INIT_LOG("DirectX not available, falling back to OpenGL");
+					SDL_DestroyWindow(g_window);
+					g_window = nullptr;
+					g_rendererType = RENDERER_OPENGL_4_6;
+					goto init_opengl;
+				}
+			}
+			else
 			{
 				INIT_LOG("D3D9 window creation failed: %s", SDL_GetError());
 				INIT_LOG("DirectX not available, falling back to OpenGL");
 				g_rendererType = RENDERER_OPENGL_4_6;
 				goto init_opengl;
 			}
-			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
-			if (!g_renderer)
-			{
-				INIT_LOG("D3D9 renderer creation failed: %s", SDL_GetError());
-				INIT_LOG("DirectX not available, falling back to OpenGL");
-				SDL_DestroyWindow(g_window);
-				g_window = nullptr;
-				g_rendererType = RENDERER_OPENGL_4_6;
-				goto init_opengl;
-			}
-			d3d11 = false;
 		}
 
-		g_directxVersion = d3d11 ? 11 : 9;
-		INIT_LOG("DirectX %d renderer created", g_directxVersion);
-
-		// Log D3D device availability
-		if (d3d11)
+		// Log D3D device info
+		if (g_directxVersion == 11)
 		{
-			// ID3D11Device is forward-declared in SDL_system.h;
-			// we can check the pointer is non-null but cannot call methods
-			// without including <d3d11.h> (which requires Windows SDK paths).
 			ID3D11Device* d3d11Dev = SDL_RenderGetD3D11Device(g_renderer);
-			if (d3d11Dev)
-			{
-				INIT_LOG("Direct3D 11 device obtained successfully");
-				// Note: Release() requires full type; SDL2 owns the device lifetime
-			}
-			else
-			{
-				INIT_LOG("Direct3D 11 device not available: %s", SDL_GetError());
-				INIT_LOG("Note: SDL2 may have used a different backend internally");
-			}
+			INIT_LOG("Direct3D 11 device: %s", d3d11Dev ? "obtained" : "not available");
 		}
 		else
 		{
-			INIT_LOG("Direct3D 9 backend active");
+			IDirect3DDevice9* d3d9Dev = SDL_RenderGetD3D9Device(g_renderer);
+			if (d3d9Dev)
+			{
+				IDirect3D9* d3d9 = nullptr;
+				d3d9Dev->GetDirect3D(&d3d9);
+				if (d3d9)
+				{
+					D3DADAPTER_IDENTIFIER9 adapterId;
+					if (SUCCEEDED(d3d9->GetAdapterIdentifier(0, 0, &adapterId)))
+					{
+						INIT_LOG("D3D9 GPU: %s", adapterId.Description);
+						INIT_LOG("D3D9 Driver: %d.%d.%d.%d",
+							HIWORD(adapterId.DriverVersion.HighPart),
+							LOWORD(adapterId.DriverVersion.HighPart),
+							HIWORD(adapterId.DriverVersion.LowPart),
+							LOWORD(adapterId.DriverVersion.LowPart));
+					}
+					d3d9->Release();
+				}
+			}
 		}
 
 		// Create streaming texture for software-rendered sprites
