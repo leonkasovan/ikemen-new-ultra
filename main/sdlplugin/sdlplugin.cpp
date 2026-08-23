@@ -56,6 +56,17 @@ static GLuint g_gl33_shadowProg    = 0;
 static GLuint g_gl33_vao           = 0;
 static GLuint g_gl33_vbo           = 0;
 
+// P4: Persistent mapped VBO ring — eliminates per-flush glBufferData orphaning.
+// Each slot is a pre-allocated buffer mapped write-only, persistent, coherent.
+// Triple-buffered so the GPU reads from slot N while the CPU writes to N+1.
+static const int    GL33_RING_SLOTS = 3;
+static const GLsizeiptr GL33_RING_SIZE = 512 * 1024; // 512 KB per slot
+static GLuint g_gl33_ringVbos[GL33_RING_SLOTS] = {};
+static GLuint g_gl33_ringVaos[GL33_RING_SLOTS] = {};
+static void*  g_gl33_ringPtrs[GL33_RING_SLOTS] = {};
+static int    g_gl33_ringIdx   = 0;
+static bool   g_gl33_ringOk    = false;
+
 // GL 3.3+ uniform locations
 static GLint g_gl33_uPal      = -1;
 static GLint g_gl33_uMask     = -1;
@@ -982,6 +993,41 @@ static bool initGL33Shaders()
 		INIT_LOG("  VAO=%u VBO=%u created", g_gl33_vao, g_gl33_vbo);
 	}
 
+	// P4: Persistent mapped VBO ring (GL 4.4+ / GL_ARB_buffer_storage)
+	if (GLEW_ARB_buffer_storage && (GLEW_ARB_vertex_array_object || g_glVersion >= GL_VER_3_3))
+	{
+		for (int i = 0; i < GL33_RING_SLOTS; i++)
+		{
+			glGenBuffers(1, &g_gl33_ringVbos[i]);
+			glBindBuffer(GL_ARRAY_BUFFER, g_gl33_ringVbos[i]);
+			glBufferStorage(GL_ARRAY_BUFFER, GL33_RING_SIZE, nullptr,
+				GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+			g_gl33_ringPtrs[i] = glMapBufferRange(GL_ARRAY_BUFFER, 0, GL33_RING_SIZE,
+				GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+			if (!g_gl33_ringPtrs[i])
+			{
+				glDeleteBuffers(1, &g_gl33_ringVbos[i]);
+				g_gl33_ringVbos[i] = 0;
+				break;
+			}
+			glGenVertexArrays(1, &g_gl33_ringVaos[i]);
+			glBindVertexArray(g_gl33_ringVaos[i]);
+			glBindBuffer(GL_ARRAY_BUFFER, g_gl33_ringVbos[i]);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(2*sizeof(float)));
+			g_gl33_ringOk = (i == GL33_RING_SLOTS - 1);
+		}
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		if (g_gl33_ringOk)
+			INIT_LOG("  P4: persistent mapped VBO ring (%d slots x %d KB)",
+				GL33_RING_SLOTS, (int)(GL33_RING_SIZE / 1024));
+		else
+			INIT_LOG("  P4: persistent ring init failed, using fallback path");
+	}
+
 	// Palette atlas: 256 (color index) × 256 (palette slots), NEAREST. Populated
 	// lazily by gl33PalSlotFor during rendering (one glTexSubImage2D row on miss).
 	glGenTextures(1, &g_gl33_palatlas);
@@ -1000,6 +1046,20 @@ static bool initGL33Shaders()
 
 static void cleanupGL33Shaders()
 {
+	// P4: unmap + destroy persistent ring buffers
+	for (int i = 0; i < GL33_RING_SLOTS; i++)
+	{
+		if (g_gl33_ringPtrs[i])
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, g_gl33_ringVbos[i]);
+			glUnmapBuffer(GL_ARRAY_BUFFER);
+			g_gl33_ringPtrs[i] = nullptr;
+		}
+		if (g_gl33_ringVaos[i]) { glDeleteVertexArrays(1, &g_gl33_ringVaos[i]); g_gl33_ringVaos[i] = 0; }
+		if (g_gl33_ringVbos[i]) { glDeleteBuffers(1, &g_gl33_ringVbos[i]); g_gl33_ringVbos[i] = 0; }
+	}
+	g_gl33_ringOk = false;
+
 	if (g_gl33_paletteProg)   { glDeleteProgram(g_gl33_paletteProg); g_gl33_paletteProg = 0; }
 	if (g_gl33_fullcolorProg) { glDeleteProgram(g_gl33_fullcolorProg); g_gl33_fullcolorProg = 0; }
 	if (g_gl33_shadowProg)    { glDeleteProgram(g_gl33_shadowProg); g_gl33_shadowProg = 0; }
@@ -1137,11 +1197,24 @@ static int gl33PalSlotFor(const uint8_t* ppal)
 static void gl33BatchFlush()
 {
 	if (g_batchVerts.empty()) return;
-	glBindVertexArray(g_gl33_vao);
-	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
-	glBufferData(GL_ARRAY_BUFFER, g_batchVerts.size() * sizeof(float),
-		g_batchVerts.data(), GL_STREAM_DRAW);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(g_batchVerts.size() / 4));
+	const GLsizeiptr bytesNeeded = g_batchVerts.size() * sizeof(float);
+
+	if (g_gl33_ringOk && bytesNeeded <= GL33_RING_SIZE)
+	{
+		// P4: memcpy into persistent mapped ring slot — no glBufferData orphaning.
+		glBindVertexArray(g_gl33_ringVaos[g_gl33_ringIdx]);
+		memcpy((char*)g_gl33_ringPtrs[g_gl33_ringIdx], g_batchVerts.data(), bytesNeeded);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(g_batchVerts.size() / 4));
+		g_gl33_ringIdx = (g_gl33_ringIdx + 1) % GL33_RING_SLOTS;
+	}
+	else
+	{
+		// Fallback: original orphan path (GL 2.1 or oversized batch)
+		glBindVertexArray(g_gl33_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
+		glBufferData(GL_ARRAY_BUFFER, bytesNeeded, g_batchVerts.data(), GL_STREAM_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(g_batchVerts.size() / 4));
+	}
 	glBindVertexArray(0);
 	g_batchVerts.clear();
 }
@@ -6445,10 +6518,21 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	};
 	glUseProgramCached(g_gl33_flatProg, true);
 	glUniform4f(g_gl33flat_uColor, r, g, b, a);
-	glBindVertexArray(g_gl33_vao);
-	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	if (g_gl33_ringOk)
+	{
+		// P4: memcpy into persistent ring slot
+		glBindVertexArray(g_gl33_ringVaos[g_gl33_ringIdx]);
+		memcpy((char*)g_gl33_ringPtrs[g_gl33_ringIdx], v, sizeof(v));
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		g_gl33_ringIdx = (g_gl33_ringIdx + 1) % GL33_RING_SLOTS;
+	}
+	else
+	{
+		glBindVertexArray(g_gl33_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	}
 	glBindVertexArray(0);
 	return;
 	}

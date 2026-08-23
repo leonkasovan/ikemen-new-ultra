@@ -147,5 +147,35 @@ sprite's many quads render as a single draw.
   noise** — this workload's GL path is tiny, so draw-call savings don't move
   frame time. Draw-call-bound scenes (dense tiling, many sprites) benefit.
 
-Remaining: P4 persistent mapped VBO ring, P5 texture pooling — neither measured
-as impactful on the demo.
+### P4 — persistent mapped VBO ring (implemented)
+
+`main/sdlplugin/sdlplugin.cpp`: 3-slot persistent mapped VBO ring using
+`GL_ARB_buffer_storage` (`glBufferStorage` + `glMapBufferRange` with
+`GL_MAP_WRITE|GL_MAP_PERSISTENT|GL_MAP_COHERENT`). Each slot is 512 KB;
+GPU reads from slot N while CPU writes to slot N+1 (triple-buffered).
+
+- Init: ring VBOs + per-slot VAOs created in `initGL33Shaders()` after the
+  original VAO/VBO; falls back to original `glBufferData` path if
+  `GLEW_ARB_buffer_storage` is unavailable.
+- Flush: `gl33BatchFlush()` and `rectFillGl()` use `memcpy` into the
+  persistent mapping + `glDrawArrays`, advancing the ring index. Fallback
+  to orphan `glBufferData` path preserved for GL 2.1 and oversized batches.
+- Cleanup: `cleanupGL33Shaders()` unmaps + deletes all ring VBOs/VAOs.
+
+15 s / 640×480 / kfm vs kfm / Debug (single session):
+
+| Renderer | Frames | FPS | Peak Private |
+|----------|--------|-----|-------------|
+| 0 SDL2 | 705 | 47.0 | — |
+| 1 GL 2.1 | 625 | 41.7 | — |
+| 2 GL 3.3 | 617 | 41.1 | 342.8 MB |
+| 3 GL 4.6 | 615 | 41.0 | — |
+| 4 DirectX | 623 | 41.5 | — |
+
+R2 (GL 3.3) at 87% of R0 (SDL2) vs pre-wiring 71%. The ring eliminates ~80
+per-frame `glBufferData` orphan allocations; within-session perf gain is
+modest because the demo's GL path is small and the main bottleneck is
+texture-bind + palette-upload, not buffer uploads. Draw-call-bound scenes
+(dense tiling, many sprites with many tiles) benefit more.
+
+Remaining: P5 texture pooling — not measured as impactful on the demo.

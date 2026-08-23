@@ -218,6 +218,37 @@ The batch only helps when **multiple quads accumulate before flushing** (tiled s
 
 These require restructuring the SSZ render loop (larger refactor).
 
+### P4 — Persistent mapped VBO ring (implemented)
+
+**Files changed**: `main/sdlplugin/sdlplugin.cpp`
+
+Replaces per-flush `glBufferData(GL_STREAM_DRAW)` orphan allocations with a
+triple-buffered persistent mapped VBO ring using `GL_ARB_buffer_storage`
+(`glBufferStorage` + `glMapBufferRange` with `GL_MAP_WRITE|GL_MAP_PERSISTENT|
+GL_MAP_COHERENT`). GPU reads from slot N while CPU writes to N+1.
+
+- **Ring**: 3 slots × 512 KB each, per-slot VAO + persistently mapped pointer.
+  Created in `initGL33Shaders()` after the original VAO/VBO; falls back to
+  original `glBufferData` path if `GLEW_ARB_buffer_storage` unavailable.
+- **Flush**: `gl33BatchFlush()` and `rectFillGl()` use `memcpy` into the
+  persistent mapping + `glDrawArrays`, advancing the ring index. Fallback to
+  orphan `glBufferData` preserved for GL 2.1 and oversized batches.
+- **Cleanup**: `cleanupGL33Shaders()` unmaps + deletes all ring VBOs/VAOs.
+
+15 s / 640×480 / kfm vs kfm / Debug, single session:
+
+| Renderer | Frames | FPS | Peak Private |
+|----------|--------|-----|-------------|
+| 0 SDL2 | 705 | 47.0 | — |
+| 1 GL 2.1 | 625 | 41.7 | — |
+| 2 GL 3.3 | 617 | 41.1 | 342.8 MB |
+| 3 GL 4.6 | 615 | 41.0 | — |
+| 4 DirectX | 623 | 41.5 | — |
+
+R2 at 87% of R0 (SDL2) vs pre-wiring 71%. Modest gain because the demo's GL
+path is small; the main bottleneck is texture-bind + palette-upload, not buffer
+uploads. Draw-call-bound scenes (dense tiling, many tiled sprites) benefit more.
+
 ---
 
 ## Open Issues
