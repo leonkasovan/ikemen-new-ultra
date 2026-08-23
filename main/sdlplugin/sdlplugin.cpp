@@ -272,6 +272,7 @@ static int atlasCreatePage(GLenum internalFmt)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	p.w = ATLAS_PAGE_SIZE; p.h = ATLAS_PAGE_SIZE; p.internalFmt = internalFmt;
 	p.curX = 0; p.curY = 0; p.rowHeight = 0;
+	g_perfCounters.atlasPagesCreated++;
 	return idx;
 }
 
@@ -1225,6 +1226,7 @@ static bool initGL33Shaders()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	INIT_LOG("  Palette atlas: 256x%d created", (int)GL33_PAL_ATLAS_SLOTS);
 	INIT_LOG("  P5: texture pool (%d slots) ready", GL_TEX_POOL_MAX);
+	INIT_LOG("  Atlas: %dx%d pages, max %d slots", ATLAS_PAGE_SIZE, ATLAS_PAGE_SIZE, ATLAS_MAX_SLOTS);
 
 	return true;
 }
@@ -5904,7 +5906,8 @@ bool SSZ_STDCALL RenderMugenShadow(Reference* pluginbuf, int32_t rle,
 	// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
 	if (useModernRender()) {
 		uint32_t id = atlasAlloc(w, h, GL_LUMINANCE, ppxl);
-		if (id) return id;
+		if (id) { g_perfCounters.atlasHits++; return id; }
+		g_perfCounters.atlasMisses++;
 	}
 	// Legacy / atlas-full: P5 pool + individual texture.
 	uint32_t texid = texPoolAcquire(w, h, GL_LUMINANCE);
@@ -5974,7 +5977,8 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
 		if (useModernRender()) {
 			texid = atlasAlloc(width, height, GL_RGBA, buff);
-			if (texid) { delete [] buff; }
+			if (texid) { g_perfCounters.atlasHits++; delete [] buff; }
+			else { g_perfCounters.atlasMisses++; }
 		}
 		if (!texid) {
 		// Legacy / atlas-full: P5 pool + individual texture.
@@ -6080,6 +6084,8 @@ void SSZ_STDCALL GlSwapBuffers()
 	}
 
 	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
+	// Capture atlas stats for perf logging.
+	g_perfCounters.atlasSlotsUsed = g_atlasSlotCount;
 	SDL_GL_SwapWindow(g_window);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// Reset per-frame GL state cache: palette dedup must not leak a stale
@@ -6107,6 +6113,11 @@ void SSZ_STDCALL GlSwapBuffers()
 		ASSET_LOG("P5: tex pool %d/%d entries, %d hits, %d misses, %d recycles",
 			g_texPoolCount, GL_TEX_POOL_MAX,
 			g_texPoolHits, g_texPoolMisses, g_texPoolRecycles);
+		ASSET_LOG("Atlas: %d pages (%d LUM + %d RGBA), %d/%d slots, %d hits, %d misses",
+			g_atlasPageCount[0] + g_atlasPageCount[1],
+			g_atlasPageCount[0], g_atlasPageCount[1],
+			g_atlasSlotCount, ATLAS_MAX_SLOTS,
+			g_perfCounters.atlasHits, g_perfCounters.atlasMisses);
 	}
 	// Begin next frame perf tracking
 	g_perfCounters.frameStartTick = SDL_GetTicks();

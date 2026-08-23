@@ -96,6 +96,11 @@ struct PerfCounters
 	uint32_t glFlushByAlpha;
 	uint32_t glFlushByScissor;
 	uint32_t glBatchedSprites;  // sprites that skipped flush (batched)
+	// Atlas stats
+	uint32_t atlasHits;     // textures packed into atlas
+	uint32_t atlasMisses;   // textures that fell through to pool/individual
+	uint32_t atlasPagesCreated;
+	uint32_t atlasSlotsUsed;
 
 	// Worst sprite info (the single slowest RenderMugenZoom call)
 	double   worstSpriteUs;
@@ -156,6 +161,9 @@ struct PerfCounters
 		glFlushByAlpha = 0;
 		glFlushByScissor = 0;
 		glBatchedSprites = 0;
+		atlasHits = 0;
+		atlasMisses = 0;
+		// atlasPagesCreated and atlasSlotsUsed are lifetime counters — not reset per frame.
 		worstSpriteUs = 0.0;
 		worstSpriteSrcW = 0;
 		worstSpriteSrcH = 0;
@@ -371,5 +379,14 @@ inline void perfPrintFrame(const PerfCounters& pc, const RendererInfo& ri)
 			pc.glBatchFlushes, pc.glFlushByTexid, pc.glFlushByAlpha,
 			pc.glFlushByScissor, pc.glBatchedSprites,
 		pc.glDrawArraysCalls > 0 ? (double)pc.glTotalVertices / pc.glDrawArraysCalls : 0.0);
+	}
+	if (pc.atlasPagesCreated > 0)
+	{
+		uint32_t total = pc.atlasHits + pc.atlasMisses;
+		PERF_LOG("Atlas: pages=%u slots=%u  hits=%u misses=%u (%.0f%% hit)  %.0f slots/page",
+			pc.atlasPagesCreated, pc.atlasSlotsUsed,
+			pc.atlasHits, pc.atlasMisses,
+			total > 0 ? (double)pc.atlasHits / total * 100.0 : 0.0,
+			pc.atlasPagesCreated > 0 ? (double)pc.atlasSlotsUsed / pc.atlasPagesCreated : 0.0);
 	}
 }
