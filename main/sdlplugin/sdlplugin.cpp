@@ -6184,8 +6184,9 @@ static void updateWindowTitle()
 	if (now - lastUpdate < 1000) return;
 	lastUpdate = now;
 	if (!g_window || g_baseWindowTitle.empty()) return;
-	const char* rname = g_rendererInfo.backendName[0]
-		? g_rendererInfo.backendName : rendererTypeName(g_rendererType);
+	// Use the user-selected renderer name, not the detected GL version
+	// (driver gives GL 4.6 even for Renderer=2 "OpenGL 3.3" config).
+	const char* rname = rendererTypeName(g_rendererType);
 	char buf[256];
 	_snprintf(buf, sizeof(buf), "%s [%s] - %.1f FPS",
 		g_baseWindowTitle.c_str(), rname, g_perfCounters.fps);
@@ -6844,7 +6845,10 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	}
 	glActiveTextureCached(GL_TEXTURE0);
 	if (IS_ATLAS_TEXID(texid))
+	{
 		atlasBindAndSetUVs(texid);
+		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
+	}
 	else
 	{
 		glBindTex2dCached(texid);
@@ -6881,7 +6885,10 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	glUniform3fARB(modern ? g_gl33fc_uMul : g_uniformMul, mulr, mulg, mulb);
 	glActiveTextureCached(GL_TEXTURE0);
 	if (IS_ATLAS_TEXID(texid))
+	{
 		atlasBindAndSetUVs(texid);
+		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
+	}
 	else
 	{
 		glBindTex2dCached(texid);
@@ -6917,7 +6924,10 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 		(float)(color & 0xff) / 255);
 	glActiveTextureCached(GL_TEXTURE0);
 	if (IS_ATLAS_TEXID(texid))
+	{
 		atlasBindAndSetUVs(texid);
+		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
+	}
 	else
 	{
 		glBindTex2dCached(texid);
