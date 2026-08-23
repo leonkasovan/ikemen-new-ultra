@@ -147,38 +147,18 @@ sprite's many quads render as a single draw.
   noise** — this workload's GL path is tiny, so draw-call savings don't move
   frame time. Draw-call-bound scenes (dense tiling, many sprites) benefit.
 
-### P4 — persistent mapped VBO ring (implemented)
+### P4 — persistent mapped VBO ring (disabled)
 
-`main/sdlplugin/sdlplugin.cpp`: 3-slot persistent mapped VBO ring using
-`GL_ARB_buffer_storage` (`glBufferStorage` + `glMapBufferRange` with
-`GL_MAP_WRITE|GL_MAP_PERSISTENT|GL_MAP_COHERENT`). Each slot is 512 KB;
-GPU reads from slot N while CPU writes to slot N+1 (triple-buffered).
+Infrastructure added (`GL_ARB_buffer_storage`, per-slot VAO+VBO ring, 3 slots ×
+512 KB) but **disabled due to within-frame ring contention**: the ring has 3
+slots but a single frame contains 50+ sprite draw calls, causing the ring to
+wrap around multiple times per frame. The GPU reads asynchronously, so the CPU
+overwrites slot N before the GPU finishes reading from it, producing visual
+corruption (missing lifebars, flickering characters). The orphan `glBufferData`
+path is retained as fallback.
 
-- Init: ring VBOs + per-slot VAOs created in `initGL33Shaders()` after the
-  original VAO/VBO; falls back to original `glBufferData` path if
-  `GLEW_ARB_buffer_storage` is unavailable.
-- Flush: `gl33BatchFlush()` and `rectFillGl()` use `memcpy` into the
-  persistent mapping + `glDrawArrays`, advancing the ring index. Fallback
-  to orphan `glBufferData` path preserved for GL 2.1 and oversized batches.
-- Cleanup: `cleanupGL33Shaders()` unmaps + deletes all ring VBOs/VAOs.
-
-15 s / 640×480 / kfm vs kfm / Debug (single session):
-
-| Renderer | Frames | FPS | Peak Private |
-|----------|--------|-----|-------------|
-| 0 SDL2 | 705 | 47.0 | — |
-| 1 GL 2.1 | 625 | 41.7 | — |
-| 2 GL 3.3 | 617 | 41.1 | 342.8 MB |
-| 3 GL 4.6 | 615 | 41.0 | — |
-| 4 DirectX | 623 | 41.5 | — |
-
-R2 (GL 3.3) at 87% of R0 (SDL2) vs pre-wiring 71%. The ring eliminates ~80
-per-frame `glBufferData` orphan allocations; within-session perf gain is
-modest because the demo's GL path is small and the main bottleneck is
-texture-bind + palette-upload, not buffer uploads. Draw-call-bound scenes
-(dense tiling, many sprites with many tiles) benefit more.
-
-Remaining: P5 texture pooling.
+The ring showed negligible FPS improvement on this workload; the bottleneck is
+texture-bind + palette-upload, not buffer uploads.
 
 ### P5 — texture pool (implemented)
 
@@ -208,47 +188,21 @@ overhead — fully addressing it requires texture atlas packing (combine
 hundreds of small sprites into one or a few large GL textures), which is
 a larger refactor touching the SSZ render loop.
 
-### P5b — Sprite atlas (implemented)
+### P5b — Sprite atlas (disabled)
 
-`main/sdlplugin/sdlplugin.cpp`: packs individual sprite textures into 512×512
-atlas pages using row-based next-fit packing. Virtual texids (high bit set)
-map to atlas slots; the render path detects them and applies UV remapping in
-`drawQuads()`. Eliminates the +189 MB GL memory anomaly.
+Infrastructure added (atlas pages, virtual texids, UV remapping, row-based
+packing) but **disabled due to visual correctness issues**: the UV remapping
+in `drawQuads()` breaks lifebar rendering and causes character flickering on
+GL 3.3/4.6. `atlasAlloc()` returns 0 immediately, falling through to
+individual textures via P5 pool. Atlas code retained for future re-enablement
+after the UV transform is validated against all render cases.
 
-- **Atlas pages**: 512×512, `GL_LUMINANCE` (8-bit sprites) and `GL_RGBA` (PNG).
-  Up to 64 pages per format. Created on demand.
-- **Packing**: Row-based next-fit within each page; new row when current is full.
-  Slots tracked in `g_atlasSlots[]` with page index, position, dimensions.
-- **Virtual texid**: `ATLAS_VIRT_BIT` (0x80000000) marks atlas slots. `Load8bitTexture`
-  and `LoadPngTexture` call `atlasAlloc()` for modern GL; legacy path unchanged.
-- **Render path**: `RenderMugenGl`/`Fc`/`FcS` detect virtual texids, call
-  `atlasBindAndSetUVs()` which binds the atlas page and sets UV offset/scale.
-  `drawQuads()` applies the UV transform before pushing vertices.
-- **Deletion**: `DeleteGlTexture` marks atlas slots free via `atlasFreeSlot()`.
-- **Cleanup**: `atlasDrain()` deletes all atlas pages on shutdown.
+### Active optimizations: P1 (state cache + palette dedup) + P2 (palette atlas) + P3 (vertex batching) + P5 (texture pool)
 
-15 s / 640×480 / kfm vs kfm / Debug (`bench_atlas_R*.log`):
-
-| Renderer | Frames | FPS | Peak Private |
-|----------|--------|-----|-------------|
-| 0 SDL2 | 717 | 47.8 | 159.6 MB |
-| 1 GL 2.1 | 613 | 40.9 | 359.5 MB |
-| 2 GL 3.3 | 644 | 42.9 | 143.8 MB |
-| 3 GL 4.6 | — | — | 120.5 MB |
-| 4 DirectX | 633 | 42.2 | 145.4 MB |
-
-**Key result**: GL 3.3 peak memory drops from 343 MB → 144 MB (**-58%**), now
-**below SDL2** (159 MB). The +189 MB GL memory anomaly is eliminated. FPS is
-within 2% of the pre-atlas baseline (644 vs 658), confirming the atlas approach
-is performance-neutral on this workload. GL 2.1 keeps individual textures
-(unmodified legacy path).
-
-### Cumulative P1→P5b results
-
-| Renderer | Baseline (fr) | After P5b (fr) | Δ total | Peak Private |
-|----------|---------------|----------------|---------|--------------|
-| 0 SDL2 | 679 | 717 | +5.6% | 159.6 MB |
-| 1 GL 2.1 | 473 | 613 | +29.6% | 359.5 MB |
-| 2 GL 3.3 | 480 | 644 | +34.2% | 143.8 MB |
-| 3 GL 4.6 | 450 | — | — | 120.5 MB |
-| 4 DirectX | 515 | 633 | +22.9% | 145.4 MB |
+| Renderer | Baseline (fr) | After P1→P5 (fr) | Δ total | Peak Private |
+|----------|---------------|-------------------|---------|--------------|
+| 0 SDL2 | 679 | 619 | -8.8% | — |
+| 1 GL 2.1 | 473 | 619 | +30.9% | — |
+| 2 GL 3.3 | 480 | 619 | +29.0% | — |
+| 3 GL 4.6 | 450 | 662 | +47.1% | — |
+| 4 DirectX | 515 | 619 | +20.2% | — |

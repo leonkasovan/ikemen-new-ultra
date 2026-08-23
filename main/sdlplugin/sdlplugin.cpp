@@ -1323,11 +1323,12 @@ static bool initGL33Shaders()
 		}
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		if (g_gl33_ringOk)
-			INIT_LOG("  P4: persistent mapped VBO ring (%d slots x %d KB)",
-				GL33_RING_SLOTS, (int)(GL33_RING_SIZE / 1024));
-		else
-			INIT_LOG("  P4: persistent ring init failed, using fallback path");
+		// P4 ring disabled: within a single frame, many sprite draw calls
+		// cycle through the 3 ring slots faster than the GPU can consume them,
+		// causing ring-slot overwrite races. The orphan glBufferData path is
+		// correct and shows negligible FPS difference on this workload.
+		g_gl33_ringOk = false;
+		INIT_LOG("  P4: persistent ring init (disabled — using orphan path)");
 	}
 
 	// Palette atlas: 256 (color index) × 256 (palette slots), NEAREST. Populated

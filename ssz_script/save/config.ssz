@@ -1,5 +1,5 @@
 //Video Settings
-const int Renderer = 4;
+const int Renderer = 2;
 const bool AspectRatio = false;
 const bool FullScreen = false;
 const bool FullScreenExclusive = false; //False: Borderless FullScreen, True: Exclusive FullScreen

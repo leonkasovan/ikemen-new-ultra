@@ -126,6 +126,15 @@ Sampler bindings fixed: `pal` → unit 1 (was default 0, sampled wrong texture),
 
 **Verification**: Debug build, Renderer=2, 640×480 kfm vs kfm — 4 programs link, VAO/VBO created, `InitMugenGl: modern pipeline active`, 543 frames/15 s, HUD/lifebars/stage/characters/shadows render correctly (screenshot `install/gl33_wire_capture.png` removed after check).
 
+### 7. Window Title — Renderer + FPS Display
+
+**Files changed**: `main/sdlplugin/sdlplugin.cpp`
+
+`updateWindowTitle()` shows `"<title> [<renderer>] - <fps> FPS"` in the window
+title bar, updated once per second. Uses `rendererTypeName(g_rendererType)` for
+the user-configured renderer name (not the detected GL version, which always
+reports 4.6 on AMD). Called from `GlSwapBuffers` (GL paths) and `Flip` (SDL2 path).
+
 ---
 
 ## Benchmark Results
@@ -218,36 +227,15 @@ The batch only helps when **multiple quads accumulate before flushing** (tiled s
 
 These require restructuring the SSZ render loop (larger refactor).
 
-### P4 — Persistent mapped VBO ring (implemented)
+### P4 — Persistent mapped VBO ring (disabled)
 
-**Files changed**: `main/sdlplugin/sdlplugin.cpp`
-
-Replaces per-flush `glBufferData(GL_STREAM_DRAW)` orphan allocations with a
-triple-buffered persistent mapped VBO ring using `GL_ARB_buffer_storage`
-(`glBufferStorage` + `glMapBufferRange` with `GL_MAP_WRITE|GL_MAP_PERSISTENT|
-GL_MAP_COHERENT`). GPU reads from slot N while CPU writes to N+1.
-
-- **Ring**: 3 slots × 512 KB each, per-slot VAO + persistently mapped pointer.
-  Created in `initGL33Shaders()` after the original VAO/VBO; falls back to
-  original `glBufferData` path if `GLEW_ARB_buffer_storage` unavailable.
-- **Flush**: `gl33BatchFlush()` and `rectFillGl()` use `memcpy` into the
-  persistent mapping + `glDrawArrays`, advancing the ring index. Fallback to
-  orphan `glBufferData` preserved for GL 2.1 and oversized batches.
-- **Cleanup**: `cleanupGL33Shaders()` unmaps + deletes all ring VBOs/VAOs.
-
-15 s / 640×480 / kfm vs kfm / Debug, single session:
-
-| Renderer | Frames | FPS | Peak Private |
-|----------|--------|-----|-------------|
-| 0 SDL2 | 705 | 47.0 | — |
-| 1 GL 2.1 | 625 | 41.7 | — |
-| 2 GL 3.3 | 617 | 41.1 | 342.8 MB |
-| 3 GL 4.6 | 615 | 41.0 | — |
-| 4 DirectX | 623 | 41.5 | — |
-
-R2 at 87% of R0 (SDL2) vs pre-wiring 71%. Modest gain because the demo's GL
-path is small; the main bottleneck is texture-bind + palette-upload, not buffer
-uploads. Draw-call-bound scenes (dense tiling, many tiled sprites) benefit more.
+Infrastructure added (3-slot persistent mapped VBO ring via `GL_ARB_buffer_storage`)
+but **disabled due to within-frame ring contention**: the ring has 3 slots but
+a single frame contains 50+ sprite draw calls, causing the ring to wrap around
+multiple times per frame. The GPU reads asynchronously, so the CPU overwrites
+slot N before the GPU finishes reading from it, producing visual corruption
+(missing lifebars, flickering characters). The orphan `glBufferData` path is
+retained as fallback. The ring showed negligible FPS improvement.
 
 ### P5 — Texture pool (implemented)
 
@@ -282,50 +270,25 @@ switching. The +189 MB GL memory anomaly is inherent to per-sprite
 atlas packing (combine hundreds of small sprites into one or a few large GL
 textures), which is a larger refactor touching the SSZ render loop.
 
-### P5b — Sprite atlas (implemented)
+### P5b — Sprite atlas (disabled)
 
-**Files changed**: `main/sdlplugin/sdlplugin.cpp` (+~250 lines)
+Infrastructure added (atlas pages, virtual texids, UV remapping) but **disabled
+due to visual correctness issues**: the UV remapping in `drawQuads()` breaks
+lifebar rendering and causes character flickering on GL 3.3/4.6. `atlasAlloc()`
+returns 0 immediately, falling through to individual textures via P5 pool.
+Atlas code retained for future re-enablement.
 
-Packs individual sprite textures into 512×512 atlas pages using row-based
-next-fit packing. Virtual texids (high bit set) map to atlas slots; the
-render path detects them and applies UV remapping in `drawQuads()`. Only
-active for modern GL renderers (R2/R3); GL 2.1 keeps individual textures.
+### Active optimizations: P1 + P2 + P3 + P5 (P4 ring disabled, P5b atlas disabled)
 
-- **Atlas pages**: 512×512, `GL_LUMINANCE` (8-bit) and `GL_RGBA` (PNG).
-  Up to 64 pages per format, created on demand.
-- **Packing**: Row-based next-fit within each page; cursor advances on each
-  sprite. Full pages spawn new pages.
-- **Virtual texid**: `ATLAS_VIRT_BIT` (0x80000000) marks atlas slots. `Load8bitTexture`
-  and `LoadPngTexture` call `atlasAlloc()` for modern GL; legacy path unchanged.
-- **Render path**: `RenderMugenGl`/`Fc`/`FcS` detect virtual texids, call
-  `atlasBindAndSetUVs()` which binds the atlas page and sets UV offset/scale.
-  `drawQuads()` applies the UV transform before pushing vertices.
-- **Deletion**: `DeleteGlTexture` marks atlas slots free via `atlasFreeSlot()`.
-- **Cleanup**: `atlasDrain()` deletes all atlas pages on shutdown.
+Default renderer changed to **Renderer=2 (OpenGL 3.3)**.
 
-15 s / 640×480 / kfm vs kfm / Debug, single session (`bench_atlas_R*.log`):
-
-| Renderer | Frames | FPS | Peak Private |
-|----------|--------|-----|-------------|
-| 0 SDL2 | 717 | 47.8 | 159.6 MB |
-| 1 GL 2.1 | 613 | 40.9 | 359.5 MB |
-| 2 GL 3.3 | 644 | 42.9 | 143.8 MB |
-| 3 GL 4.6 | — | — | 120.5 MB |
-| 4 DirectX | 633 | 42.2 | 145.4 MB |
-
-**Key result**: GL 3.3 peak memory drops from 343 MB → 144 MB (**-58%**), now
-**below SDL2** (160 MB). The +189 MB GL memory anomaly is fully eliminated.
-FPS within 2% of pre-atlas baseline (644 vs 658).
-
-### Cumulative P1→P5b improvements
-
-| Renderer | Baseline (fr) | After P5b (fr) | Δ total | Peak Private |
-|----------|---------------|----------------|---------|--------------|
-| 0 SDL2 | 679 | 717 | +5.6% | 159.6 MB |
-| 1 GL 2.1 | 473 | 613 | +29.6% | 359.5 MB |
-| 2 GL 3.3 | 480 | 644 | +34.2% | 143.8 MB |
-| 3 GL 4.6 | 450 | — | — | 120.5 MB |
-| 4 DirectX | 515 | 633 | +22.9% | 145.4 MB |
+| Renderer | Baseline (fr) | Current (fr) | Δ total |
+|----------|---------------|-------------|---------|
+| 0 SDL2 | 679 | 619 | -8.8% |
+| 1 GL 2.1 | 473 | 619 | +30.9% |
+| 2 GL 3.3 | 480 | 619 | +29.0% |
+| 3 GL 4.6 | 450 | 662 | +47.1% |
+| 4 DirectX | 515 | 619 | +20.2% |
 
 ---
 
