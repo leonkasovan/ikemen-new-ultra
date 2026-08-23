@@ -239,6 +239,7 @@ int g_pitch = 0;
 int g_w = 640, g_h = 480;
 float w_opacity = 1.0;
 uint32_t g_scrflag = 0;
+std::string g_baseWindowTitle; // initial window title, set once at init
 SDL_AudioSpec g_desired = {};
 HGLRC g_hglrc = nullptr, g_hglrc2 = nullptr;
 HDC g_hdc = nullptr;
@@ -246,6 +247,8 @@ DWORD g_mainTreadId = 0;
 
 WNDPROC g_orgProc = nullptr;
 char16_t g_lastChar = '\0', g_newChar = '\0';
+
+static void updateWindowTitle(); // forward declaration
 
 void lockTarget()
 {
@@ -705,6 +708,7 @@ void TestRoom()
 bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 {
 	//TestRoom(); //To test SDL Stuff
+	g_baseWindowTitle = WstrToStr(cap);
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0)
 	{
 		return false;
@@ -737,6 +741,7 @@ bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 int isOpenGL = 0;
 bool SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap)
 {
+	g_baseWindowTitle = WstrToStr(cap);
 	if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
 	{
 		return false;;
@@ -1387,6 +1392,7 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 	g_rendererType = parseRendererType(rendStr.c_str());
 	g_perfCounters.init();
 	g_perfCounters.fpsLastTick = SDL_GetTicks();
+	g_baseWindowTitle = WstrToStr(cap);
 
 	INIT_LOG("========================================");
 	INIT_LOG("I.K.E.M.E.N. Plus Ultra - Renderer Init");
@@ -2659,6 +2665,7 @@ void SSZ_STDCALL Flip()
 		perfFrameEnd(g_perfCounters, now);
 		if (g_perfMonitorEnabled)
 			perfPrintFrame(g_perfCounters, g_rendererInfo);
+		updateWindowTitle();
 		// Process-memory timeline sample ~once per second (what Task Manager
 		// shows): working set + private bytes, peak tracked, printed at exit.
 		if (g_perfCounters.totalFrames % 60 == 0)
@@ -5943,6 +5950,23 @@ void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 		glDeleteTextures(1, &texid); // Unknown texture — actual delete
 }
 
+// Update window title with renderer info + FPS. Called every frame; throttled
+// to once per second internally.
+static void updateWindowTitle()
+{
+	static uint32_t lastUpdate = 0;
+	uint32_t now = SDL_GetTicks();
+	if (now - lastUpdate < 1000) return;
+	lastUpdate = now;
+	if (!g_window || g_baseWindowTitle.empty()) return;
+	const char* rname = g_rendererInfo.backendName[0]
+		? g_rendererInfo.backendName : rendererTypeName(g_rendererType);
+	char buf[256];
+	_snprintf(buf, sizeof(buf), "%s [%s] - %.1f FPS",
+		g_baseWindowTitle.c_str(), rname, g_perfCounters.fps);
+	SDL_SetWindowTitle(g_window, buf);
+}
+
 void SSZ_STDCALL GlSwapBuffers()
 {
 	// End previous frame perf tracking (always tracked; print only when
@@ -5952,6 +5976,7 @@ void SSZ_STDCALL GlSwapBuffers()
 		perfFrameEnd(g_perfCounters, now);
 		if (g_perfMonitorEnabled)
 			perfPrintFrame(g_perfCounters, g_rendererInfo);
+		updateWindowTitle();
 	}
 
 	// Non-GL renderers (DirectX, Vulkan): present via SDL2 renderer API
