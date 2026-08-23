@@ -79,6 +79,19 @@ struct PerfCounters
 	uint32_t addAlphaSimpleSprites;
 	uint64_t totalPixelArea;    // sum of dest w*h across all RenderMugenZoom calls
 
+	// GL-specific API call counters (modern path profiling)
+	uint32_t glDrawArraysCalls;
+	uint32_t glBufferDataCalls;
+	uint32_t glUseProgramCalls;
+	uint32_t glUniformCalls;
+	uint32_t glBindTex2dCalls;
+	uint32_t glTexSubImageCalls;
+	uint32_t glBlendFuncCalls;
+	uint32_t glScissorCalls;
+	uint32_t glTotalVertices;
+	uint32_t glBatchFlushes;
+	uint32_t glPaletteUploads;
+
 	// Worst sprite info (the single slowest RenderMugenZoom call)
 	double   worstSpriteUs;
 	int      worstSpriteSrcW;
@@ -123,6 +136,17 @@ struct PerfCounters
 		fastAddRectBlits = 0;
 		addAlphaSimpleSprites = 0;
 		totalPixelArea = 0;
+		glDrawArraysCalls = 0;
+		glBufferDataCalls = 0;
+		glUseProgramCalls = 0;
+		glUniformCalls = 0;
+		glBindTex2dCalls = 0;
+		glTexSubImageCalls = 0;
+		glBlendFuncCalls = 0;
+		glScissorCalls = 0;
+		glTotalVertices = 0;
+		glBatchFlushes = 0;
+		glPaletteUploads = 0;
 		worstSpriteUs = 0.0;
 		worstSpriteSrcW = 0;
 		worstSpriteSrcH = 0;
@@ -329,4 +353,15 @@ inline void perfPrintFrame(const PerfCounters& pc, const RendererInfo& ri)
 		pc.textCacheHits, pc.textCacheMisses,
 		pc.blitCacheHits, pc.blitCacheMisses,
 		ri.backendName);
+	if (pc.glDrawArraysCalls > 0)
+	{
+		PERF_LOG("GL: drawArrays=%u  vertices=%u  glBufferData=%u UseProgram=%u "
+			"glUniform=%u  BindTex2d=%u  TexSubImage=%u  BlendFunc=%u  Scissor=%u "
+			"BatchFlush=%u  PaletteUpload=%u  avgVerts=%.1f",
+			pc.glDrawArraysCalls, pc.glTotalVertices, pc.glBufferDataCalls,
+			pc.glUseProgramCalls, pc.glUniformCalls, pc.glBindTex2dCalls,
+			pc.glTexSubImageCalls, pc.glBlendFuncCalls, pc.glScissorCalls,
+			pc.glBatchFlushes, pc.glPaletteUploads,
+		pc.glDrawArraysCalls > 0 ? (double)pc.glTotalVertices / pc.glDrawArraysCalls : 0.0);
+	}
 }

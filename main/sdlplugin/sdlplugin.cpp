@@ -1171,6 +1171,7 @@ static void glUseProgramCached(GLuint prog, bool core)
 	g_glCache.prog = prog;
 	g_glCache.progCore = core;
 	g_perfCounters.shaderSwitches++;
+	g_perfCounters.glUseProgramCalls++;
 }
 
 static void glActiveTextureCached(GLenum unit)
@@ -1186,6 +1187,7 @@ static void glBindTex2dCached(GLuint tex)
 	glBindTexture(GL_TEXTURE_2D, tex);
 	g_glCache.tex2d = tex;
 	g_perfCounters.textureBinds++;
+	g_perfCounters.glBindTex2dCalls++;
 }
 
 static void glBindTex1dCached(GLuint tex)
@@ -1201,6 +1203,7 @@ static void glBlendFuncCached(GLenum src, GLenum dst)
 	glBlendFunc(src, dst);
 	g_glCache.blendSrc = src;
 	g_glCache.blendDst = dst;
+	g_perfCounters.glBlendFuncCalls++;
 }
 
 // ---------------------------------------------------------------------------
@@ -1236,6 +1239,7 @@ static int gl33PalSlotFor(const uint8_t* ppal)
 	glBindTex2dCached(g_gl33_palatlas);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, evict, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
+	g_perfCounters.glPaletteUploads++;
 	return evict;
 }
 
@@ -1244,11 +1248,16 @@ static void gl33BatchFlush()
 {
 	if (g_batchVerts.empty()) return;
 	const GLsizeiptr bytesNeeded = g_batchVerts.size() * sizeof(float);
+	const GLsizei vertCount = (GLsizei)(g_batchVerts.size() / 4);
 	glBindVertexArray(g_gl33_vao);
 	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
 	glBufferData(GL_ARRAY_BUFFER, bytesNeeded, g_batchVerts.data(), GL_STREAM_DRAW);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(g_batchVerts.size() / 4));
+	glDrawArrays(GL_TRIANGLES, 0, vertCount);
 	glBindVertexArray(0);
+	g_perfCounters.glDrawArraysCalls++;
+	g_perfCounters.glBufferDataCalls++;
+	g_perfCounters.glTotalVertices += vertCount;
+	g_perfCounters.glBatchFlushes++;
 	g_batchVerts.clear();
 }
 // ---------------------------------------------------------------------------
@@ -6382,6 +6391,7 @@ static bool glSpriteBegin(
 	y += rcy;
 	glEnable(GL_SCISSOR_TEST);
 	glScissor(dstr->x, g_h - (dstr->y + dstr->h), dstr->w, dstr->h);
+	g_perfCounters.glScissorCalls++;
 	return true;
 }
 
@@ -6619,6 +6629,9 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	g_perfCounters.glDrawArraysCalls++;
+	g_perfCounters.glBufferDataCalls++;
+	g_perfCounters.glTotalVertices += 4;
 	glBindVertexArray(0);
 	return;
 	}
