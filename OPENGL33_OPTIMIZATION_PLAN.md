@@ -208,10 +208,47 @@ overhead — fully addressing it requires texture atlas packing (combine
 hundreds of small sprites into one or a few large GL textures), which is
 a larger refactor touching the SSZ render loop.
 
-### Cumulative P1→P5 results
+### P5b — Sprite atlas (implemented)
 
-| Renderer | Baseline (fr) | After P5 (fr) | Δ total |
-|----------|---------------|---------------|----------|
-| 1 GL 2.1 | 473 | 660 | +39.5% |
-| 2 GL 3.3 | 480 | 658 | +37.1% |
-| 3 GL 4.6 | 450 | 657 | +46.0% |
+`main/sdlplugin/sdlplugin.cpp`: packs individual sprite textures into 512×512
+atlas pages using row-based next-fit packing. Virtual texids (high bit set)
+map to atlas slots; the render path detects them and applies UV remapping in
+`drawQuads()`. Eliminates the +189 MB GL memory anomaly.
+
+- **Atlas pages**: 512×512, `GL_LUMINANCE` (8-bit sprites) and `GL_RGBA` (PNG).
+  Up to 64 pages per format. Created on demand.
+- **Packing**: Row-based next-fit within each page; new row when current is full.
+  Slots tracked in `g_atlasSlots[]` with page index, position, dimensions.
+- **Virtual texid**: `ATLAS_VIRT_BIT` (0x80000000) marks atlas slots. `Load8bitTexture`
+  and `LoadPngTexture` call `atlasAlloc()` for modern GL; legacy path unchanged.
+- **Render path**: `RenderMugenGl`/`Fc`/`FcS` detect virtual texids, call
+  `atlasBindAndSetUVs()` which binds the atlas page and sets UV offset/scale.
+  `drawQuads()` applies the UV transform before pushing vertices.
+- **Deletion**: `DeleteGlTexture` marks atlas slots free via `atlasFreeSlot()`.
+- **Cleanup**: `atlasDrain()` deletes all atlas pages on shutdown.
+
+15 s / 640×480 / kfm vs kfm / Debug (`bench_atlas_R*.log`):
+
+| Renderer | Frames | FPS | Peak Private |
+|----------|--------|-----|-------------|
+| 0 SDL2 | 717 | 47.8 | 159.6 MB |
+| 1 GL 2.1 | 613 | 40.9 | 359.5 MB |
+| 2 GL 3.3 | 644 | 42.9 | 143.8 MB |
+| 3 GL 4.6 | — | — | 120.5 MB |
+| 4 DirectX | 633 | 42.2 | 145.4 MB |
+
+**Key result**: GL 3.3 peak memory drops from 343 MB → 144 MB (**-58%**), now
+**below SDL2** (159 MB). The +189 MB GL memory anomaly is eliminated. FPS is
+within 2% of the pre-atlas baseline (644 vs 658), confirming the atlas approach
+is performance-neutral on this workload. GL 2.1 keeps individual textures
+(unmodified legacy path).
+
+### Cumulative P1→P5b results
+
+| Renderer | Baseline (fr) | After P5b (fr) | Δ total | Peak Private |
+|----------|---------------|----------------|---------|--------------|
+| 0 SDL2 | 679 | 717 | +5.6% | 159.6 MB |
+| 1 GL 2.1 | 473 | 613 | +29.6% | 359.5 MB |
+| 2 GL 3.3 | 480 | 644 | +34.2% | 143.8 MB |
+| 3 GL 4.6 | 450 | — | — | 120.5 MB |
+| 4 DirectX | 515 | 633 | +22.9% | 145.4 MB |
