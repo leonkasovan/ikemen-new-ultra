@@ -239,6 +239,7 @@ void main()
     ret;
   }
 /*?*/
+  .sdl.enablePerfMonitor(.cfg.PerformanceMonitor);
   .sdl.fullScreenMode(.cfg.FullScreenExclusive);
   if(.cfg.FullScreenExclusive) .se.fullReal = true;
   if(.sdl.fullScreen(.cfg.FullScreen)) .sdl.showCursor(!.cfg.FullScreen || .cfg.FullScreen && !.cfg.FullScreenExclusive);

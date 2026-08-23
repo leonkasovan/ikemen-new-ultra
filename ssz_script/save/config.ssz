@@ -17,6 +17,7 @@ const float PanStr = 0.8;
 const int VideoVol = 100;
 
 //Perfomance Settings
+const bool PerformanceMonitor = false; //Enable FPS/GL API profiling output
 const bool SaveMemory = false;
 const int HelperMax = 56;
 const int PlayerProjectileMax = 50;
