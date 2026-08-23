@@ -129,4 +129,23 @@ neutral here — it wins on palfx-heavy scenes (many palette mutations) and is
 the infrastructure for load-time pre-pack (Go uploads palettes at character
 load; that would be the next step if palfx scenes show up in profiling).
 
-Remaining: P3 state-sorted batching / instancing.
+### P3 — within-sprite vertex batching (implemented)
+
+`main/sdlplugin/sdlplugin.cpp`: sprite quads accumulate in `g_batchVerts` and
+flush as one `glBufferData` + `glDrawArrays(GL_TRIANGLES)` at state boundaries.
+Strips are triangulated (culling is off, so winding is free), letting a tiled
+sprite's many quads render as a single draw.
+
+- Flush points: `glSpriteBegin` (per sprite), the alpha≥512 dst/src passes,
+  `rectFillGl`, and `GlSwapBuffers`.
+- Cross-sprite batching is intentionally OFF — per-sprite scissor + per-sprite
+  uniforms (alpha/mask/palUV/palfx) block grouping; the Go desktop backend
+  reaches the same conclusion (batching is GLES32-only there, `render_gl33.go`
+  `flushSpriteQueueBatched` comment).
+- Measured on the demo: **~14 draws/frame vs ~84** (6× fewer GL calls, avg batch
+  ≈ 6 quads), rendering verified correct (skin tones). Perf is **neutral within
+  noise** — this workload's GL path is tiny, so draw-call savings don't move
+  frame time. Draw-call-bound scenes (dense tiling, many sprites) benefit.
+
+Remaining: P4 persistent mapped VBO ring, P5 texture pooling — neither measured
+as impactful on the demo.

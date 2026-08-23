@@ -85,6 +85,14 @@ static int    g_palSlotClock     = 0; // monotonic LRU use counter
 struct PalSlot { uint32_t hash; int lastUse; };
 static PalSlot g_palSlot[GL33_PAL_ATLAS_SLOTS];
 
+// Frame vertex batch (P3): quads for a sprite are accumulated here and drawn as
+// one glBufferData + glDrawArrays(GL_TRIANGLES) on state change / frame end.
+// Batches within a sprite only (tiled sprites emit many quads); cross-sprite
+// batching is blocked by per-sprite scissor + per-sprite uniforms, same as the
+// Go desktop backend (batching is GLES32-only there). Culling is off, so
+// triangle winding is irrelevant.
+static std::vector<float> g_batchVerts;
+
 // Flat-color program (MugenFillGl) – shares g_gl33_palVS
 static GLuint g_gl33_flatProg    = 0;
 static GLint  g_gl33flat_uColor   = -1;
@@ -1125,6 +1133,18 @@ static int gl33PalSlotFor(const uint8_t* ppal)
 	return evict;
 }
 
+// Draw all accumulated quads as one GL_TRIANGLES draw. No-op when empty.
+static void gl33BatchFlush()
+{
+	if (g_batchVerts.empty()) return;
+	glBindVertexArray(g_gl33_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
+	glBufferData(GL_ARRAY_BUFFER, g_batchVerts.size() * sizeof(float),
+		g_batchVerts.data(), GL_STREAM_DRAW);
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(g_batchVerts.size() / 4));
+	glBindVertexArray(0);
+	g_batchVerts.clear();
+}
 // ---------------------------------------------------------------------------
 // Fill RendererInfo from current GL context
 // ---------------------------------------------------------------------------
@@ -5744,6 +5764,7 @@ void SSZ_STDCALL GlSwapBuffers()
 		return;
 	}
 
+	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
 	SDL_GL_SwapWindow(g_window);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// Reset per-frame GL state cache: palette dedup must not leak a stale
@@ -5963,13 +5984,18 @@ void drawQuads(
 	}
 	v.push_back(x2); v.push_back(y2); v.push_back(1.0f); v.push_back(1.0f);
 	v.push_back(x3); v.push_back(y3); v.push_back(1.0f); v.push_back(0.0f);
-	glBindVertexArray(g_gl33_vao);
-	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
-	// Orphan + re-specify: avoids the glBufferSubData sync stall measured
-	// in the earlier batch experiment (PROGRESS.md).
-	glBufferData(GL_ARRAY_BUFFER, v.size()*sizeof(float), v.data(), GL_STREAM_DRAW);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, (GLsizei)(v.size()/4));
-	glBindVertexArray(0);
+	// Accumulate into the frame batch as GL_TRIANGLES so a sprite's tiled quads
+	// are one glBufferData + glDrawArrays instead of one per quad (P3).
+	g_batchVerts.reserve(g_batchVerts.size() + v.size());
+	const size_t m = v.size() / 4; // strip vertex count
+	for(size_t i = 0; i + 2 < m; i++){
+		const float* a = &v[i*4];
+		const float* b = &v[(i+1)*4];
+		const float* c = &v[(i+2)*4];
+		g_batchVerts.push_back(a[0]); g_batchVerts.push_back(a[1]); g_batchVerts.push_back(a[2]); g_batchVerts.push_back(a[3]);
+		g_batchVerts.push_back(b[0]); g_batchVerts.push_back(b[1]); g_batchVerts.push_back(b[2]); g_batchVerts.push_back(b[3]);
+		g_batchVerts.push_back(c[0]); g_batchVerts.push_back(c[1]); g_batchVerts.push_back(c[2]); g_batchVerts.push_back(c[3]);
+	}
 	return;
 	}
 	glColor4f(r, g, b, a);
@@ -6157,6 +6183,9 @@ static bool glSpriteBegin(
 	SDL_Rect* tile, SDL_Rect* rect, SDL_Rect& r, SDL_Rect& tl,
 	uint32_t texid, SDL_Rect* dstr)
 {
+	// Flush the previous sprite's accumulated quads while its program / texture
+	// / uniforms / scissor are still bound (P3).
+	gl33BatchFlush();
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
 	if (texid == 0
@@ -6256,6 +6285,7 @@ void renderMugenGl(
 				angle, rcx, rcy, 1, 1, 1, 1.0f - (GLfloat)dst / 255.0f);
 		}
 		if(src > 0){
+			gl33BatchFlush(); // dst and src passes have different blend/alpha
 			glUniform1fARB(alphaUniform, (GLfloat)src / 255.0f);
 			glBlendFuncCached(GL_SRC_ALPHA, GL_ONE);
 			drawTile(
@@ -6406,6 +6436,7 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	if(useModernRender()){
 	// Same vertex order as the legacy GL_QUADS path (y pre-negated; the
 	// modelview translate(0,g_h) is baked into uProj instead).
+	gl33BatchFlush(); // flat fill uses a different program
 	float v[16] = {
 		(float)rect.x,           -(float)(rect.y+rect.h), 0.0f, 0.0f,
 		(float)(rect.x+rect.w),  -(float)(rect.y+rect.h), 0.0f, 0.0f,
