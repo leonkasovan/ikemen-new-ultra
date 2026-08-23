@@ -107,15 +107,16 @@ struct GlCache
 {
 	GLuint         prog = 0;     // bound program (0 = none)
 	bool           progCore = false; // true if bound via glUseProgram (core), else ARB
-	GLuint         tex2d = 0;    // 2D texture bound on unit 0
-	GLuint         tex1d = 0;    // 1D palette texture bound on unit 1
+	GLuint         tex2d_unit0 = 0; // 2D texture bound on unit 0 (sprite)
+	GLuint         tex2d_unit1 = 0; // 2D texture bound on unit 1 (palette atlas)
+	GLuint         tex1d = 0;    // 1D palette texture bound on unit 1 (legacy)
 	GLint          activeUnit = 0;
 	GLenum         blendSrc = 0, blendDst = 0;
 	const uint8_t* palPtr = nullptr; // last palette uploaded this frame (dedup)
 	void reset()
 	{
 		prog = 0; progCore = false;
-		tex2d = 0; tex1d = 0; activeUnit = 0;
+		tex2d_unit0 = 0; tex2d_unit1 = 0; tex1d = 0; activeUnit = 0;
 		blendSrc = blendDst = 0;
 		palPtr = nullptr;
 	}
@@ -1183,9 +1184,11 @@ static void glActiveTextureCached(GLenum unit)
 
 static void glBindTex2dCached(GLuint tex)
 {
-	if (g_glCache.tex2d == tex) return;
+	GLuint& cached = (g_glCache.activeUnit == GL_TEXTURE1)
+		? g_glCache.tex2d_unit1 : g_glCache.tex2d_unit0;
+	if (cached == tex) return;
 	glBindTexture(GL_TEXTURE_2D, tex);
-	g_glCache.tex2d = tex;
+	cached = tex;
 	g_perfCounters.textureBinds++;
 	g_perfCounters.glBindTex2dCalls++;
 }
@@ -6356,15 +6359,28 @@ void drawTile(
 // Shared preamble for the three GL sprite entry points (RenderMugenGl/Fc/FcS).
 // Normalizes the SSZ-side args, sets scissor, and skips off-screen/garbage.
 // Returns false if the sprite should be skipped.
+// When scissor+texid+alpha match the previous sprite, the batch is NOT flushed
+// and vertices accumulate — reducing per-sprite draw calls (scissor batching).
 static bool glSpriteBegin(
 	float& x, float& y, float& rcy, float& rcx, float& vscl, float& yscl,
 	float& angle, float xtopscl, float xbotscl, float rasterxadd,
 	SDL_Rect* tile, SDL_Rect* rect, SDL_Rect& r, SDL_Rect& tl,
-	uint32_t texid, SDL_Rect* dstr)
+	uint32_t texid, SDL_Rect* dstr, int alpha)
 {
-	// Flush the previous sprite's accumulated quads while its program / texture
-	// / uniforms / scissor are still bound (P3).
-	gl33BatchFlush();
+	// Scissor batching: only flush when render state changes.
+	static SDL_Rect prevScissor = {0,0,0,0};
+	static uint32_t prevTexid = 0;
+	static int prevAlpha = 0;
+	bool sameState = (texid == prevTexid) && (alpha == prevAlpha)
+		&& (dstr->x == prevScissor.x) && (dstr->y == prevScissor.y)
+		&& (dstr->w == prevScissor.w) && (dstr->h == prevScissor.h);
+	if (!sameState)
+	{
+		gl33BatchFlush();
+		prevScissor = *dstr;
+		prevTexid = texid;
+		prevAlpha = alpha;
+	}
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
 	if (texid == 0
@@ -6493,7 +6509,7 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 		return false;
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
-			tile, rect, r, tl, texid, dstr))
+			tile, rect, r, tl, texid, dstr, alpha))
 		return false;
 	bool modern = useModernRender();
 	GLuint prog = modern ? g_gl33_paletteProg : (GLuint)g_mugenshader;
@@ -6563,7 +6579,7 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 		return false;
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
-			tile, rect, r, tl, texid, dstr))
+			tile, rect, r, tl, texid, dstr, -999))
 		return false;
 	bool modern = useModernRender();
 	GLuint prog = modern ? g_gl33_fullcolorProg : (GLuint)g_mugenshaderFc;
@@ -6592,7 +6608,7 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 		return false;
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
-			tile, rect, r, tl, texid, dstr))
+			tile, rect, r, tl, texid, dstr, -999))
 		return false;
 	bool modern = useModernRender();
 	GLuint prog = modern ? g_gl33_shadowProg : (GLuint)g_mugenshaderFcS;
