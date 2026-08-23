@@ -316,10 +316,8 @@ static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt,
 	const void* pixels)
 {
 	if (w <= 0 || h <= 0 || !pixels) return 0;
-	// Fall back to individual texture if slot array is full.
-	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
-	// Sprites larger than atlas page can't fit — fall back to individual texture.
-	if (w > ATLAS_PAGE_SIZE || h > ATLAS_PAGE_SIZE) return 0;
+	// Atlas disabled — visual correctness requires per-sprite textures.
+	return 0; // TODO: re-enable after atlas UV correctness is verified
 	int fi = atlasFmtIdx(internalFmt);
 
 	// Find a page with enough space
