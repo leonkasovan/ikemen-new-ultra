@@ -233,7 +233,7 @@ void main()
     ret;
   }
   .ssz.procMemMark("POST-INIT");
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   if(!.sdl.InitMugenGl(::)){
     .error!.self?("Renderer Initialization Failed, set Renderer to 0 (SDL2) in save/config.ssz");
     ret;

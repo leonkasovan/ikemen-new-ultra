@@ -1600,7 +1600,7 @@ void refresh(&.lua.State L=, int re=)
 {
   re = 0;
   if(!.se.fskip){
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     .sdl.GlSwapBuffers(::);
   /*true:
     .sdl.flip();

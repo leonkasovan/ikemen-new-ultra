@@ -180,7 +180,7 @@ bool stateCompile()
 
 void load()
 {
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   &.sdl.UseGlContext ugc;
 /*?*/
   ^bool charDone.new(#.chr.chars);

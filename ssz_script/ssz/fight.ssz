@@ -87,7 +87,7 @@ public void layspr(
   cond  #fx > 0 && fx~enable:
     pal = fx~getFxPal(pal, false);
   }
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   spr~glDraw(
     pal, 0, -x2*.com.WidthScale, -y2*.com.HeightScale, tile=,
     xs, xs, l.scale.y*(float)l.vfacing*.com.HeightScale,

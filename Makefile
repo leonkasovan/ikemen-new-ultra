@@ -95,7 +95,7 @@ CFLAGS   += $(GLOBAL_INC) $(GLOBAL_DEFS)
 # ---- Linker ----
 LDFLAGS = -static-libgcc -static-libstdc++ $(ARCH_F)
 LDLIBS  = -lwinmm -lole32 -lshell32 -lws2_32 -lopengl32 -lglu32 -lgdi32 \
-          -lshlwapi -lsetupapi -limm32 -lversion -ldinput8 -ldxguid -luuid -loleaut32
+          -lshlwapi -lsetupapi -limm32 -lversion -ldinput8 -ldxguid -ldxgi -luuid -loleaut32
 
 # ============================================================
 #  MAIN APPLICATION SOURCES

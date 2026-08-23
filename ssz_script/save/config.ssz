@@ -1,5 +1,5 @@
 //Video Settings
-const int Renderer = 0; //0: SDL2, 1: OpenGL, 2: OpenGL ES, 3: Vulkan | Windows/x86-x64 Linux: 0,1,3 | arm64 Linux: 0,2,3
+const int Renderer = 4;
 const bool AspectRatio = false;
 const bool FullScreen = false;
 const bool FullScreenExclusive = false; //False: Borderless FullScreen, True: Exclusive FullScreen

@@ -326,7 +326,7 @@ public &Font
     }
 	//int foo = 1*salpha>>8;
 	//.al.alert!self?(''foo);
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     plugin bool RenderMugenGl(:
       &.sdl.GlTexture, index, int, &.sdl.Rect=, float, float, &.sdl.Rect=,
       float, float, float, float, float, float, int, &.sdl.Rect=, float,
@@ -370,7 +370,7 @@ public &Font
     }
     ^uint pal = `mpl~img[bank].colorPallet;
     if(.sff.allPalFX~enable) pal = .sff.allPalFX~getFxPal(pal, false);
-  /?/*.cfg.Renderer == 0:
+  /?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
     if(#`fontAtlas > 0 && #txt > 0){
       int alpha = 255;
       branch{

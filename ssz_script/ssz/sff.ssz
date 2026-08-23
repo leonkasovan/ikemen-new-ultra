@@ -122,7 +122,7 @@ public &SffHeader
 public &Sprite
 {
   public ^uint colorPallet;
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   public ^&.sdl.GlTexture pxl;
 /*true:
   public ^ubyte pxl;
@@ -144,7 +144,7 @@ public &Sprite
   public void copy(`self sp=)
   {
     `shareCopy(sp=);
-  /?/*.cfg.Renderer == 0:
+  /?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
     `pluginbuf = sp.pluginbuf;
   /*?*/
     `rct = sp.rct;
@@ -292,7 +292,7 @@ public &Sprite
     case 10:
       px = .sdl.decodePNG8(`rct.w=, `rct.h=, f=);
     case 11, 12:
-    /?/*.cfg.Renderer != 0:
+    /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
       `rle = -12;
       `pxl.new(1);
       if(!`pxl~loadPngTexture(`rct.w=, `rct.h=, f=)) default;
@@ -304,14 +304,14 @@ public &Sprite
       ret "unknown format";
     }
     `setPxl(px);
-    /?/*.cfg.Renderer == 0:
+    /?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
     if(useCache) SffV2CachePut(:cacheKey, `imageGroup, `imageNumber, px:);
     /*?*/
     ret "";
   }
   public void setPxl(^ubyte px)
   {
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     `pxl.new(1);
     `pxl~load8bitTexture(px, `rct.w, `rct.h);
   /*true:
@@ -609,7 +609,7 @@ public &Sprite
       mr = mg = mb = 1.0;
     }
   }
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   public void glDraw(
     ^uint pal, int mask, float x, float y, &.sdl.Rect tile=,
     float xts, float xbs, float ys, float rxadd, float agl, int trans,
@@ -642,7 +642,7 @@ public &Sprite
     float y2 = y - yscale*(float)`rct.y + (float)(.com.GameHeight-240);
     if(xscale < 0.0) x2 *= -1.0;
     if(yscale < 0.0) y2 *= -1.0;
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     if(#`pxl > 0){
       ^&.com.PalFX nullfx;
       `glDraw(
@@ -1284,7 +1284,7 @@ public &Anim<frame_t>
     }
     float xs = h*cscalex*xtscale, ys = v*cscaley*yscale;
     float bs = xbscale;
-  /?/*.cfg.Renderer == 0:
+  /?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
     .m.limRange!float?(xs=, -16000.0/.com.WidthScale, 16000.0/.com.WidthScale);
     .m.limRange!float?(
       ys=, -16000.0/.com.HeightScale, 16000.0/.com.HeightScale);
@@ -1311,7 +1311,7 @@ public &Anim<frame_t>
         ys * ((float)`tile.y + (`tile.y > 0 ? 0.0 : (float)`spr~rct.h));
       y2 -= (float)(int)(y2 / tmp) * tmp;
     }
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     `spr~glDraw(
       `palFoo(fx), `mask, -x2*.com.WidthScale, -y2*.com.HeightScale,
       `tile=, xs*.com.WidthScale, cscalex*bs*h*.com.WidthScale,
@@ -1337,7 +1337,7 @@ public &Anim<frame_t>
     float xs = xscale, ys = yscale, agl = 0.0;
     `exParam(`frames[`drawidx]=, h=, v=, agl=);
     float rx = x+xs*h*(float)`frames[`drawidx].x+(float).com.GameWidth/2.0;
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     agl += angle;
     `spr~glDraw(
       `palFoo(fx), `mask, #(xs*h)*(float)`spr~rct.x*.com.WidthScale,
@@ -1379,7 +1379,7 @@ public &Anim<frame_t>
     `exParam(`frames[`drawidx]=, xs=, ys=, agl=);
     float x2 = x + xs*(float)`frames[`drawidx].x;
     float y2 = y + ys*vscale*(float)`frames[`drawidx].y;
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     if(color != 0x0 && `spr~rle != -12) loop{index i = 0; do:
       .com.tmppl[i] = color;
     while ++i < 256:}

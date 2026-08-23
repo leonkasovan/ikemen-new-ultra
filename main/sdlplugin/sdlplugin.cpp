@@ -1,6 +1,7 @@
 
 #include <windows.h>
 #include <emmintrin.h>   // SSE2: _mm_adds_epu8, _mm_loadu/storeu_si128
+#include <dxgi.h>        // DXGI_ADAPTER_DESC for DirectX renderer info
 #include <locale.h>
 #include <process.h>
 #include <stdint.h>
@@ -38,6 +39,7 @@
 RendererType  g_rendererType       = RENDERER_SDL2;
 GLVersion     g_glVersion          = GL_VER_NONE;
 GLESVersion   g_glesVersion        = GLES_VER_NONE;
+int           g_directxVersion     = 0;  // 9 or 11
 RendererInfo  g_rendererInfo;
 PerfCounters  g_perfCounters;
 bool          g_perfMonitorEnabled = false;
@@ -947,6 +949,35 @@ static void fillRendererInfo()
 		sprintf(g_rendererInfo.deviceName, "N/A");
 		sprintf(g_rendererInfo.driverInfo, "N/A");
 	}
+	else if (g_rendererType == RENDERER_DIRECTX)
+	{
+		const char* d3dName = g_directxVersion == 11 ? "Direct3D 11" : "Direct3D 9";
+		sprintf(g_rendererInfo.backendName, "%s", d3dName);
+		g_rendererInfo.directxVersion = g_directxVersion;
+		// Query GPU adapter info from DXGI if available
+		DXGI_ADAPTER_DESC adapterDesc;
+		ZeroMemory(&adapterDesc, sizeof(adapterDesc));
+		IDXGIFactory* pFactory = nullptr;
+		if (SUCCEEDED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory)))
+		{
+			IDXGIAdapter* pAdapter = nullptr;
+			if (SUCCEEDED(pFactory->EnumAdapters(0, &pAdapter)))
+			{
+				pAdapter->GetDesc(&adapterDesc);
+				// Convert wide description to narrow string
+				WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, -1,
+					g_rendererInfo.deviceName, sizeof(g_rendererInfo.deviceName), nullptr, nullptr);
+				pAdapter->Release();
+			}
+			pFactory->Release();
+		}
+		if (g_rendererInfo.deviceName[0] == '\0')
+			strncpy(g_rendererInfo.deviceName, "Unknown GPU", sizeof(g_rendererInfo.deviceName)-1);
+		sprintf(g_rendererInfo.driverInfo, "%s (SDL2 %d.%d.%d)", d3dName,
+			SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
+		g_rendererInfo.maxTextureSize = 8192; // D3D9/D3D11 typical max
+		INIT_LOG("DirectX GPU: %s", g_rendererInfo.deviceName);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,6 +1057,126 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 		}
 	}
 
+	// --- DirectX (D3D9/D3D11 via SDL2) ---
+	if (g_rendererType == RENDERER_DIRECTX)
+	{
+		INIT_LOG("Initializing DirectX backend...");
+		if (SDL_Init(SDL_INIT_VIDEO) < 0)
+		{
+			INIT_LOG("SDL_Init(SDL_INIT_VIDEO) failed: %s", SDL_GetError());
+			return false;
+		}
+		INIT_LOG("SDL initialized");
+
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+		TTF_Init();
+		INIT_LOG("SDL_ttf initialized");
+
+		// Try Direct3D 11 first, fall back to Direct3D 9
+		// SDL2 render driver names: "direct3d" = D3D9, "direct3d11" = D3D11
+		bool d3d11 = true;
+		SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11");
+		INIT_LOG("Trying Direct3D 11...");
+
+		g_scrflag = 0;
+		g_window = SDL_CreateWindow(
+			WstrToStr(cap).c_str(),
+			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			w, h, g_scrflag);
+		if (!g_window)
+		{
+			INIT_LOG("D3D11 window creation failed: %s", SDL_GetError());
+		}
+		else
+		{
+			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+			if (!g_renderer)
+			{
+				INIT_LOG("D3D11 renderer creation failed: %s", SDL_GetError());
+				SDL_DestroyWindow(g_window);
+				g_window = nullptr;
+				d3d11 = false;
+			}
+		}
+
+		if (!d3d11 || !g_renderer)
+		{
+			// Fall back to Direct3D 9
+			if (g_window) { SDL_DestroyWindow(g_window); g_window = nullptr; }
+			SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d");
+			INIT_LOG("Falling back to Direct3D 9...");
+
+			g_window = SDL_CreateWindow(
+				WstrToStr(cap).c_str(),
+				SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+				w, h, g_scrflag);
+			if (!g_window)
+			{
+				INIT_LOG("D3D9 window creation failed: %s", SDL_GetError());
+				INIT_LOG("DirectX not available, falling back to OpenGL");
+				g_rendererType = RENDERER_OPENGL;
+				goto init_opengl;
+			}
+			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+			if (!g_renderer)
+			{
+				INIT_LOG("D3D9 renderer creation failed: %s", SDL_GetError());
+				INIT_LOG("DirectX not available, falling back to OpenGL");
+				SDL_DestroyWindow(g_window);
+				g_window = nullptr;
+				g_rendererType = RENDERER_OPENGL;
+				goto init_opengl;
+			}
+			d3d11 = false;
+		}
+
+		g_directxVersion = d3d11 ? 11 : 9;
+		INIT_LOG("DirectX %d renderer created", g_directxVersion);
+
+		// Log D3D device availability
+		if (d3d11)
+		{
+			// ID3D11Device is forward-declared in SDL_system.h;
+			// we can check the pointer is non-null but cannot call methods
+			// without including <d3d11.h> (which requires Windows SDK paths).
+			ID3D11Device* d3d11Dev = SDL_RenderGetD3D11Device(g_renderer);
+			if (d3d11Dev)
+			{
+				INIT_LOG("Direct3D 11 device obtained successfully");
+				// Note: Release() requires full type; SDL2 owns the device lifetime
+			}
+			else
+			{
+				INIT_LOG("Direct3D 11 device not available: %s", SDL_GetError());
+				INIT_LOG("Note: SDL2 may have used a different backend internally");
+			}
+		}
+		else
+		{
+			INIT_LOG("Direct3D 9 backend active");
+		}
+
+		// Create streaming texture for software-rendered sprites
+		g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+			SDL_TEXTUREACCESS_STREAMING, w, h);
+		SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
+		lockTarget();
+		INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
+
+		winProcInit();
+		INIT_LOG("Window procedure hook installed");
+		g_mainTreadId = GetCurrentThreadId();
+		sndjoyinit();
+		INIT_LOG("Audio and joystick initialized");
+
+		g_w = w;
+		g_h = h;
+		fillRendererInfo();
+		INIT_LOG("Renderer ready: %s", g_rendererInfo.backendName);
+		return true;
+	}
+
+init_opengl:
 	// --- OpenGL / OpenGL ES ---
 	if (g_rendererType == RENDERER_OPENGL || g_rendererType == RENDERER_OPENGLES)
 	{
@@ -4341,7 +4492,7 @@ template<copycolorproc ccp> void mRender(
 	uint32_t roto, uint32_t colorkey, int rle, Reference *pluginbuf)
 {
 	roto &= 0x3ff;
-	LOG_DEBUG("RENDER", "mRender: dr=(%d,%d,%d,%d) src=(%d,%d) rle=%d img.len=%d", dr.x, dr.y, dr.w, dr.h, psrcr.w, psrcr.h, rle, img.len());
+	// LOG_DEBUG("RENDER", "mRender: dr=(%d,%d,%d,%d) src=(%d,%d) rle=%d img.len=%d", dr.x, dr.y, dr.w, dr.h, psrcr.w, psrcr.h, rle, img.len());
 	if(!g_pix) { LOG_DEBUG("RENDER", "mRender: g_pix is NULL!"); return; }
 	if(rle > 0){
 		PcxRleImg pri;
@@ -4367,18 +4518,18 @@ template<copycolorproc ccp> void mRender(
 			{
 				return;
 			}
-			LOG_DEBUG("RENDER", "mRender: calling mzScreenBilt");
+			// LOG_DEBUG("RENDER", "mRender: calling mzScreenBilt");
 			mzScreenBilt(
 				mzlLoop<PalletColorImg, ccp>, dr, rcx, pri, ppal, psrcr,
 				cx, ty, tile, xtopscl, xbotscl, yscl, rasterxadd, colorkey);
-			LOG_DEBUG("RENDER", "mRender: mzScreenBilt returned");
+			// LOG_DEBUG("RENDER", "mRender: mzScreenBilt returned");
 		}else{
 			mzrScreenBilt(
 				mzrlLoop<PalletColorImg, ccp>, rcx, rcy, pri, ppal,
 				psrcr, cx, ty, xtopscl, yscl, roto, colorkey);
 		}
 	}
-	LOG_DEBUG("RENDER", "mRender: done");
+	// LOG_DEBUG("RENDER", "mRender: done");
 }
 
 int foobar(int n)
@@ -4422,8 +4573,8 @@ bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 	{
 		g_lastRenderPathFlags |= SPRITE_PATH_SIMPLE_RECT;
 	}
-	LOG_DEBUG("RENDER", "RenderMugenZoom: dr=(%d,%d,%d,%d) src=(%d,%d) rle=%d alpha=%d img.len=%d ppal=%p",
-	          pdstr->x, pdstr->y, pdstr->w, pdstr->h, psrcr->w, psrcr->h, rle, alpha, img.len(), (void*)ppal);
+	// LOG_DEBUG("RENDER", "RenderMugenZoom: dr=(%d,%d,%d,%d) src=(%d,%d) rle=%d alpha=%d img.len=%d ppal=%p",
+	        //   pdstr->x, pdstr->y, pdstr->w, pdstr->h, psrcr->w, psrcr->h, rle, alpha, img.len(), (void*)ppal);
 	if(
 		img.len() == 0
 		|| tl.x <= -(int)psrcr->w || tl.y <= -(int)psrcr->h
@@ -4432,7 +4583,6 @@ bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 		|| abs(cx) > 1.0e5f || abs(ty) > 1.0e5f
 		|| abs(xtopscl) > 16383.0f || abs(xbotscl) > 16383.0f
 		|| abs(yscl) > 16383.0f) {
-		LOG_DEBUG("RENDER", "RenderMugenZoom: EARLY RETURN (bounds check failed)");
 		return false;
 	}
 	uint32_t pal[256];
@@ -4503,10 +4653,10 @@ bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 				xtopscl, xbotscl, yscl, rasterxadd, roto, ck, rle, pluginbuf);
 		}
 	}
-	LOG_DEBUG("RENDER", "RenderMugenZoom: mRender returned, img.pointer=%p img.len=%d",
-	          (void*)img.pointer, img.len());
+	// LOG_DEBUG("RENDER", "RenderMugenZoom: mRender returned, img.pointer=%p img.len=%d",
+	//           (void*)img.pointer, img.len());
 	QueryPerformanceCounter(&t1);
-	LOG_DEBUG("RENDER", "RenderMugenZoom: QueryPerformanceCounter OK");
+	// LOG_DEBUG("RENDER", "RenderMugenZoom: QueryPerformanceCounter OK");
 	{
 		double elapsed = qpcElapsedUs(t0, t1, g_perfCounters.qpcFreq);
 		g_perfCounters.spriteTimeUs += elapsed;
@@ -4524,7 +4674,7 @@ bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 			g_perfCounters.worstSpritePathFlags = g_lastRenderPathFlags;
 		}
 	}
-	LOG_DEBUG("RENDER", "RenderMugenZoom: perf counter update OK, returning true");
+	// LOG_DEBUG("RENDER", "RenderMugenZoom: perf counter update OK, returning true");
 	return true;
 }
 
@@ -5455,6 +5605,28 @@ void SSZ_STDCALL GlSwapBuffers()
 			perfPrintFrame(g_perfCounters, g_rendererInfo);
 	}
 
+	// Non-GL renderers (DirectX, Vulkan): present via SDL2 renderer API
+	if (g_rendererType == RENDERER_DIRECTX || g_rendererType == RENDERER_VULKAN)
+	{
+		if (g_renderer)
+		{
+			// g_pix already points to the locked streaming texture buffer
+			// (from lockTarget()). No SDL_UpdateTexture needed — just unlock
+			// to flush, then blit + present, same as the SDL2 software path.
+			if (g_target)
+			{
+				unlockTarget();
+				SDL_RenderCopy(g_renderer, g_target, NULL, NULL);
+				lockTarget();
+			}
+			SDL_RenderPresent(g_renderer);
+		}
+		// Begin next frame perf tracking
+		g_perfCounters.frameStartTick = SDL_GetTicks();
+		perfFrameBegin(g_perfCounters);
+		return;
+	}
+
 	SDL_GL_SwapWindow(g_window);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// [OPT] Set up ortho projection once per frame instead of per sprite.
@@ -5472,6 +5644,14 @@ void SSZ_STDCALL GlSwapBuffers()
 
 bool SSZ_STDCALL InitMugenGl()
 {
+	// Non-GL renderers (DirectX, Vulkan) don't need GL shader setup.
+	// The SSZ /?/ conditional compiles this for Renderer != 0, so guard here.
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	{
+		INIT_LOG("InitMugenGl: non-GL renderer (%s), skipping GL shader setup",
+			rendererTypeName(g_rendererType));
+		return true;
+	}
 	const GLchar* vertShader =
 		"void main(void){"
 			"gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;"
@@ -5876,6 +6056,9 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, int mask, uint8_t* ppal, uint32_t texid)
 {
+	// Guard: non-GL renderer should never reach here (SSZ conditionals prevent it)
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
 	g_perfCounters.textureBinds++;
@@ -5952,6 +6135,8 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, uint32_t texid)
 {
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
 	g_perfCounters.textureBinds++;
@@ -6003,6 +6188,8 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, uint32_t texid)
 {
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
 	g_perfCounters.textureBinds++;
@@ -6062,6 +6249,8 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 
 void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 {
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return;
 	g_perfCounters.fillCalls++;
 	g_perfCounters.drawCalls++;
 	float r = (float)(color>>16&0xff)/255.0f;
@@ -6109,6 +6298,8 @@ void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 
 bool SSZ_STDCALL BindGlContext()
 {
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return true; // no GL context to bind
 	return
 		wglMakeCurrent(
 			g_hdc,
@@ -6117,5 +6308,7 @@ bool SSZ_STDCALL BindGlContext()
 
 bool SSZ_STDCALL UnbindGlContext()
 {
+	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+		return true;
 	return wglMakeCurrent(nullptr, nullptr) != 0;
 }

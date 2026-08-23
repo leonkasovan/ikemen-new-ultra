@@ -671,7 +671,7 @@ void game()
 	//}
 	pmSt = pmEsc = false;
     drawDebug();
-  /?/*.cfg.Renderer != 0:
+  /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     .sdl.GlSwapBuffers(::);
   /*true:
     .sdl.flip();

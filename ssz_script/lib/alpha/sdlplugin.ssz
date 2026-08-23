@@ -891,6 +891,7 @@ public bool init(^/char t, int w, int h, int renderer, bool mugen)
   if(renderer == 1) rendererStr = "OpenGL";
   if(renderer == 2) rendererStr = "OpenGL ES";
   if(renderer == 3) rendererStr = "Vulkan";
+  if(renderer == 4) rendererStr = "DirectX";
   ret RendererInit(:t, w, h, rendererStr:);
 }
 

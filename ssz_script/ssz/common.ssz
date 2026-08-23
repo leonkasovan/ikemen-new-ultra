@@ -812,13 +812,13 @@ const ^/char FileReadError = "File could not be loaded";
 
 
 public ^uint tmppl.new(256);
-/?/*.cfg.Renderer == 0:
+/?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
 ^ubyte px.new(1);
 px<> = 0x0;
 /*?*/
 public void rectFill(.scrrect.self rect=, uint color, int alpha)
 {
-/?/*.cfg.Renderer != 0:
+/?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
   .sdl.MugenFillGl(:rect, color, alpha:);
 /*true:
   &.sdl.Rect onedot;

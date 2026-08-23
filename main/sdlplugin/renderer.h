@@ -7,6 +7,7 @@
 //   OpenGL     – GPU accelerated: auto-detects 4.6 > 3.3 > 2.1
 //   OpenGL ES  – GPU accelerated: auto-detects 3.2 > 3.1 > 3.0  (ARM Linux)
 //   Vulkan     – GPU accelerated (stub – future implementation)
+//   DirectX    – GPU accelerated via SDL2 D3D9/D3D11 backends (Windows)
 // ---------------------------------------------------------------------------
 
 #include <stdint.h>
@@ -25,7 +26,8 @@ enum RendererType
 	RENDERER_SDL2     = 1,
 	RENDERER_OPENGL   = 2,
 	RENDERER_OPENGLES = 3,
-	RENDERER_VULKAN   = 4
+	RENDERER_VULKAN   = 4,
+	RENDERER_DIRECTX  = 5
 };
 
 // ---------------------------------------------------------------------------
@@ -150,6 +152,7 @@ struct RendererInfo
 	RendererType type;
 	GLVersion    glVersion;
 	GLESVersion  glesVersion;
+	int          directxVersion;    // 9 or 11
 	char         backendName[64];   // e.g. "OpenGL 4.6"
 	char         deviceName[128];   // GPU name
 	char         driverInfo[128];   // driver version
@@ -196,6 +199,9 @@ inline RendererType parseRendererType(const char* name)
 		return RENDERER_OPENGLES;
 	if (_stricmp(name, "Vulkan") == 0 || _stricmp(name, "VK") == 0)
 		return RENDERER_VULKAN;
+	if (_stricmp(name, "DirectX") == 0 || _stricmp(name, "DirectX9") == 0 || _stricmp(name, "DirectX11") == 0
+		|| _stricmp(name, "D3D") == 0 || _stricmp(name, "D3D9") == 0 || _stricmp(name, "D3D11") == 0)
+		return RENDERER_DIRECTX;
 	return RENDERER_SDL2; // default fallback
 }
 
@@ -206,6 +212,7 @@ inline const char* rendererTypeName(RendererType t)
 	case RENDERER_OPENGL:   return "OpenGL";
 	case RENDERER_OPENGLES: return "OpenGL ES";
 	case RENDERER_VULKAN:   return "Vulkan";
+	case RENDERER_DIRECTX:  return "DirectX";
 	default:                return "Unknown";
 	}
 }
