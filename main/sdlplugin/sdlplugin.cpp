@@ -229,205 +229,6 @@ static void texPoolDrain()
 	g_texDimCount = 0;
 }
 
-// ---------------------------------------------------------------------------
-// Sprite atlas (P5b) — packs individual sprite textures into large atlas pages
-// to reduce GL driver metadata overhead from per-sprite texture objects.
-// Eliminates the +189 MB GL memory anomaly by combining hundreds of small
-// textures into a handful of large GL textures.
-// ---------------------------------------------------------------------------
-static const int ATLAS_PAGE_SIZE  = 512; // 512×512 atlas pages (reduce GPU cache thrash)
-static const int ATLAS_MAX_PAGES = 64;    // max 64 pages per format
-static const int ATLAS_MAX_SLOTS = 32768;  // max tracked sprite slots
-// Virtual texid high bit — distinguishes atlas slots from real GL texids
-static const uint32_t ATLAS_VIRT_BIT = 0x80000000u;
-
-struct AtlasPage {
-	GLuint texId;
-	int32_t w, h;
-	GLenum internalFmt;
-	int32_t curX, curY;     // cursor position (next free pixel)
-	int32_t rowHeight;       // height of current row
-};
-
-struct AtlasSlot {
-	uint16_t pageIdx;        // index into atlas page array
-	uint16_t x, y;           // position within the atlas page
-	uint16_t w, h;           // sprite dimensions
-	uint8_t  fmtIdx;         // 0=LUMINANCE, 1=RGBA
-	bool     inUse;          // false = freed, available for recycling
-};
-
-static AtlasPage g_atlasPages[2][ATLAS_MAX_PAGES]; // [0]=LUMINANCE, [1]=RGBA
-static int g_atlasPageCount[2] = {0, 0};
-static AtlasSlot g_atlasSlots[ATLAS_MAX_SLOTS];
-static int g_atlasSlotCount = 0;
-static int g_atlasPageTexCreated = 0;
-
-// Atlas UV globals — set per-sprite before drawQuads() for modern path.
-static float g_atlasUOff = 0.0f, g_atlasVOff = 0.0f;
-static float g_atlasUScale = 1.0f, g_atlasVScale = 1.0f;
-
-static inline bool IS_ATLAS_TEXID(uint32_t id)
-{
-	return (id & ATLAS_VIRT_BIT) != 0;
-}
-
-static inline int ATLAS_SLOT_IDX(uint32_t id)
-{
-	return (int)(id & ~ATLAS_VIRT_BIT);
-}
-
-// Format index: 0 = GL_LUMINANCE, 1 = GL_RGBA
-static inline int atlasFmtIdx(GLenum fmt)
-{
-	return (fmt == GL_RGBA) ? 1 : 0;
-}
-
-// Create a new atlas page with the given internal format.
-static int atlasCreatePage(GLenum internalFmt)
-{
-	int fi = atlasFmtIdx(internalFmt);
-	if (g_atlasPageCount[fi] >= ATLAS_MAX_PAGES) return -1;
-	int idx = g_atlasPageCount[fi]++;
-	AtlasPage& p = g_atlasPages[fi][idx];
-	glGenTextures(1, &p.texId);
-	glBindTexture(GL_TEXTURE_2D, p.texId);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexImage2D(GL_TEXTURE_2D, 0, internalFmt,
-		ATLAS_PAGE_SIZE, ATLAS_PAGE_SIZE, 0,
-		internalFmt, GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	p.w = ATLAS_PAGE_SIZE;
-	p.h = ATLAS_PAGE_SIZE;
-	p.internalFmt = internalFmt;
-	p.curX = 0;
-	p.curY = 0;
-	p.rowHeight = 0;
-	g_atlasPageTexCreated++;
-	return idx;
-}
-
-// Allocate a sprite slot in the atlas. Returns virtual texid.
-// Uses row-based next-fit packing within each page.
-static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt,
-	const void* pixels)
-{
-	if (w <= 0 || h <= 0 || !pixels) return 0;
-	// Atlas disabled — visual correctness requires per-sprite textures.
-	return 0; // TODO: re-enable after atlas UV correctness is verified
-	int fi = atlasFmtIdx(internalFmt);
-
-	// Find a page with enough space
-	for (int i = 0; i < g_atlasPageCount[fi]; i++)
-	{
-		AtlasPage& p = g_atlasPages[fi][i];
-		if (p.curX + w <= p.w)
-		{
-			// Fits in current row
-			if (p.curY + h <= p.h)
-			{
-				// Upload pixels
-				glBindTexture(GL_TEXTURE_2D, p.texId);
-				glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-				glTexSubImage2D(GL_TEXTURE_2D, 0,
-					p.curX, p.curY, w, h,
-					internalFmt, GL_UNSIGNED_BYTE, pixels);
-
-				// Record slot
-				int si = g_atlasSlotCount++;
-				g_atlasSlots[si] = {
-					(uint16_t)i,
-					(uint16_t)p.curX, (uint16_t)p.curY,
-					(uint16_t)w, (uint16_t)h,
-					(uint8_t)fi,
-					true
-				};
-
-				p.curX += w;
-				if (h > p.rowHeight) p.rowHeight = h;
-				return (uint32_t)si | ATLAS_VIRT_BIT;
-			}
-		}
-		else if (p.curY + p.rowHeight + h <= p.h)
-		{
-			// Advance to next row
-			p.curX = 0;
-			p.curY += p.rowHeight;
-			p.rowHeight = 0;
-			// Retry
-			i--; // re-check this page
-			continue;
-		}
-	}
-
-	// No existing page has space — create a new one
-	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
-	int pi = atlasCreatePage(internalFmt);
-	if (pi < 0) return 0; // all pages exhausted
-	AtlasPage& p = g_atlasPages[fi][pi];
-	glBindTexture(GL_TEXTURE_2D, p.texId);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h,
-		internalFmt, GL_UNSIGNED_BYTE, pixels);
-
-	int si = g_atlasSlotCount++;
-	g_atlasSlots[si] = {
-		(uint16_t)pi,
-		0, 0,
-		(uint16_t)w, (uint16_t)h,
-		(uint8_t)fi,
-		true
-	};
-	p.curX = w;
-	p.rowHeight = h;
-	return (uint32_t)si | ATLAS_VIRT_BIT;
-}
-
-// Set atlas UV globals for a virtual texid. Called before drawQuads().
-static void atlasBindAndSetUVs(uint32_t texid)
-{
-	if (!IS_ATLAS_TEXID(texid))
-	{
-		g_atlasUOff = g_atlasVOff = 0.0f;
-		g_atlasUScale = g_atlasVScale = 1.0f;
-		return;
-	}
-	int si = ATLAS_SLOT_IDX(texid);
-	const AtlasSlot& s = g_atlasSlots[si];
-	const AtlasPage& p = g_atlasPages[s.fmtIdx][s.pageIdx];
-	glBindTexture(GL_TEXTURE_2D, p.texId);
-	g_atlasUOff   = (float)s.x / (float)p.w;
-	g_atlasVOff   = (float)s.y / (float)p.h;
-	g_atlasUScale = (float)s.w / (float)p.w;
-	g_atlasVScale = (float)s.h / (float)p.h;
-}
-
-// Free an atlas slot (marks it available for recycling).
-static void atlasFreeSlot(uint32_t texid)
-{
-	if (!IS_ATLAS_TEXID(texid)) return;
-	int si = ATLAS_SLOT_IDX(texid);
-	if (si >= 0 && si < g_atlasSlotCount)
-		g_atlasSlots[si].inUse = false;
-}
-
-// Drain all atlas pages (called on shutdown).
-static void atlasDrain()
-{
-	for (int fi = 0; fi < 2; fi++)
-	{
-		for (int i = 0; i < g_atlasPageCount[fi]; i++)
-		{
-			if (g_atlasPages[fi][i].texId)
-				glDeleteTextures(1, &g_atlasPages[fi][i].texId);
-		}
-		g_atlasPageCount[fi] = 0;
-	}
-	g_atlasSlotCount = 0;
-}
 
 int32_t ransuutane = 0;
 SDL_Window* g_window = nullptr;
@@ -1373,8 +1174,6 @@ static void cleanupGL33Shaders()
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
 	// P5: drain texture pool
 	texPoolDrain();
-	// Atlas: drain all atlas pages
-	atlasDrain();
 	g_useModernGL = false;
 }
 
@@ -6034,19 +5833,10 @@ bool SSZ_STDCALL RenderMugenShadow(Reference* pluginbuf, int32_t rle,
 	QueryPerformanceCounter(&t1);
 	g_perfCounters.shadowTimeUs += qpcElapsedUs(t0, t1, g_perfCounters.qpcFreq);
 	return true;
-}
-
-uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
+}	uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 {
 	if (w <= 0 || h <= 0 || !ppxl) return 0;
-	// Modern GL path: pack into atlas (dramatically reduces driver metadata).
-	if (useModernRender())
-	{
-		uint32_t id = atlasAlloc(w, h, GL_LUMINANCE, ppxl);
-		if (id) return id;
-		// Atlas full — fall through to individual texture path.
-	}
-	// Legacy GL / non-GL: use P5 pool + individual texture objects.
+	// P5: Try pool first — reuse a texture object of matching dimensions.
 	uint32_t texid = texPoolAcquire(w, h, GL_LUMINANCE);
 	if (texid)
 	{
@@ -6111,45 +5901,36 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
 		png_read_image(png_ptr, pp);
 		delete [] pp;
-		// Modern GL path: pack into atlas.
-		if (useModernRender())
+		// P5: Try pool first — reuse a texture object of matching dimensions.
+		texid = texPoolAcquire(width, height, GL_RGBA);
+		if (texid)
 		{
-			texid = atlasAlloc(width, height, GL_RGBA, buff);
-			if (texid) { delete [] buff; }
-			else { /* atlas full — fall through to individual texture */ }
+			glBindTexture(GL_TEXTURE_2D, texid);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexSubImage2D(
+				GL_TEXTURE_2D, 0, 0, 0,
+				width, height, GL_RGBA, GL_UNSIGNED_BYTE, buff);
+			delete [] buff;
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 		}
-		if (!texid)
+		else
 		{
-			// Legacy: P5 pool + individual texture.
-			texid = texPoolAcquire(width, height, GL_RGBA);
-			if (texid)
-			{
-				glBindTexture(GL_TEXTURE_2D, texid);
-				glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-				glTexSubImage2D(
-					GL_TEXTURE_2D, 0, 0, 0,
-					width, height, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-				delete [] buff;
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-			}
-			else
-			{
-				glGenTextures(1, &texid);
-				glBindTexture(GL_TEXTURE_2D, texid);
-				glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-				glTexImage2D(
-					GL_TEXTURE_2D, 0, GL_RGBA,
-					width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-				delete [] buff;
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-				texDimRegister(texid, width, height, GL_RGBA);
-			}
+			// Pool miss — create a new texture object.
+			glGenTextures(1, &texid);
+			glBindTexture(GL_TEXTURE_2D, texid);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexImage2D(
+				GL_TEXTURE_2D, 0, GL_RGBA,
+				width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
+			delete [] buff;
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+			texDimRegister(texid, width, height, GL_RGBA);
 		}
 	}
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
@@ -6159,13 +5940,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 {
 	if(texid == 0) return;
-	// Atlas virtual texid — just mark the slot free.
-	if (IS_ATLAS_TEXID(texid))
-	{
-		atlasFreeSlot(texid);
-		return;
-	}
-	// Real GL texid: return to pool for reuse.
+	// Return texture to pool for reuse.
 	int32_t w = 0, h = 0;
 	GLenum fmt = 0;
 	if (texDimLookup(texid, w, h, fmt))
@@ -6453,16 +6228,6 @@ void drawQuads(
 	}
 	v.push_back(x2); v.push_back(y2); v.push_back(1.0f); v.push_back(1.0f);
 	v.push_back(x3); v.push_back(y3); v.push_back(1.0f); v.push_back(0.0f);
-	// Atlas UV transform: remap [0,1] → [offset, offset+scale]
-	if (g_atlasUScale != 1.0f || g_atlasUOff != 0.0f ||
-		g_atlasVScale != 1.0f || g_atlasVOff != 0.0f)
-	{
-		for (size_t i = 2; i < v.size(); i += 4)
-		{
-			v[i]   = g_atlasUOff + v[i]   * g_atlasUScale;
-			v[i+1] = g_atlasVOff + v[i+1] * g_atlasVScale;
-		}
-	}
 	// Accumulate into the frame batch as GL_TRIANGLES so a sprite's tiled quads
 	// are one glBufferData + glDrawArrays instead of one per quad (P3).
 	g_batchVerts.reserve(g_batchVerts.size() + v.size());
@@ -6843,17 +6608,7 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 		glBindTex1dCached(g_paltex);
 	}
 	glActiveTextureCached(GL_TEXTURE0);
-	if (IS_ATLAS_TEXID(texid))
-	{
-		atlasBindAndSetUVs(texid);
-		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
-	}
-	else
-	{
-		glBindTex2dCached(texid);
-		g_atlasUOff = g_atlasVOff = 0.0f;
-		g_atlasUScale = g_atlasVScale = 1.0f;
-	}
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
@@ -6883,17 +6638,7 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	glUniform3fARB(modern ? g_gl33fc_uAdd : g_uniformAdd, addr, addg, addb);
 	glUniform3fARB(modern ? g_gl33fc_uMul : g_uniformMul, mulr, mulg, mulb);
 	glActiveTextureCached(GL_TEXTURE0);
-	if (IS_ATLAS_TEXID(texid))
-	{
-		atlasBindAndSetUVs(texid);
-		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
-	}
-	else
-	{
-		glBindTex2dCached(texid);
-		g_atlasUOff = g_atlasVOff = 0.0f;
-		g_atlasUScale = g_atlasVScale = 1.0f;
-	}
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
@@ -6922,17 +6667,7 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 		(float)(color >> 16 & 0xff) / 255, (float)(color >> 8 & 0xff) / 255,
 		(float)(color & 0xff) / 255);
 	glActiveTextureCached(GL_TEXTURE0);
-	if (IS_ATLAS_TEXID(texid))
-	{
-		atlasBindAndSetUVs(texid);
-		g_glCache.tex2d = 0; // invalidate cache after raw glBindTexture
-	}
-	else
-	{
-		glBindTex2dCached(texid);
-		g_atlasUOff = g_atlasVOff = 0.0f;
-		g_atlasUScale = g_atlasVScale = 1.0f;
-	}
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
 		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
