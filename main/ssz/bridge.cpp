@@ -973,9 +973,6 @@ void       SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x,
 bool       SSZ_STDCALL SetSndBuf(int32_t* buf);
 bool       SSZ_STDCALL PlayBGM(const std::wstring& fn, const std::wstring& pldir);
 void       SSZ_STDCALL PauseBGM(bool pause);
-bool       SSZ_STDCALL SendOpenBGM(int32_t channels, int32_t rate);
-void       SSZ_STDCALL SendCloseBGM();
-intptr_t   SSZ_STDCALL SendWriteBGM();
 void       SSZ_STDCALL SetVolume(float bv, float wv, float gv);
 void       SSZ_STDCALL FadeInBGM(int time);
 void       SSZ_STDCALL FadeOutBGM(int time);
@@ -1263,25 +1260,6 @@ extern "C" void SSZ_STDCALL PauseBGM(PluginUtil* pu, bool pause)
 {
     (void)pu;
     PauseBGM(pause);
-}
-
-extern "C" bool SSZ_STDCALL SendOpenBGM(PluginUtil* pu, int32_t channels, int32_t rate)
-{
-    (void)pu;
-    return SendOpenBGM(channels, rate);
-}
-
-extern "C" void SSZ_STDCALL SendCloseBGM(PluginUtil* pu)
-{
-    (void)pu;
-    SendCloseBGM();
-}
-
-extern "C" intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil* pu, Reference fn)
-{
-    (void)pu;
-    (void)fn;
-    return SendWriteBGM();
 }
 
 extern "C" void SSZ_STDCALL SetVolume(PluginUtil* pu, float bv, float wv, float gv)

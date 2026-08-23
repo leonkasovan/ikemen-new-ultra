@@ -105,26 +105,6 @@ public void pauseBGM(bool pause)
   PauseBGM(:pause:);
 }
 
-// Deprecated: OGG streaming is now handled by PlayBGM via SDL_mixer.
-// These stubs are kept for ABI compatibility but do nothing.
-public bool sendOpenBGM(int rate, int channels)
-{
-  plugin bool SendOpenBGM(:int, int:) = "dll/sdlplugin.dll";
-  ret SendOpenBGM(:rate, channels:);
-}
-
-public void sendCloseBGM()
-{
-  plugin void SendCloseBGM(::) = "dll/sdlplugin.dll";
-  SendCloseBGM(::);
-}
-
-public index sendWriteBGM(^/short buffer)
-{
-  plugin index SendWriteBGM(:^/short:) = "dll/sdlplugin.dll";
-  ret SendWriteBGM(:buffer:);
-}
-
 public void fadeInBGM(int time)
 {
   plugin void FadeInBGM(:int:) = "dll/sdlplugin.dll";

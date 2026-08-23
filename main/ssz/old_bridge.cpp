@@ -216,9 +216,6 @@ bool      SSZ_STDCALL RenderFontBatch(int32_t, int32_t*, float, float, float, SD
 bool      SSZ_STDCALL SetSndBuf(int32_t*);
 bool      SSZ_STDCALL PlayBGM(const std::wstring&, const std::wstring&);
 void      SSZ_STDCALL PauseBGM(bool);
-bool      SSZ_STDCALL SendOpenBGM(int32_t, int32_t);
-void      SSZ_STDCALL SendCloseBGM();
-intptr_t  SSZ_STDCALL SendWriteBGM(const void*, intptr_t);
 void      SSZ_STDCALL SetVolume(float, float, float);
 void      SSZ_STDCALL FadeInBGM(int);
 void      SSZ_STDCALL FadeOutBGM(int);
@@ -590,11 +587,6 @@ bool SSZ_STDCALL RenderFontBatch(PluginUtil*, int32_t k, int32_t* j, float g, fl
 bool SSZ_STDCALL SetSndBuf(PluginUtil*, int32_t* b) { return SetSndBuf(b); }
 bool SSZ_STDCALL PlayBGM(PluginUtil*, Reference fn, Reference pd) { return PlayBGM(W(fn), W(pd)); }
 void SSZ_STDCALL PauseBGM(PluginUtil*, bool p) { PauseBGM(p); }
-bool SSZ_STDCALL SendOpenBGM(PluginUtil*, int32_t ch, int32_t r) { return SendOpenBGM(ch, r); }
-void SSZ_STDCALL SendCloseBGM(PluginUtil*) { SendCloseBGM(); }
-intptr_t SSZ_STDCALL SendWriteBGM(PluginUtil*, Reference buf, intptr_t len) {
-    return SendWriteBGM(buf.atpos(), len);
-}
 void SSZ_STDCALL SetVolume(PluginUtil*, float b, float w, float g) { SetVolume(b, w, g); }
 void SSZ_STDCALL FadeInBGM(PluginUtil*, int t) { FadeInBGM(t); }
 void SSZ_STDCALL FadeOutBGM(PluginUtil*, int t) { FadeOutBGM(t); }

@@ -292,6 +292,60 @@ Default renderer changed to **Renderer=2 (OpenGL 3.3)**.
 
 ---
 
+## Audio System Fixes (AUDIO_REVIEW.md)
+
+Implemented all fixes from `AUDIO_REVIEW.md` (2026-08-24). See that file
+for full rationale and source verification.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `main/sdlplugin/sdlplugin.cpp` | `g_snddata` → `std::atomic<int16_t*>`, acquire/release ordering, limiter idle recovery |
+| `ssz_script/ssz/sound.ssz` | Equal-power pan law (`cos`/`sin`), pan applied to stereo sources, `Bgm.write()` removed |
+| `ssz_script/lib/alpha/sdlplugin.ssz` | Removed `sendOpenBGM`/`sendCloseBGM`/`sendWriteBGM` SSZ declarations |
+| `main/ssz/bridge.cpp` | Removed `Send*BGM` bridge wrappers |
+| `main/ssz/old_bridge.cpp` | Removed `Send*BGM` old-bridge wrappers |
+| `main/sdlplugin_static.hpp` | Removed `Send*BGM` static registry entries |
+
+### Fix Details
+
+#### 1. 🔴 Critical: `g_snddata` hand-off synchronization
+
+`g_snddata` changed from plain `int16_t*` to `std::atomic<int16_t*>`.
+- `SetSndBuf`: relaxed load for guard, `atomic_thread_fence(release)` + relaxed store to publish buffer
+- `sndcallback`: acquire load into local variable (indexes the local), release store to reset to `g_sndzero`
+- Prevents compiler reordering (UB) and half-buffer tear when callback fires mid-swap
+
+#### 2. 🟡 Medium: Limiter idle recovery
+
+Added `normalizeIdleRecovery(NormalizeVar&)` — called when `SetSndBuf` returns false
+(no new audio data). Decays `bai` toward 1.0 at 12.5% per idle frame, reducing
+pumping/ducking after loud transients.
+
+#### 3. 🟡 Medium: Equal-power pan law + stereo pan bypass fix
+
+Replaced linear pan (`vol ± x*panstr`) with equal-power (`vol * cos(angle)` / `vol * sin(angle)`)
+using `.m.PI / 2` angle range. Now applies to **both** mono and stereo sources (previously
+stereo sources ignored pan entirely). The `panstr` global is retained for future use but
+the mix function no longer needs it.
+
+#### 4. 🟢 Low: Dead code removal
+
+- `Bgm.write()` no-op removed from `sound.ssz` and its call in `mixSounds()`
+- `SendOpenBGM`/`SendCloseBGM`/`SendWriteBGM` removed from C++ (sdlplugin.cpp, bridge, static registry)
+  and SSZ declarations (sdlplugin.ssz)
+
+### Verified non-changes
+
+- `FadeInBGM` volume ordering was correct (SDL_mixer interpolates live volume, not snapshot)
+- `SndCacheGet`/`SndCachePut` param order self-consistent (cache key correct)
+- Two SDL audio devices left as-is (merging via Mix_Chunks impractical for procedural SFX)
+- `sndbufClear()` element loop left as-is (µs/frame, real cost is mix loops)
+- No SIMD alignment on buffers (immaterial for 8 KB int16 copies)
+
+---
+
 ## Open Issues
 
 1. ~~**GL 3.3+ modern shader pipeline** (`initGL33Shaders`) is compiled but not wired — now wired for Renderer 2/3 (see §6)~~

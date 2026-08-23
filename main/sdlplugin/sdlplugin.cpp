@@ -5,6 +5,7 @@
 #include <d3d9.h>         // D3DCAPS9 for max texture size query
 #include <locale.h>
 #include <process.h>
+#include <atomic>
 #include <stdint.h>
 #include <shlobj.h>
 #include <math.h>
@@ -438,7 +439,7 @@ const int g_samples = 2048;
 const int g_sndfreq = 44100;
 int16_t g_sndzero[g_samples*2] = {0};
 int16_t g_sndbuf[g_samples*2] = {0};
-int16_t *g_snddata = g_sndzero;
+std::atomic<int16_t*> g_snddata(g_sndzero);
 
 float g_vol = 1.0;
 float wav_vol = 1.0;
@@ -458,11 +459,11 @@ bool       bgm_paused = false;
 // ---------------------------------------------------------------------------
 void sndcallback(void* unused, Uint8* stream, int len)
 {
-	int i;
-	for(i = 0; i < g_samples*2; i++){
-		((int16_t*)stream)[i] = g_snddata[i];
+	int16_t* data = g_snddata.load(std::memory_order_acquire);
+	for(int i = 0; i < g_samples*2; i++){
+		((int16_t*)stream)[i] = data[i];
 	}
-	g_snddata = g_sndzero;
+	g_snddata.store(g_sndzero, std::memory_order_release);
 }
 
 // Stop and free the current BGM track.
@@ -3013,6 +3014,11 @@ struct NormalizeVar
 
 const double NormalizeVar::shitsu = 32.0;
 NormalizeVar g__nvAll;
+void normalizeIdleRecovery(NormalizeVar& v)
+{
+	v.bai += (1.0 - v.bai) * 0.125;
+}
+
 double normalize(double sam, const int chs, const int sps, NormalizeVar& v)
 {
 	if(v.bai > 8.0) v.bai = 8.0;
@@ -3065,7 +3071,10 @@ double normalize(double sam, const int chs, const int sps, NormalizeVar& v)
 // ---------------------------------------------------------------------------
 bool SSZ_STDCALL SetSndBuf(int32_t* buf)
 {
-	if(g_snddata == g_sndbuf) return false;
+	if(g_snddata.load(std::memory_order_relaxed) == g_sndbuf){
+		normalizeIdleRecovery(g__nvAll);
+		return false;
+	}
 	for(int i = 0; i < g_samples*2; i++){
 		g_sndbuf[i] =
 			(int16_t)(
@@ -3075,7 +3084,8 @@ bool SSZ_STDCALL SetSndBuf(int32_t* buf)
 				* 32767.0
 				* g_vol);
 	}
-	g_snddata = g_sndbuf;
+	std::atomic_thread_fence(std::memory_order_release);
+	g_snddata.store(g_sndbuf, std::memory_order_relaxed);
 	return true;
 }
 
@@ -3141,24 +3151,7 @@ void SSZ_STDCALL PauseBGM(bool pause)
 	}
 }
 
-// Legacy SendOpen/Write/Close kept as no-ops for ABI compatibility.
-// OGG streaming is now handled by PlayBGM via SDL_mixer.
-bool SSZ_STDCALL SendOpenBGM(int32_t channels, int32_t rate)
-{
-	LOG_DEBUG("SDL", "SendOpenBGM: deprecated (SDL_mixer handles all BGM)");
-	return false;
-}
 
-void SSZ_STDCALL SendCloseBGM()
-{
-	LOG_DEBUG("SDL", "SendCloseBGM: deprecated");
-}
-
-intptr_t SSZ_STDCALL SendWriteBGM()
-{
-	LOG_DEBUG("SDL", "SendWriteBGM: deprecated");
-	return 0;
-}
 
 void SSZ_STDCALL SetVolume(float bv, float wv, float gv)
 {

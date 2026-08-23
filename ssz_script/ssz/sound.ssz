@@ -322,21 +322,23 @@ public &Sound
       `sound.new(0);
       ret;
     }
-    int lv = `volume, rv = `volume;
+    float panAngle = (float)((double)`x / 160.0) * (.m.PI / 2.0);
+    int lv = (int)((float)`volume * .m.cos(panAngle));
+    int rv = (int)((float)`volume * .m.sin(panAngle));
     branch{
-    cond `sound~channels == 0d2:
+    cond `sound~bytesPerSample == 0d2:
       branch{
-      cond `sound~bytesPerSample == 0d2:
+      cond `sound~channels == 0d2:
         `mix_s16(buf, fidxadd, lv, rv);
       else:
-        `mix_s8(buf, fidxadd, lv, rv);
+        `mix_m16(buf, fidxadd, lv, rv);
       }
     else:
       branch{
-      cond `sound~bytesPerSample == 0d2:
-        `mix_m16(buf, fidxadd, (int)((float)lv-(`x*.panstr)), (int)((float)rv+(`x*.panstr)));
+      cond `sound~channels == 0d2:
+        `mix_s8(buf, fidxadd, lv, rv);
       else:
-        `mix_m8(buf, fidxadd, (int)((float)lv-(`x*.panstr)), (int)((float)rv+(`x*.panstr)));
+        `mix_m8(buf, fidxadd, lv, rv);
       }
     }
   }
@@ -349,10 +351,6 @@ public &Bgm
   {
     `clear();
     if(.sdl.playBGM("", file)) `fileName = file;
-  }
-  public void write()
-  {
-    // BGM playback is handled by SDL_mixer – nothing to pump.
   }
   public void clear()
   {
@@ -389,7 +387,6 @@ public ^&Sound getChannel(int ch)
 
 public void mixSounds()
 {
-  .bgm~write();
   loop{index i = 0; while; do:
     .sounds[i].mix(.sndbuf, -160.0, 160.0);
     i++;

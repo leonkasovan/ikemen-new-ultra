@@ -114,9 +114,6 @@ extern "C"
 	bool      SSZ_STDCALL SetSndBuf          (PluginUtil*, int32_t*);
 	bool      SSZ_STDCALL PlayBGM            (PluginUtil*, Reference, Reference);
 	void      SSZ_STDCALL PauseBGM           (PluginUtil*, bool);
-	bool      SSZ_STDCALL SendOpenBGM        (PluginUtil*, int32_t, int32_t);
-	void      SSZ_STDCALL SendCloseBGM       (PluginUtil*);
-	intptr_t  SSZ_STDCALL SendWriteBGM       (PluginUtil*, Reference);
 	void      SSZ_STDCALL SetVolume          (PluginUtil*, float, float, float);
 	void      SSZ_STDCALL FadeInBGM          (PluginUtil*, int);
 	void      SSZ_STDCALL FadeOutBGM         (PluginUtil*, int);
@@ -210,9 +207,6 @@ inline bool sdlplugin_static_register()
 		{ "SetSndBuf",           (void*)SetSndBuf           },
 		{ "PlayBGM",             (void*)PlayBGM             },
 		{ "PauseBGM",            (void*)PauseBGM            },
-		{ "SendOpenBGM",         (void*)SendOpenBGM         },
-		{ "SendCloseBGM",        (void*)SendCloseBGM        },
-		{ "SendWriteBGM",        (void*)SendWriteBGM        },
 		{ "SetVolume",           (void*)SetVolume           },
 		{ "FadeInBGM",           (void*)FadeInBGM           },
 		{ "FadeOutBGM",          (void*)FadeOutBGM          },
