@@ -22,13 +22,18 @@
 // ---------------------------------------------------------------------------
 enum RendererType
 {
-	RENDERER_UNKNOWN  = 0,
-	RENDERER_SDL2     = 1,
-	RENDERER_OPENGL   = 2,
-	RENDERER_OPENGLES = 3,
-	RENDERER_VULKAN   = 4,
-	RENDERER_DIRECTX  = 5
+	RENDERER_UNKNOWN      = 0,
+	RENDERER_SDL2         = 1,
+	RENDERER_OPENGL_2_1   = 2,
+	RENDERER_OPENGL_3_3   = 3,
+	RENDERER_OPENGL_4_6   = 4,
+	RENDERER_DIRECTX      = 5
 };
+
+// Helpers to test renderer family
+inline bool isOpenGLRenderer(RendererType t) {
+	return t == RENDERER_OPENGL_2_1 || t == RENDERER_OPENGL_3_3 || t == RENDERER_OPENGL_4_6;
+}
 
 // ---------------------------------------------------------------------------
 // OpenGL version detected
@@ -41,13 +46,7 @@ enum GLVersion
 	GL_VER_4_6   = 46
 };
 
-enum GLESVersion
-{
-	GLES_VER_NONE = 0,
-	GLES_VER_3_0  = 30,
-	GLES_VER_3_1  = 31,
-	GLES_VER_3_2  = 32
-};
+// GLES removed — desktop OpenGL only (2.1 / 3.3 / 4.6)
 
 enum SpritePathFlags
 {
@@ -151,7 +150,7 @@ struct RendererInfo
 {
 	RendererType type;
 	GLVersion    glVersion;
-	GLESVersion  glesVersion;
+	int          _pad_gles;        // kept for binary compat
 	int          directxVersion;    // 9 or 11
 	char         backendName[64];   // e.g. "OpenGL 4.6"
 	char         deviceName[128];   // GPU name
@@ -179,7 +178,7 @@ struct RendererInfo
 // ---------------------------------------------------------------------------
 extern RendererType  g_rendererType;
 extern GLVersion     g_glVersion;
-extern GLESVersion   g_glesVersion;
+
 extern RendererInfo  g_rendererInfo;
 extern PerfCounters  g_perfCounters;
 extern bool          g_perfMonitorEnabled;
@@ -193,12 +192,15 @@ inline RendererType parseRendererType(const char* name)
 	// Case-insensitive comparison
 	if (_stricmp(name, "SDL2") == 0 || _stricmp(name, "Software") == 0)
 		return RENDERER_SDL2;
+	if (_stricmp(name, "OpenGL 2.1") == 0 || _stricmp(name, "GL 2.1") == 0 || _stricmp(name, "GL2.1") == 0)
+		return RENDERER_OPENGL_2_1;
+	if (_stricmp(name, "OpenGL 3.3") == 0 || _stricmp(name, "GL 3.3") == 0 || _stricmp(name, "GL3.3") == 0)
+		return RENDERER_OPENGL_3_3;
+	if (_stricmp(name, "OpenGL 4.6") == 0 || _stricmp(name, "GL 4.6") == 0 || _stricmp(name, "GL4.6") == 0)
+		return RENDERER_OPENGL_4_6;
+	// Generic 'OpenGL' / 'GL' → probe highest available
 	if (_stricmp(name, "OpenGL") == 0 || _stricmp(name, "GL") == 0)
-		return RENDERER_OPENGL;
-	if (_stricmp(name, "OpenGL ES") == 0 || _stricmp(name, "GLES") == 0 || _stricmp(name, "OpenGLES") == 0)
-		return RENDERER_OPENGLES;
-	if (_stricmp(name, "Vulkan") == 0 || _stricmp(name, "VK") == 0)
-		return RENDERER_VULKAN;
+		return RENDERER_OPENGL_4_6; // probe will downgrade if needed
 	if (_stricmp(name, "DirectX") == 0 || _stricmp(name, "DirectX9") == 0 || _stricmp(name, "DirectX11") == 0
 		|| _stricmp(name, "D3D") == 0 || _stricmp(name, "D3D9") == 0 || _stricmp(name, "D3D11") == 0)
 		return RENDERER_DIRECTX;
@@ -208,12 +210,12 @@ inline RendererType parseRendererType(const char* name)
 inline const char* rendererTypeName(RendererType t)
 {
 	switch (t) {
-	case RENDERER_SDL2:     return "SDL2";
-	case RENDERER_OPENGL:   return "OpenGL";
-	case RENDERER_OPENGLES: return "OpenGL ES";
-	case RENDERER_VULKAN:   return "Vulkan";
-	case RENDERER_DIRECTX:  return "DirectX";
-	default:                return "Unknown";
+	case RENDERER_SDL2:       return "SDL2";
+	case RENDERER_OPENGL_2_1: return "OpenGL 2.1";
+	case RENDERER_OPENGL_3_3: return "OpenGL 3.3";
+	case RENDERER_OPENGL_4_6: return "OpenGL 4.6";
+	case RENDERER_DIRECTX:    return "DirectX";
+	default:                  return "Unknown";
 	}
 }
 
@@ -227,15 +229,7 @@ inline const char* glVersionName(GLVersion v)
 	}
 }
 
-inline const char* glesVersionName(GLESVersion v)
-{
-	switch (v) {
-	case GLES_VER_3_0: return "3.0";
-	case GLES_VER_3_1: return "3.1";
-	case GLES_VER_3_2: return "3.2";
-	default:           return "N/A";
-	}
-}
+
 
 // ---------------------------------------------------------------------------
 // High-resolution timer helper

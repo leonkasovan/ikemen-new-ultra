@@ -12,6 +12,7 @@
 #include <sstream>
 #include <ctime>
 #include <map>
+#include <vector>
 
 #include <GL/glew.h>
 
@@ -38,7 +39,7 @@
 // ---------------------------------------------------------------------------
 RendererType  g_rendererType       = RENDERER_SDL2;
 GLVersion     g_glVersion          = GL_VER_NONE;
-GLESVersion   g_glesVersion        = GLES_VER_NONE;
+
 int           g_directxVersion     = 0;  // 9 or 11
 RendererInfo  g_rendererInfo;
 PerfCounters  g_perfCounters;
@@ -71,6 +72,15 @@ static GLint g_gl33fc_uProjMat= -1;
 static GLint g_gl33s_uColor   = -1;
 static GLint g_gl33s_uAlpha   = -1;
 static GLint g_gl33s_uProjMat = -1;
+
+// Flat-color program (MugenFillGl) – shares g_gl33_palVS
+static GLuint g_gl33_flatProg    = 0;
+static GLint  g_gl33flat_uColor   = -1;
+static GLint  g_gl33flat_uProjMat = -1;
+
+// True when the modern pipeline is wired (Renderer=2/3, initGL33Shaders ok).
+// GL 2.1 always uses the legacy ARB path.
+static bool g_useModernGL = false;
 
 int32_t ransuutane = 0;
 SDL_Window* g_window = nullptr;
@@ -883,6 +893,33 @@ static bool initGL33Shaders()
 	g_gl33s_uAlpha   = glGetUniformLocation(g_gl33_shadowProg, "a");
 	INIT_LOG("  Shadow shader: program=%u", g_gl33_shadowProg);
 
+	// Sampler bindings: unit 0 = sprite texture, unit 1 = palette.
+	// Without this the "pal" sampler defaults to unit 0 and samples the
+	// indexed texture instead of the palette.
+	glUseProgram(g_gl33_paletteProg);
+	glUniform1i(glGetUniformLocation(g_gl33_paletteProg, "tex"), 0);
+	glUniform1i(g_gl33_uPal, 1);
+	glUseProgram(g_gl33_fullcolorProg);
+	glUniform1i(glGetUniformLocation(g_gl33_fullcolorProg, "tex"), 0);
+	glUseProgram(g_gl33_shadowProg);
+	glUniform1i(glGetUniformLocation(g_gl33_shadowProg, "tex"), 0);
+
+	// Flat-color program for MugenFillGl (no texture)
+	static const char* flatFSSource =
+		"#version 330 core\n"
+		"in vec2 vUV;\n"
+		"uniform vec4 color;\n"
+		"out vec4 FragColor;\n"
+		"void main(){ FragColor = color; }\n";
+	GLuint flatFS = compileShader(GL_FRAGMENT_SHADER, flatFSSource);
+	if (!flatFS) { glDeleteShader(vs); return false; }
+	g_gl33_flatProg = linkProgram(vs, flatFS);
+	glDeleteShader(flatFS);
+	if (!g_gl33_flatProg) { glDeleteShader(vs); return false; }
+	g_gl33flat_uProjMat = glGetUniformLocation(g_gl33_flatProg, "uProj");
+	g_gl33flat_uColor   = glGetUniformLocation(g_gl33_flatProg, "color");
+	INIT_LOG("  Flat shader: program=%u", g_gl33_flatProg);
+
 	glDeleteShader(vs);
 
 	// Create VAO/VBO for core profile
@@ -910,8 +947,47 @@ static void cleanupGL33Shaders()
 	if (g_gl33_paletteProg)   { glDeleteProgram(g_gl33_paletteProg); g_gl33_paletteProg = 0; }
 	if (g_gl33_fullcolorProg) { glDeleteProgram(g_gl33_fullcolorProg); g_gl33_fullcolorProg = 0; }
 	if (g_gl33_shadowProg)    { glDeleteProgram(g_gl33_shadowProg); g_gl33_shadowProg = 0; }
+	if (g_gl33_flatProg)      { glDeleteProgram(g_gl33_flatProg); g_gl33_flatProg = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
+	g_useModernGL = false;
+}
+
+// Modern GL3.3+ render path active? Only for renderer types that selected it;
+// OpenGL 2.1 always stays on the legacy ARB path.
+static inline bool useModernRender()
+{
+	return g_useModernGL
+		&& (g_rendererType == RENDERER_OPENGL_3_3 || g_rendererType == RENDERER_OPENGL_4_6);
+}
+
+// Upload the frame projection to all modern programs.
+// Equivalent to legacy glOrtho(0,w,0,h,-1,1) + glTranslated(0,h,0):
+// clip.y = (2/h)*(y+h) - 1, so SSZ top-left origin maps to screen correctly.
+static void gl33SetFrameProjection()
+{
+	const float sx = 2.0f / (float)g_w;
+	const float sy = 2.0f / (float)g_h;
+	float m[16] = {
+		sx, 0, 0, 0,
+		0, sy, 0, 0,
+		0, 0, -2, 0,
+		-1, 1, -1, 1
+	};
+	struct ProgLoc { GLuint prog; GLint loc; };
+	const ProgLoc pl[] = {
+		{ g_gl33_paletteProg,   g_gl33_uProjMat },
+		{ g_gl33_fullcolorProg, g_gl33fc_uProjMat },
+		{ g_gl33_shadowProg,    g_gl33s_uProjMat },
+		{ g_gl33_flatProg,      g_gl33flat_uProjMat },
+	};
+	for (size_t i = 0; i < sizeof(pl)/sizeof(pl[0]); i++)
+	{
+		if (!pl[i].prog) continue;
+		glUseProgram(pl[i].prog);
+		glUniformMatrix4fv(pl[i].loc, 1, GL_FALSE, m);
+	}
+	glUseProgram(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -922,7 +998,7 @@ static void fillRendererInfo()
 	g_rendererInfo.clear();
 	g_rendererInfo.type = g_rendererType;
 	g_rendererInfo.glVersion = g_glVersion;
-	g_rendererInfo.glesVersion = g_glesVersion;
+
 
 	if (g_rendererType == RENDERER_SDL2)
 	{
@@ -931,7 +1007,7 @@ static void fillRendererInfo()
 		sprintf(g_rendererInfo.driverInfo, "SDL %d.%d.%d",
 			SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 	}
-	else if (g_rendererType == RENDERER_OPENGL)
+	else if (isOpenGLRenderer(g_rendererType))
 	{
 		const char* ver = (const char*)glGetString(GL_VERSION);
 		const char* ren = (const char*)glGetString(GL_RENDERER);
@@ -942,12 +1018,6 @@ static void fillRendererInfo()
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &g_rendererInfo.maxTextureSize);
 		INIT_LOG("GPU: %s (%s)", ren ? ren : "?", ven ? ven : "?");
 		INIT_LOG("Max texture size: %d", g_rendererInfo.maxTextureSize);
-	}
-	else if (g_rendererType == RENDERER_VULKAN)
-	{
-		sprintf(g_rendererInfo.backendName, "Vulkan (stub)");
-		sprintf(g_rendererInfo.deviceName, "N/A");
-		sprintf(g_rendererInfo.driverInfo, "N/A");
 	}
 	else if (g_rendererType == RENDERER_DIRECTX)
 	{
@@ -997,65 +1067,6 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 	INIT_LOG("Resolution: %dx%d", w, h);
 
 	// --- Vulkan stub ---
-	if (g_rendererType == RENDERER_VULKAN)
-	{
-		INIT_LOG("Initializing Vulkan backend (stub)...");
-		if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
-		{
-			INIT_LOG("SDL_Init failed: %s", SDL_GetError());
-			return false;
-		}
-		INIT_LOG("SDL initialized (Vulkan mode)");
-		TTF_Init();
-		INIT_LOG("SDL_ttf initialized");
-
-		// Check for Vulkan support
-		if (SDL_Vulkan_LoadLibrary(NULL) != 0)
-		{
-			REND_LOG("Vulkan not available: %s", SDL_GetError());
-			REND_LOG("Falling back to OpenGL");
-			g_rendererType = RENDERER_OPENGL;
-			// Fall through to OpenGL init below
-		}
-		else
-		{
-			SDL_Vulkan_UnloadLibrary();
-			g_scrflag = SDL_WINDOW_VULKAN;
-			g_window = SDL_CreateWindow(
-				WstrToStr(cap).c_str(),
-				SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-				w, h, g_scrflag);
-			if (!g_window)
-			{
-				REND_LOG("Failed to create Vulkan window: %s", SDL_GetError());
-				REND_LOG("Falling back to OpenGL");
-				g_rendererType = RENDERER_OPENGL;
-			}
-			else
-			{
-				INIT_LOG("Vulkan window created");
-				REND_LOG("Vulkan rendering pipeline is not yet implemented");
-				REND_LOG("Using Vulkan window with SDL2 software fallback for now");
-
-				// Create SDL renderer as fallback for actual rendering
-				g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
-				g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
-					SDL_TEXTUREACCESS_STREAMING, w, h);
-				SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
-				lockTarget();
-
-				winProcInit();
-				g_mainTreadId = GetCurrentThreadId();
-				sndjoyinit();
-				g_w = w;
-				g_h = h;
-				fillRendererInfo();
-				INIT_LOG("Vulkan stub initialized (SDL2 fallback active)");
-				INIT_LOG("Renderer ready: %s", g_rendererInfo.backendName);
-				return true;
-			}
-		}
-	}
 
 	// --- DirectX (D3D9/D3D11 via SDL2) ---
 	if (g_rendererType == RENDERER_DIRECTX)
@@ -1114,7 +1125,7 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 			{
 				INIT_LOG("D3D9 window creation failed: %s", SDL_GetError());
 				INIT_LOG("DirectX not available, falling back to OpenGL");
-				g_rendererType = RENDERER_OPENGL;
+				g_rendererType = RENDERER_OPENGL_4_6;
 				goto init_opengl;
 			}
 			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
@@ -1124,7 +1135,7 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 				INIT_LOG("DirectX not available, falling back to OpenGL");
 				SDL_DestroyWindow(g_window);
 				g_window = nullptr;
-				g_rendererType = RENDERER_OPENGL;
+				g_rendererType = RENDERER_OPENGL_4_6;
 				goto init_opengl;
 			}
 			d3d11 = false;
@@ -1178,7 +1189,7 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 
 init_opengl:
 	// --- OpenGL / OpenGL ES ---
-	if (g_rendererType == RENDERER_OPENGL || g_rendererType == RENDERER_OPENGLES)
+	if (isOpenGLRenderer(g_rendererType))
 	{
 		INIT_LOG("Initializing %s backend...", rendererTypeName(g_rendererType));
 		if (SDL_Init(SDL_INIT_VIDEO) < 0)
@@ -1192,24 +1203,11 @@ init_opengl:
 		TTF_Init();
 		INIT_LOG("SDL_ttf initialized");
 
-		if (g_rendererType == RENDERER_OPENGLES)
-		{
-			// Request OpenGL ES context
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-			// Try highest first: 3.2
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-			INIT_LOG("Requesting OpenGL ES 3.2 context...");
-		}
-		else
-		{
-			// Request desktop OpenGL  –  try to get highest version
-			// We'll request a compatibility profile so legacy code still works
-			// and detect the actual version after context creation
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-			INIT_LOG("Requesting OpenGL context (will detect version)...");
-		}
+		// Request desktop OpenGL 2.1 — let driver give highest version.
+		// Do NOT set CONTEXT_PROFILE_MASK to match original behavior.
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+		INIT_LOG("Requesting OpenGL context (will detect version)...");
 
 		isOpenGL = 1;
 		g_scrflag = SDL_WINDOW_OPENGL;
@@ -1241,25 +1239,8 @@ init_opengl:
 		INIT_LOG("GLEW initialized");
 
 		// Detect actual GL version
-		if (g_rendererType == RENDERER_OPENGLES)
-		{
-			const char* verStr = (const char*)glGetString(GL_VERSION);
-			INIT_LOG("OpenGL ES version: %s", verStr ? verStr : "unknown");
-			// Parse ES version
-			int major = 0, minor = 0;
-			if (verStr && sscanf(verStr, "OpenGL ES %d.%d", &major, &minor) >= 2)
-			{
-				if (major >= 3 && minor >= 2) g_glesVersion = GLES_VER_3_2;
-				else if (major >= 3 && minor >= 1) g_glesVersion = GLES_VER_3_1;
-				else if (major >= 3) g_glesVersion = GLES_VER_3_0;
-			}
-			INIT_LOG("Detected OpenGL ES version: %s", glesVersionName(g_glesVersion));
-		}
-		else
-		{
-			g_glVersion = detectGLVersion();
-			INIT_LOG("Detected OpenGL version: %s", glVersionName(g_glVersion));
-		}
+		g_glVersion = detectGLVersion();
+		INIT_LOG("Detected OpenGL version: %s (requested: %s)", glVersionName(g_glVersion), rendererTypeName(g_rendererType));
 
 		winProcInit();
 		INIT_LOG("Window procedure hook installed");
@@ -1287,6 +1268,7 @@ init_opengl:
 			INIT_LOG("Initializing modern shader pipeline (GL %s)...", glVersionName(g_glVersion));
 			if (initGL33Shaders())
 			{
+				g_useModernGL = true;
 				INIT_LOG("Modern shader pipeline ready");
 			}
 			else
@@ -5606,7 +5588,7 @@ void SSZ_STDCALL GlSwapBuffers()
 	}
 
 	// Non-GL renderers (DirectX, Vulkan): present via SDL2 renderer API
-	if (g_rendererType == RENDERER_DIRECTX || g_rendererType == RENDERER_VULKAN)
+	if (!isOpenGLRenderer(g_rendererType) && g_target)
 	{
 		if (g_renderer)
 		{
@@ -5631,11 +5613,19 @@ void SSZ_STDCALL GlSwapBuffers()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// [OPT] Set up ortho projection once per frame instead of per sprite.
 	// All render calls (RenderMugenGl, RenderMugenGlFc, RenderMugenGlFcS,
-	// MugenFillGl) use the same projection: glOrtho(0, g_w, 0, g_h, -1, 1).
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0, g_w, 0, g_h, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
+	// MugenFillGl) use the same transform.
+	if (useModernRender())
+	{
+		// Modern path: ortho * translate(0,h) baked into the uProj uniform
+		gl33SetFrameProjection();
+	}
+	else
+	{
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0, g_w, 0, g_h, -1, 1);
+		glMatrixMode(GL_MODELVIEW);
+	}
 	g_orthoProjectionSet = true;
 	// Begin next frame perf tracking
 	g_perfCounters.frameStartTick = SDL_GetTicks();
@@ -5646,10 +5636,19 @@ bool SSZ_STDCALL InitMugenGl()
 {
 	// Non-GL renderers (DirectX, Vulkan) don't need GL shader setup.
 	// The SSZ /?/ conditional compiles this for Renderer != 0, so guard here.
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 	{
 		INIT_LOG("InitMugenGl: non-GL renderer (%s), skipping GL shader setup",
 			rendererTypeName(g_rendererType));
+		return true;
+	}
+	// Modern pipeline: programs already built in RendererInit (initGL33Shaders).
+	// Only persistent state is needed; the legacy ARB programs stay unbuilt.
+	if (useModernRender())
+	{
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		INIT_LOG("InitMugenGl: modern GL3.3 pipeline active, skipping ARB shaders");
 		return true;
 	}
 	const GLchar* vertShader =
@@ -5803,6 +5802,38 @@ void drawQuads(
 	float x1, float y1, float x2, float y2, float x3, float y3,
 	float x4, float y4, float r, float g, float b, float a, float pers)
 {
+	if(useModernRender()){
+	// Same strip layout as the legacy glBegin path: 2 + 2*(n-1) + 2 vertices.
+	int n =
+		(int)(
+			(
+				pers > 1.0
+				? (1-1/(pers*pers))*abs(x3-x4) : (1-(pers*pers))*abs(x1-x2))
+			* (g_h>>5) / (abs(y1-y4) + (g_h>>5)));
+	if(n < 1) n = 1;
+	static std::vector<float> v;
+	v.clear();
+	v.reserve((size_t)(2*n+2)*4);
+	v.push_back(x1); v.push_back(y1); v.push_back(0.0f); v.push_back(1.0f);
+	v.push_back(x4); v.push_back(y4); v.push_back(0.0f); v.push_back(0.0f);
+	for(int i = 1; i < n; i++){
+		float u = (float)i/n;
+		v.push_back(x1 + (x2 - x1)*i/n); v.push_back(y1 + (y2 - y1)*i/n);
+		v.push_back(u);                  v.push_back(1.0f);
+		v.push_back(x4 + (x3 - x4)*i/n); v.push_back(y4 + (y3 - y4)*i/n);
+		v.push_back(u);                  v.push_back(0.0f);
+	}
+	v.push_back(x2); v.push_back(y2); v.push_back(1.0f); v.push_back(1.0f);
+	v.push_back(x3); v.push_back(y3); v.push_back(1.0f); v.push_back(0.0f);
+	glBindVertexArray(g_gl33_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
+	// Orphan + re-specify: avoids the glBufferSubData sync stall measured
+	// in the earlier batch experiment (PROGRESS.md).
+	glBufferData(GL_ARRAY_BUFFER, v.size()*sizeof(float), v.data(), GL_STREAM_DRAW);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, (GLsizei)(v.size()/4));
+	glBindVertexArray(0);
+	return;
+	}
 	glColor4f(r, g, b, a);
 	glBegin(GL_TRIANGLE_STRIP);
 	glTexCoord2f(0, 1);
@@ -5987,7 +6018,14 @@ void renderMugenGl(
 	float y, float x, const SDL_Rect& r, GLhandleARB shader, GLint alphaUniform)
 {
 	// [OPT] Skip projection setup if already configured for this frame.
-	// Saves 2 matrix push/pops + glOrtho + glMatrixMode switches per sprite.
+	if(useModernRender()){
+	// First frame renders before the first GlSwapBuffers – make sure the
+	// shader projection is uploaded once.
+	if(!g_orthoProjectionSet){
+		gl33SetFrameProjection();
+		g_orthoProjectionSet = true;
+	}
+	}else{
 	if(!g_orthoProjectionSet){
 	glMatrixMode(GL_PROJECTION);
 	glPushMatrix();
@@ -5997,6 +6035,7 @@ void renderMugenGl(
 	}
 	glPushMatrix();
 	glTranslated(0, g_h, 0);
+	}
 	if (shader == g_mugenshaderFc) {
 		drawQuads(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
 	}
@@ -6043,11 +6082,13 @@ void renderMugenGl(
 				angle, rcx, rcy, 1, 1, 1, (GLfloat)src / 255.0f);
 		}
 	}
+	if(!useModernRender()){
 	glPopMatrix();
 	// [OPT] Only pop projection if we pushed it (fallback path)
 	if(!g_orthoProjectionSet){
 	glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
+	}
 	}
 }
 
@@ -6057,7 +6098,7 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	SDL_Rect* rect, int mask, uint8_t* ppal, uint32_t texid)
 {
 	// Guard: non-GL renderer should never reach here (SSZ conditionals prevent it)
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
@@ -6085,9 +6126,13 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	rcy = -rcy;
 	if(yscl < 0) y = -y;
 	y += rcy;
-	glUseProgramObjectARB(g_mugenshader);
-	glUniform1iARB(g_uniformPal, 1);
-	glUniform1iARB(g_uniformMsk, mask);
+	bool modern = useModernRender();
+	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_paletteProg : g_mugenshader;
+	GLint alphaLoc  = modern ? g_gl33_uAlpha : g_uniformAlpha;
+	if(modern) glUseProgram((GLuint)prog);
+	else       glUseProgramObjectARB(prog);
+	if(!modern) glUniform1iARB(g_uniformPal, 1); // samplers bound at init for modern
+	glUniform1iARB(modern ? g_gl33_uMask : g_uniformMsk, mask);
 	glEnable(GL_TEXTURE_1D);
 	glEnable(GL_TEXTURE_2D);
 	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
@@ -6120,11 +6165,12 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	glBindTexture(GL_TEXTURE_2D, texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, g_mugenshader, g_uniformAlpha);
+		tl, y, x, r, prog, alphaLoc);
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_TEXTURE_1D);
-	glUseProgramObjectARB(0);
+	if(modern) glUseProgram(0);
+	else       glUseProgramObjectARB(0);
 	return true;
 }
 
@@ -6135,7 +6181,7 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, uint32_t texid)
 {
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
@@ -6163,11 +6209,15 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	rcy = -rcy;
 	if(yscl < 0) y = -y;
 	y += rcy;
-	glUseProgramObjectARB(g_mugenshaderFc);
-	glUniform1iARB(g_uniformNeg, neg);
-	glUniform1fARB(g_uniformGray, 1 - color);
-	glUniform3fARB(g_uniformAdd, addr, addg, addb);
-	glUniform3fARB(g_uniformMul, mulr, mulg, mulb);
+	bool modern = useModernRender();
+	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_fullcolorProg : g_mugenshaderFc;
+	GLint alphaLoc  = modern ? g_gl33fc_uAlpha : g_uniformAlphaFc;
+	if(modern) glUseProgram((GLuint)prog);
+	else       glUseProgramObjectARB(prog);
+	glUniform1iARB(modern ? g_gl33fc_uNeg : g_uniformNeg, neg ? 1 : 0);
+	glUniform1fARB(modern ? g_gl33fc_uGray : g_uniformGray, 1 - color);
+	glUniform3fARB(modern ? g_gl33fc_uAdd : g_uniformAdd, addr, addg, addb);
+	glUniform3fARB(modern ? g_gl33fc_uMul : g_uniformMul, mulr, mulg, mulb);
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, texid);
 	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
@@ -6175,10 +6225,11 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 	glScissor(dstr->x, g_h - (dstr->y+dstr->h), dstr->w, dstr->h);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, g_mugenshaderFc, g_uniformAlphaFc);
+		tl, y, x, r, prog, alphaLoc);
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_TEXTURE_2D);
-	glUseProgramObjectARB(0);
+	if(modern) glUseProgram(0);
+	else       glUseProgramObjectARB(0);
 	return true;
 }
 
@@ -6188,7 +6239,7 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 	float xbotscl, float xtopscl, SDL_Rect* tile, float y, float x,
 	SDL_Rect* rect, uint32_t texid)
 {
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return false;
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
@@ -6216,9 +6267,14 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 	rcy = -rcy;
 	if(yscl < 0) y = -y;
 	y += rcy;
-	glUseProgramObjectARB(g_mugenshaderFcS);
+	bool modern = useModernRender();
+	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_shadowProg : g_mugenshaderFcS;
+	GLint alphaLoc  = modern ? g_gl33s_uAlpha : g_uniformAlphaFcS;
+	if(modern) glUseProgram((GLuint)prog);
+	else       glUseProgramObjectARB(prog);
 	glUniform3fARB(
-		g_uniformColor, (float)(color >> 16 & 0xff) / 255, (float)(color >> 8 & 0xff) / 255,
+		modern ? g_gl33s_uColor : g_uniformColor,
+		(float)(color >> 16 & 0xff) / 255, (float)(color >> 8 & 0xff) / 255,
 		(float)(color & 0xff) / 255);
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, texid);
@@ -6227,15 +6283,35 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 	glScissor(dstr->x, g_h - (dstr->y+dstr->h), dstr->w, dstr->h);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, g_mugenshaderFcS, g_uniformAlphaFcS);
+		tl, y, x, r, prog, alphaLoc);
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_TEXTURE_2D);
-	glUseProgramObjectARB(0);
+	if(modern) glUseProgram(0);
+	else       glUseProgramObjectARB(0);
 	return true;
 }
 
 void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 {
+	if(useModernRender()){
+	// Same vertex order as the legacy GL_QUADS path (y pre-negated; the
+	// modelview translate(0,g_h) is baked into uProj instead).
+	float v[16] = {
+		(float)rect.x,           -(float)(rect.y+rect.h), 0.0f, 0.0f,
+		(float)(rect.x+rect.w),  -(float)(rect.y+rect.h), 0.0f, 0.0f,
+		(float)rect.x,           -(float)rect.y,          0.0f, 0.0f,
+		(float)(rect.x+rect.w),  -(float)rect.y,          0.0f, 0.0f,
+	};
+	glUseProgram(g_gl33_flatProg);
+	glUniform4f(g_gl33flat_uColor, r, g, b, a);
+	glBindVertexArray(g_gl33_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glBindVertexArray(0);
+	glUseProgram(0);
+	return;
+	}
 	glBegin(GL_QUADS);
 	{
 		glColor4f(r, g, b, a);
@@ -6249,7 +6325,7 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 
 void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 {
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return;
 	g_perfCounters.fillCalls++;
 	g_perfCounters.drawCalls++;
@@ -6258,6 +6334,12 @@ void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 	float b = (float)(color&0xff)/255.0f;
 	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
 	// [OPT] Skip projection setup if already configured for this frame
+	if(useModernRender()){
+	if(!g_orthoProjectionSet){
+		gl33SetFrameProjection();
+		g_orthoProjectionSet = true;
+	}
+	}else{
 	if(!g_orthoProjectionSet){
 	glMatrixMode(GL_PROJECTION);
 	glPushMatrix();
@@ -6267,6 +6349,7 @@ void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 	}
 	glPushMatrix();
 	glTranslated(0, g_h, 0);
+	}
 	if(alpha == -1){
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		rectFillGl(r, g, b, 1.0f, rect);
@@ -6288,17 +6371,19 @@ void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		rectFillGl(r, g, b, (GLfloat)src / 255.0f, rect);
 	}
+	if(!useModernRender()){
 	glPopMatrix();
 	// [OPT] Only pop projection if we pushed it (fallback path)
 	if(!g_orthoProjectionSet){
 	glMatrixMode(GL_PROJECTION);
 	glPopMatrix();
 	}
+	}
 }
 
 bool SSZ_STDCALL BindGlContext()
 {
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return true; // no GL context to bind
 	return
 		wglMakeCurrent(
@@ -6308,7 +6393,7 @@ bool SSZ_STDCALL BindGlContext()
 
 bool SSZ_STDCALL UnbindGlContext()
 {
-	if (g_rendererType != RENDERER_OPENGL && g_rendererType != RENDERER_OPENGLES)
+	if (!isOpenGLRenderer(g_rendererType))
 		return true;
 	return wglMakeCurrent(nullptr, nullptr) != 0;
 }

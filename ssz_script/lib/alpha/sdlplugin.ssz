@@ -888,9 +888,9 @@ public bool init(^/char t, int w, int h, int renderer, bool mugen)
   plugin bool GlInit(:^/char, int, int:) = "dll/sdlplugin.dll";
   plugin bool Init(:^/char, int, int, bool:) = "dll/sdlplugin.dll";
   ^/char rendererStr = "SDL2";
-  if(renderer == 1) rendererStr = "OpenGL";
-  if(renderer == 2) rendererStr = "OpenGL ES";
-  if(renderer == 3) rendererStr = "Vulkan";
+  if(renderer == 1) rendererStr = "OpenGL 2.1";
+  if(renderer == 2) rendererStr = "OpenGL 3.3";
+  if(renderer == 3) rendererStr = "OpenGL 4.6";
   if(renderer == 4) rendererStr = "DirectX";
   ret RendererInit(:t, w, h, rendererStr:);
 }
