@@ -226,4 +226,4 @@ These require restructuring the SSZ render loop (larger refactor).
 2. **`frame:total` timer shows ~84M ms** for a 15s run — profiling unit bug in `PerfCounters`
 3. **GL render timers show 0.00 ms** — CPU profiler doesn't instrument GPU work (persists with modern path; need GPU queries)
 4. **Sprite class `pxl` field** differs per renderer (GL: `GlTexture`, SDL2/DX: `^ubyte`) — SSZ compile-time conditional
-5. **GL 3.3 vs Go unified shader gap** — Go `sprite.frag.glsl` handles `tint`/`hue`/`isTrapez`/`isRgba`/`isFlat`/`palUV`; current GL33 shaders cover only `msk`/`a`/`neg`/`gray`/`add`/`mul`/`color` — extend when palette atlas / hue features needed
+5. **GL 3.3 vs Go unified shader gap** — Go `sprite.frag.glsl` handles `tint`/`hue`/`isTrapez`/`isRgba`/`isFlat`/`palUV`; current GL33 shaders now cover `palUV` (palette atlas, see `OPENGL33_OPTIMIZATION_PLAN.md` §5 P2) but not `tint`/`hue`/`isTrapez` — extend when those effects are needed

@@ -110,5 +110,23 @@ Correctness: `Renderer=1` vs `Renderer=2` 14 s screenshots are pixel-identical
 legacy output. (Cross-session run-to-run variance is ±10%; within-run ordering
 holds regardless.)
 
-Remaining: P2 palette atlas (biggest next win, eliminates the last per-sprite
-palette touch), then P3 state-sorted batching.
+### P2 — palette atlas (implemented)
+
+`main/sdlplugin/sdlplugin.cpp`: palettes packed one-per-row in a 256×256 RGBA
+atlas (`g_gl33_palatlas`), sampled via `palUV` (mirrors Go `createPalAtlas` /
+`sprite.frag.glsl`). Keyed by 1 KB content hash (FNV-1a) + per-frame pointer
+cache so a stable palette uploads ONCE and persists across frames; LRU eviction.
+
+- `g_gl33_palFS`/`g_gl46_palFS`: `sampler1D` → `sampler2D` + `palUV`,
+  `texture(pal, vec2(palUV.x + palUV.z*r*0.9961, palUV.y))`.
+- `gl33PalSlotFor()` assigns/evicts rows; `gl33PalHash()` = FNV-1a over 1 KB.
+- Legacy R1 path untouched (keeps 1D palette texture + P1 pointer dedup).
+
+Same-session A/B (3× 15 s each, GL 3.3, Debug): P1 mean 554 fr / 36.9 fps,
+P2 mean 556 fr / 37.1 fps → **+0.4 % (parity)**. P1's per-frame pointer dedup
+already removed most per-sprite uploads on this workload, so the atlas is
+neutral here — it wins on palfx-heavy scenes (many palette mutations) and is
+the infrastructure for load-time pre-pack (Go uploads palettes at character
+load; that would be the next step if palfx scenes show up in profiling).
+
+Remaining: P3 state-sorted batching / instancing.

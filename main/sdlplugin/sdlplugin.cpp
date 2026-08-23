@@ -73,6 +73,18 @@ static GLint g_gl33s_uColor   = -1;
 static GLint g_gl33s_uAlpha   = -1;
 static GLint g_gl33s_uProjMat = -1;
 
+// Palette atlas (modern path): palettes are packed one-per-row (256×1 each) in
+// a 256×256 RGBA texture, sampled through the palUV uniform. Keyed by content
+// hash so a character's stable palettes upload ONCE and persist across frames,
+// instead of a glTexSubImage1D per sprite (P2).
+#define GL33_PAL_ATLAS_SLOTS 256
+static GLuint g_gl33_palatlas    = 0;
+static GLint  g_gl33_uPalUV      = -1;
+static int    g_lastPalSlot      = 0; // last row used (ppal==null reuses it)
+static int    g_palSlotClock     = 0; // monotonic LRU use counter
+struct PalSlot { uint32_t hash; int lastUse; };
+static PalSlot g_palSlot[GL33_PAL_ATLAS_SLOTS];
+
 // Flat-color program (MugenFillGl) – shares g_gl33_palVS
 static GLuint g_gl33_flatProg    = 0;
 static GLint  g_gl33flat_uColor   = -1;
@@ -730,18 +742,20 @@ static const char* g_gl33_palVS =
 	"}\n";
 
 // Palette-indexed sprite fragment shader (GL 3.3+)
+// palUV = (u offset, v row, u scale, 0); palette rows live in the 256×256 atlas.
 static const char* g_gl33_palFS =
 	"#version 330 core\n"
 	"in vec2 vUV;\n"
 	"uniform sampler2D tex;\n"
-	"uniform sampler1D pal;\n"
+	"uniform sampler2D pal;\n"
+	"uniform vec4 palUV;\n"
 	"uniform int msk;\n"
 	"uniform float a;\n"
 	"out vec4 FragColor;\n"
 	"void main(){\n"
 	"  float r = texture(tex, vUV).r;\n"
 	"  if(int(255.0*r) == msk) discard;\n"
-	"  vec4 c = texture(pal, r*0.9961);\n"
+	"  vec4 c = texture(pal, vec2(palUV.x + palUV.z*r*0.9961, palUV.y));\n"
 	"  FragColor = vec4(c.b, c.g, c.r, a);\n"
 	"}\n";
 
@@ -798,14 +812,15 @@ static const char* g_gl46_palFS =
 	"#version 460 core\n"
 	"in vec2 vUV;\n"
 	"layout(binding=0) uniform sampler2D tex;\n"
-	"layout(binding=1) uniform sampler1D pal;\n"
+	"layout(binding=1) uniform sampler2D pal;\n"
+	"uniform vec4 palUV;\n"
 	"layout(location=4) uniform int msk;\n"
 	"layout(location=5) uniform float a;\n"
 	"out vec4 FragColor;\n"
 	"void main(){\n"
 	"  float r = texture(tex, vUV).r;\n"
 	"  if(int(255.0*r) == msk) discard;\n"
-	"  vec4 c = texture(pal, r*0.9961);\n"
+	"  vec4 c = texture(pal, vec2(palUV.x + palUV.z*r*0.9961, palUV.y));\n"
 	"  FragColor = vec4(c.b, c.g, c.r, a);\n"
 	"}\n";
 
@@ -883,6 +898,7 @@ static bool initGL33Shaders()
 	g_gl33_uPal     = glGetUniformLocation(g_gl33_paletteProg, "pal");
 	g_gl33_uMask    = glGetUniformLocation(g_gl33_paletteProg, "msk");
 	g_gl33_uAlpha   = glGetUniformLocation(g_gl33_paletteProg, "a");
+	g_gl33_uPalUV   = glGetUniformLocation(g_gl33_paletteProg, "palUV");
 	INIT_LOG("  Palette shader: program=%u", g_gl33_paletteProg);
 
 	// Full-color program
@@ -958,6 +974,19 @@ static bool initGL33Shaders()
 		INIT_LOG("  VAO=%u VBO=%u created", g_gl33_vao, g_gl33_vbo);
 	}
 
+	// Palette atlas: 256 (color index) × 256 (palette slots), NEAREST. Populated
+	// lazily by gl33PalSlotFor during rendering (one glTexSubImage2D row on miss).
+	glGenTextures(1, &g_gl33_palatlas);
+	glBindTexture(GL_TEXTURE_2D, g_gl33_palatlas);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, GL33_PAL_ATLAS_SLOTS, 0,
+		GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	INIT_LOG("  Palette atlas: 256x%d created", (int)GL33_PAL_ATLAS_SLOTS);
+
 	return true;
 }
 
@@ -967,6 +996,7 @@ static void cleanupGL33Shaders()
 	if (g_gl33_fullcolorProg) { glDeleteProgram(g_gl33_fullcolorProg); g_gl33_fullcolorProg = 0; }
 	if (g_gl33_shadowProg)    { glDeleteProgram(g_gl33_shadowProg); g_gl33_shadowProg = 0; }
 	if (g_gl33_flatProg)      { glDeleteProgram(g_gl33_flatProg); g_gl33_flatProg = 0; }
+	if (g_gl33_palatlas)      { glDeleteTextures(1, &g_gl33_palatlas); g_gl33_palatlas = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
 	g_useModernGL = false;
@@ -1057,6 +1087,42 @@ static void glBlendFuncCached(GLenum src, GLenum dst)
 	glBlendFunc(src, dst);
 	g_glCache.blendSrc = src;
 	g_glCache.blendDst = dst;
+}
+
+// ---------------------------------------------------------------------------
+// Palette atlas (P2)  –  palettes are rows of the 256×256 atlas, keyed by a
+// 1 KB content hash (FNV-1a). A stable palette uploads once, then every sprite
+// that uses it just sets palUV – no per-sprite glTexSubImage.
+// ---------------------------------------------------------------------------
+static uint32_t gl33PalHash(const uint8_t* p)
+{
+	uint32_t h = 2166136261u;
+	for (int i = 0; i < 1024; i++) { h ^= p[i]; h *= 16777619u; }
+	return h;
+}
+
+// Assign the atlas row for a palette; uploads it only when the content is new.
+// LRU eviction (unused slots have lastUse==0 and are evicted first).
+static int gl33PalSlotFor(const uint8_t* ppal)
+{
+	const uint32_t h = gl33PalHash(ppal);
+	int i;
+	for (i = 0; i < GL33_PAL_ATLAS_SLOTS; i++)
+		if (g_palSlot[i].lastUse != 0 && g_palSlot[i].hash == h)
+		{
+			g_palSlot[i].lastUse = ++g_palSlotClock;
+			return i;
+		}
+	int evict = 0;
+	for (i = 1; i < GL33_PAL_ATLAS_SLOTS; i++)
+		if (g_palSlot[i].lastUse < g_palSlot[evict].lastUse) evict = i;
+	g_palSlot[evict].hash = h;
+	g_palSlot[evict].lastUse = ++g_palSlotClock;
+	glActiveTextureCached(GL_TEXTURE1);
+	glBindTex2dCached(g_gl33_palatlas);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, evict, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
+	return evict;
 }
 
 // ---------------------------------------------------------------------------
@@ -6225,26 +6291,48 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	glUseProgramCached(prog, modern);
 	if(!modern) glUniform1iARB(g_uniformPal, 1); // samplers bound at init for modern
 	glUniform1iARB(modern ? g_gl33_uMask : g_uniformMsk, mask);
-	// Palette texture (unit 1) – dedup re-upload: a character's sprites share one
-	// palette, so it typically changes once per character, not once per sprite.
-	glActiveTextureCached(GL_TEXTURE1);
-	if (!g_paltexInitialized) {
-		glGenTextures(1, &g_paltex);
-		glBindTexture(GL_TEXTURE_1D, g_paltex);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage1D(
-			GL_TEXTURE_1D, 0, GL_RGBA, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
-		glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		g_paltexInitialized = true;
-		g_glCache.palPtr = ppal;
-	} else if (ppal && g_glCache.palPtr != ppal) {
+	if (modern) {
+		// Palette atlas (unit 1): stable palettes upload once and persist across
+		// frames; each sprite just sets palUV to its row. Consecutive sprites of a
+		// character share one palette pointer, so the 1 KB hash runs only on the
+		// first sprite per distinct palette per frame (g_glCache.palPtr resets each
+		// frame); across frames the content hash catches in-place palfx changes.
+		int slot;
+		if (ppal && g_glCache.palPtr == ppal)
+			slot = g_lastPalSlot;
+		else
+		{
+			slot = ppal ? gl33PalSlotFor(ppal) : g_lastPalSlot;
+			g_glCache.palPtr = ppal;
+		}
+		g_lastPalSlot = slot;
+		glActiveTextureCached(GL_TEXTURE1);
+		glBindTex2dCached(g_gl33_palatlas);
+		glUniform4f(g_gl33_uPalUV, 0.0f,
+			(float)(slot + 0.5) / (float)GL33_PAL_ATLAS_SLOTS, 1.0f, 0.0f);
+	} else {
+		// Legacy palette texture (unit 1) – dedup re-upload: a character's sprites
+		// share one palette, so it typically changes once per character, not once
+		// per sprite.
+		glActiveTextureCached(GL_TEXTURE1);
+		if (!g_paltexInitialized) {
+			glGenTextures(1, &g_paltex);
+			glBindTexture(GL_TEXTURE_1D, g_paltex);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexImage1D(
+				GL_TEXTURE_1D, 0, GL_RGBA, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
+			glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			g_paltexInitialized = true;
+			g_glCache.palPtr = ppal;
+		} else if (ppal && g_glCache.palPtr != ppal) {
+			glBindTex1dCached(g_paltex);
+			glTexSubImage1D(
+				GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
+			g_glCache.palPtr = ppal;
+		}
 		glBindTex1dCached(g_paltex);
-		glTexSubImage1D(
-			GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
-		g_glCache.palPtr = ppal;
 	}
-	glBindTex1dCached(g_paltex);
 	glActiveTextureCached(GL_TEXTURE0);
 	glBindTex2dCached(texid);
 	renderMugenGl(
