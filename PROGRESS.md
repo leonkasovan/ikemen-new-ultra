@@ -249,6 +249,47 @@ R2 at 87% of R0 (SDL2) vs pre-wiring 71%. Modest gain because the demo's GL
 path is small; the main bottleneck is texture-bind + palette-upload, not buffer
 uploads. Draw-call-bound scenes (dense tiling, many tiled sprites) benefit more.
 
+### P5 — Texture pool (implemented)
+
+**Files changed**: `main/sdlplugin/sdlplugin.cpp` (+120 lines)
+
+Recycles deleted GL texture objects by `(w, h, internalFmt)` instead of calling
+`glDeleteTextures`. New textures of matching dimensions reuse pool entries via
+`glTexSubImage2D`, avoiding `glGenTextures` + `glTexImage2D` allocation churn.
+
+- **Pool**: 512-slot fixed array, linear scan for size match. Deleted textures
+  return to pool; pool-full triggers actual `glDeleteTextures`.
+- **Dimension tracking**: `texDimLookup` table (texid → w, h, fmt) lets
+  `DeleteGlTexture` recycle without the caller passing dimensions.
+- **Cleanup**: `texPoolDrain()` called from `cleanupGL33Shaders()` on shutdown.
+- **Stats**: Periodic `ASSET_LOG` of pool hits/misses/recycles when perf monitor
+  is enabled.
+
+15 s / 640×480 / kfm vs kfm / Debug, single session (`bench_p5_R*.log`):
+
+| Renderer | Frames | FPS | Peak Private |
+|----------|--------|-----|-------------|
+| 0 SDL2 | 732 | 48.8 | 159.3 MB |
+| 1 GL 2.1 | 660 | 44.0 | 359.8 MB |
+| 2 GL 3.3 | 658 | 43.9 | 343.1 MB |
+| 3 GL 4.6 | 657 | 43.8 | 344.2 MB |
+| 4 DirectX | 690 | 46.0 | 145.1 MB |
+
+P5 is neutral on the demo workload (session variance dominates). The pool's
+benefit is reduced `glGenTextures`/`glDeleteTextures` churn during character
+switching. The +189 MB GL memory anomaly is inherent to per-sprite
+`glTexImage2D` driver metadata overhead — fully addressing it requires texture
+atlas packing (combine hundreds of small sprites into one or a few large GL
+textures), which is a larger refactor touching the SSZ render loop.
+
+### Cumulative P1→P5 improvements
+
+| Renderer | Baseline (fr) | After P5 (fr) | Δ total |
+|----------|---------------|---------------|----------|
+| 1 GL 2.1 | 473 | 660 | +39.5% |
+| 2 GL 3.3 | 480 | 658 | +37.1% |
+| 3 GL 4.6 | 450 | 657 | +46.0% |
+
 ---
 
 ## Open Issues

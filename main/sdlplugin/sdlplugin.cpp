@@ -132,6 +132,103 @@ struct GlCache
 	}
 };
 
+// ---------------------------------------------------------------------------
+// P5 — GL texture pool: recycles texture objects by (w, h, format).
+// Deleted textures return to the pool; new textures of matching dimensions
+// reuse pool entries via glTexSubImage2D instead of glGenTextures + glTexImage2D.
+// This reduces driver metadata overhead from per-sprite texture objects.
+// ---------------------------------------------------------------------------
+struct GlTexPoolEntry {
+	GLuint id;
+	int32_t w, h;
+	GLenum internalFmt;
+};
+static const int GL_TEX_POOL_MAX = 512;
+static GlTexPoolEntry g_texPool[GL_TEX_POOL_MAX];
+static int g_texPoolCount = 0;
+
+// texid → (w, h, fmt) mapping so DeleteGlTexture can recycle properly.
+// Linear-probe open-addressed table; texids are small sequential integers.
+struct GlTexDim {
+	GLuint id;
+	int32_t w, h;
+	GLenum internalFmt;
+};
+static const int GL_TEX_DIM_CAP = 4096;
+static GlTexDim g_texDims[GL_TEX_DIM_CAP];
+static int g_texDimCount = 0;
+static int g_texPoolHits = 0;
+static int g_texPoolMisses = 0;
+static int g_texPoolRecycles = 0; // total textures served from pool
+
+static void texDimRegister(GLuint id, int32_t w, int32_t h, GLenum fmt)
+{
+	if (g_texDimCount < GL_TEX_DIM_CAP)
+	{
+		g_texDims[g_texDimCount].id = id;
+		g_texDims[g_texDimCount].w = w;
+		g_texDims[g_texDimCount].h = h;
+		g_texDims[g_texDimCount].internalFmt = fmt;
+		g_texDimCount++;
+	}
+}
+
+static bool texDimLookup(GLuint id, int32_t& w, int32_t& h, GLenum& fmt)
+{
+	for (int i = 0; i < g_texDimCount; i++)
+		if (g_texDims[i].id == id)
+		{
+			w = g_texDims[i].w;
+			h = g_texDims[i].h;
+			fmt = g_texDims[i].internalFmt;
+			// Remove by swap-with-last
+			g_texDims[i] = g_texDims[--g_texDimCount];
+			return true;
+		}
+	return false;
+}
+
+// Try to acquire a pooled texture of given dimensions/format.
+// Returns 0 if no match (caller must create new).
+static GLuint texPoolAcquire(int32_t w, int32_t h, GLenum internalFmt)
+{
+	for (int i = 0; i < g_texPoolCount; i++)
+		if (g_texPool[i].w == w && g_texPool[i].h == h &&
+			g_texPool[i].internalFmt == internalFmt)
+		{
+			GLuint id = g_texPool[i].id;
+			g_texPool[i] = g_texPool[--g_texPoolCount];
+			g_texPoolHits++;
+			g_texPoolRecycles++;
+			return id;
+		}
+	g_texPoolMisses++;
+	return 0;
+}
+
+// Return a texture to the pool for reuse.
+static void texPoolRelease(GLuint id, int32_t w, int32_t h, GLenum internalFmt)
+{
+	if (g_texPoolCount < GL_TEX_POOL_MAX)
+	{
+		g_texPool[g_texPoolCount++] = {id, w, h, internalFmt};
+	}
+	else
+	{
+		// Pool full — actually delete this texture
+		glDeleteTextures(1, &id);
+	}
+}
+
+// Drain all pooled textures (called on shutdown).
+static void texPoolDrain()
+{
+	for (int i = 0; i < g_texPoolCount; i++)
+		glDeleteTextures(1, &g_texPool[i].id);
+	g_texPoolCount = 0;
+	g_texDimCount = 0;
+}
+
 int32_t ransuutane = 0;
 SDL_Window* g_window = nullptr;
 SDL_Renderer* g_renderer = nullptr;
@@ -1040,6 +1137,7 @@ static bool initGL33Shaders()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	INIT_LOG("  Palette atlas: 256x%d created", (int)GL33_PAL_ATLAS_SLOTS);
+	INIT_LOG("  P5: texture pool (%d slots) ready", GL_TEX_POOL_MAX);
 
 	return true;
 }
@@ -1067,6 +1165,8 @@ static void cleanupGL33Shaders()
 	if (g_gl33_palatlas)      { glDeleteTextures(1, &g_gl33_palatlas); g_gl33_palatlas = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
+	// P5: drain texture pool
+	texPoolDrain();
 	g_useModernGL = false;
 }
 
@@ -5728,8 +5828,19 @@ bool SSZ_STDCALL RenderMugenShadow(Reference* pluginbuf, int32_t rle,
 
 uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 {
-	// ASSET_LOG("Loading 8-bit texture: %dx%d", w, h);
-	uint32_t texid;
+	// P5: Try pool first — reuse a texture object of matching dimensions.
+	uint32_t texid = texPoolAcquire(w, h, GL_LUMINANCE);
+	if (texid)
+	{
+		// Reuse pooled texture — re-upload pixel data via glTexSubImage2D.
+		glBindTexture(GL_TEXTURE_2D, texid);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexSubImage2D(
+			GL_TEXTURE_2D, 0, 0, 0,
+			w, h, GL_LUMINANCE, GL_UNSIGNED_BYTE, ppxl);
+		return texid;
+	}
+	// Pool miss — create a new texture object.
 	glGenTextures(1, &texid);
 	glBindTexture(GL_TEXTURE_2D, texid);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -5740,6 +5851,7 @@ uint32_t SSZ_STDCALL Load8bitTexture(int32_t h, int32_t w, uint8_t* ppxl)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	texDimRegister(texid, w, h, GL_LUMINANCE);
 	return texid;
 }
 
@@ -5783,17 +5895,37 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
 		png_read_image(png_ptr, pp);
 		delete [] pp;
-		glGenTextures(1, &texid);
-		glBindTexture(GL_TEXTURE_2D, texid);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(
-			GL_TEXTURE_2D, 0, GL_RGBA,
-			width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-		delete [] buff;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		// P5: Try pool first — reuse a texture object of matching dimensions.
+		texid = texPoolAcquire(width, height, GL_RGBA);
+		if (texid)
+		{
+			glBindTexture(GL_TEXTURE_2D, texid);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexSubImage2D(
+				GL_TEXTURE_2D, 0, 0, 0,
+				width, height, GL_RGBA, GL_UNSIGNED_BYTE, buff);
+			delete [] buff;
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		}
+		else
+		{
+			// Pool miss — create a new texture object.
+			glGenTextures(1, &texid);
+			glBindTexture(GL_TEXTURE_2D, texid);
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+			glTexImage2D(
+				GL_TEXTURE_2D, 0, GL_RGBA,
+				width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
+			delete [] buff;
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+			texDimRegister(texid, width, height, GL_RGBA);
+		}
 	}
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 	return texid;
@@ -5801,7 +5933,14 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 
 void SSZ_STDCALL DeleteGlTexture(uint32_t texid)
 {
-	if(texid != 0) glDeleteTextures(1, &texid);
+	if(texid == 0) return;
+	// P5: Return texture to pool for reuse instead of deleting.
+	int32_t w = 0, h = 0;
+	GLenum fmt = 0;
+	if (texDimLookup(texid, w, h, fmt))
+		texPoolRelease(texid, w, h, fmt);
+	else
+		glDeleteTextures(1, &texid); // Unknown texture — actual delete
 }
 
 void SSZ_STDCALL GlSwapBuffers()
@@ -5859,6 +5998,13 @@ void SSZ_STDCALL GlSwapBuffers()
 		glMatrixMode(GL_MODELVIEW);
 	}
 	g_orthoProjectionSet = true;
+	// P5: Log texture pool stats periodically (every 300 frames ≈ 5 s at 60 FPS).
+	if (g_perfMonitorEnabled && (g_perfCounters.totalFrames % 300) == 0 && g_perfCounters.totalFrames > 0)
+	{
+		ASSET_LOG("P5: tex pool %d/%d entries, %d hits, %d misses, %d recycles",
+			g_texPoolCount, GL_TEX_POOL_MAX,
+			g_texPoolHits, g_texPoolMisses, g_texPoolRecycles);
+	}
 	// Begin next frame perf tracking
 	g_perfCounters.frameStartTick = SDL_GetTicks();
 	perfFrameBegin(g_perfCounters);

@@ -178,4 +178,40 @@ modest because the demo's GL path is small and the main bottleneck is
 texture-bind + palette-upload, not buffer uploads. Draw-call-bound scenes
 (dense tiling, many sprites with many tiles) benefit more.
 
-Remaining: P5 texture pooling — not measured as impactful on the demo.
+Remaining: P5 texture pooling.
+
+### P5 — texture pool (implemented)
+
+`main/sdlplugin/sdlplugin.cpp`: deleted GL textures return to a 512-slot pool
+keyed by `(w, h, internalFmt)` instead of calling `glDeleteTextures`. New
+textures of matching dimensions reuse pool entries via `glTexSubImage2D`,
+avoiding `glGenTextures` + `glTexImage2D` allocation churn. A `texDimLookup`
+table (texid → dimensions) lets `DeleteGlTexture` recycle without the caller
+passing dimensions. Pool drained on `cleanupGL33Shaders()`.
+
+15 s / 640×480 / kfm vs kfm / Debug (single session, `bench_p5_R*.log`):
+
+| Renderer | Frames | FPS | Peak Private |
+|----------|--------|-----|-------------|
+| 0 SDL2 | 732 | 48.8 | 159.3 MB |
+| 1 GL 2.1 | 660 | 44.0 | 359.8 MB |
+| 2 GL 3.3 | 658 | 43.9 | 343.1 MB |
+| 3 GL 4.6 | 657 | 43.8 | 344.2 MB |
+| 4 DirectX | 690 | 46.0 | 145.1 MB |
+
+P5 pool recycling is neutral on this workload (session-to-session variance
+dominates). The pool's benefit is reduced `glGenTextures`/`glDeleteTextures`
+churn and driver metadata reuse, which helps during character-switching
+scenarios where textures are rapidly deleted and re-created. The +189 MB
+GL memory anomaly is inherent to per-sprite `glTexImage2D` driver metadata
+overhead — fully addressing it requires texture atlas packing (combine
+hundreds of small sprites into one or a few large GL textures), which is
+a larger refactor touching the SSZ render loop.
+
+### Cumulative P1→P5 results
+
+| Renderer | Baseline (fr) | After P5 (fr) | Δ total |
+|----------|---------------|---------------|----------|
+| 1 GL 2.1 | 473 | 660 | +39.5% |
+| 2 GL 3.3 | 480 | 658 | +37.1% |
+| 3 GL 4.6 | 450 | 657 | +46.0% |
