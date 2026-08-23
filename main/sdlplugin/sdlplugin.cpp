@@ -82,6 +82,25 @@ static GLint  g_gl33flat_uProjMat = -1;
 // GL 2.1 always uses the legacy ARB path.
 static bool g_useModernGL = false;
 
+// GL dirty-state cache (see glUseProgramCached et al. below). Reset per frame.
+struct GlCache
+{
+	GLuint         prog = 0;     // bound program (0 = none)
+	bool           progCore = false; // true if bound via glUseProgram (core), else ARB
+	GLuint         tex2d = 0;    // 2D texture bound on unit 0
+	GLuint         tex1d = 0;    // 1D palette texture bound on unit 1
+	GLint          activeUnit = 0;
+	GLenum         blendSrc = 0, blendDst = 0;
+	const uint8_t* palPtr = nullptr; // last palette uploaded this frame (dedup)
+	void reset()
+	{
+		prog = 0; progCore = false;
+		tex2d = 0; tex1d = 0; activeUnit = 0;
+		blendSrc = blendDst = 0;
+		palPtr = nullptr;
+	}
+};
+
 int32_t ransuutane = 0;
 SDL_Window* g_window = nullptr;
 SDL_Renderer* g_renderer = nullptr;
@@ -961,6 +980,8 @@ static inline bool useModernRender()
 		&& (g_rendererType == RENDERER_OPENGL_3_3 || g_rendererType == RENDERER_OPENGL_4_6);
 }
 
+static GlCache g_glCache;
+
 // Upload the frame projection to all modern programs.
 // Equivalent to legacy glOrtho(0,w,0,h,-1,1) + glTranslated(0,h,0):
 // clip.y = (2/h)*(y+h) - 1, so SSZ top-left origin maps to screen correctly.
@@ -988,6 +1009,54 @@ static void gl33SetFrameProjection()
 		glUniformMatrix4fv(pl[i].loc, 1, GL_FALSE, m);
 	}
 	glUseProgram(0);
+	g_glCache.prog = 0; // gl33SetFrameProjection leaves no program bound
+}
+
+// ---------------------------------------------------------------------------
+// GL dirty-state cache  –  skips redundant driver calls when consecutive
+// sprites repeat the same program / texture / blend / texture-unit state.
+// All GL state changes in the render path MUST go through these helpers so
+// the cache stays authoritative.  Reset at frame boundary (GlSwapBuffers).
+// ---------------------------------------------------------------------------
+
+static void glUseProgramCached(GLuint prog, bool core)
+{
+	if (g_glCache.prog == prog && g_glCache.progCore == core) return;
+	if (core) glUseProgram(prog);
+	else      glUseProgramObjectARB((GLhandleARB)prog);
+	g_glCache.prog = prog;
+	g_glCache.progCore = core;
+	g_perfCounters.shaderSwitches++;
+}
+
+static void glActiveTextureCached(GLenum unit)
+{
+	if (g_glCache.activeUnit == unit) return;
+	glActiveTexture(unit);
+	g_glCache.activeUnit = unit;
+}
+
+static void glBindTex2dCached(GLuint tex)
+{
+	if (g_glCache.tex2d == tex) return;
+	glBindTexture(GL_TEXTURE_2D, tex);
+	g_glCache.tex2d = tex;
+	g_perfCounters.textureBinds++;
+}
+
+static void glBindTex1dCached(GLuint tex)
+{
+	if (g_glCache.tex1d == tex) return;
+	glBindTexture(GL_TEXTURE_1D, tex);
+	g_glCache.tex1d = tex;
+}
+
+static void glBlendFuncCached(GLenum src, GLenum dst)
+{
+	if (g_glCache.blendSrc == src && g_glCache.blendDst == dst) return;
+	glBlendFunc(src, dst);
+	g_glCache.blendSrc = src;
+	g_glCache.blendDst = dst;
 }
 
 // ---------------------------------------------------------------------------
@@ -5611,6 +5680,9 @@ void SSZ_STDCALL GlSwapBuffers()
 
 	SDL_GL_SwapWindow(g_window);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// Reset per-frame GL state cache: palette dedup must not leak a stale
+	// pointer across frames (in-place palette mutation would be missed).
+	g_glCache.reset();
 	// [OPT] Set up ortho projection once per frame instead of per sprite.
 	// All render calls (RenderMugenGl, RenderMugenGlFc, RenderMugenGlFcS,
 	// MugenFillGl) use the same transform.
@@ -6010,6 +6082,49 @@ void drawTile(
 	}
 }
 
+// Shared preamble for the three GL sprite entry points (RenderMugenGl/Fc/FcS).
+// Normalizes the SSZ-side args, sets scissor, and skips off-screen/garbage.
+// Returns false if the sprite should be skipped.
+static bool glSpriteBegin(
+	float& x, float& y, float& rcy, float& rcx, float& vscl, float& yscl,
+	float& angle, float xtopscl, float xbotscl, float rasterxadd,
+	SDL_Rect* tile, SDL_Rect* rect, SDL_Rect& r, SDL_Rect& tl,
+	uint32_t texid, SDL_Rect* dstr)
+{
+	g_perfCounters.spriteCount++;
+	g_perfCounters.drawCalls++;
+	if (texid == 0
+		|| _finite(x + y + rcx + rcy + xtopscl + xbotscl + yscl + vscl + rasterxadd + angle) == 0)
+	{
+		return false;
+	}
+	if (vscl < 0.0f)
+	{
+		vscl *= -1;
+		yscl *= -1;
+		angle *= -1;
+	}
+	r = *rect;
+	tl = *tile;
+	if (tl.x > 0) tl.x -= r.w;
+	if (tl.y > 0) tl.y -= r.h;
+	if (tl.w == 0) tl.x = 0;
+	if (tl.h == 0) tl.y = 0;
+	if (xtopscl >= 0) x = -x;
+	x += rcx;
+	rcy = -rcy;
+	if (yscl < 0) y = -y;
+	y += rcy;
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(dstr->x, g_h - (dstr->y + dstr->h), dstr->w, dstr->h);
+	return true;
+}
+
+static void glSpriteEnd()
+{
+	glDisable(GL_SCISSOR_TEST);
+}
+
 // [OPT] Added alphaUniform parameter - uses cached uniform location instead of
 // calling glGetUniformLocation(shader, "a") on every alpha branch (was 6-7 lookups/sprite)
 void renderMugenGl(
@@ -6041,26 +6156,26 @@ void renderMugenGl(
 	}
 	if(alpha == -1){
 		glUniform1fARB(alphaUniform, 1.0);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE);
 		drawTile(
 			r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 			angle, rcx, rcy, 1, 1, 1, 1);
 	}else if(alpha == -2){
 		glUniform1fARB(alphaUniform, 1.0);
-		glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
+		glBlendFuncCached(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
 		drawTile(
 			r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 			angle, rcx, rcy, 1, 1, 1, 1);
 	}else if(alpha <= 0){
 	}else if(alpha < 255){
 		glUniform1fARB(alphaUniform, (GLfloat)alpha / 255.0f);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		drawTile(
 			r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 			angle, rcx, rcy, 1, 1, 1, (GLfloat)alpha / 255.0f);
 	}else if(alpha < 512){
 		glUniform1fARB(alphaUniform, 1.0);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		drawTile(
 			r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 			angle, rcx, rcy, 1, 1, 1, 1);
@@ -6069,14 +6184,14 @@ void renderMugenGl(
 		int dst = (alpha & 0x3fc00) >> 10;
 		if(dst < 255){
 			glUniform1fARB(alphaUniform, 1.0f - (GLfloat)dst / 255.0f);
-			glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+			glBlendFuncCached(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
 			drawTile(
 				r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 				angle, rcx, rcy, 1, 1, 1, 1.0f - (GLfloat)dst / 255.0f);
 		}
 		if(src > 0){
 			glUniform1fARB(alphaUniform, (GLfloat)src / 255.0f);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			glBlendFuncCached(GL_SRC_ALPHA, GL_ONE);
 			drawTile(
 				r.w, r.h, x, y, tl, xtopscl, xbotscl, yscl, vscl, rasterxadd,
 				angle, rcx, rcy, 1, 1, 1, (GLfloat)src / 255.0f);
@@ -6100,50 +6215,20 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	// Guard: non-GL renderer should never reach here (SSZ conditionals prevent it)
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
-	g_perfCounters.spriteCount++;
-	g_perfCounters.drawCalls++;
-	g_perfCounters.textureBinds++;
-	g_perfCounters.shaderSwitches++;
-	if(
-		texid == 0
-		|| _finite(
-			x+y+rcx+rcy+xtopscl+xbotscl+yscl+vscl+rasterxadd+angle) == 0)
-	{
+	SDL_Rect r, tl;
+	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
+			tile, rect, r, tl, texid, dstr))
 		return false;
-	}
-	if(vscl < 0.0f){
-		vscl *= -1;
-		yscl *= -1;
-		angle *= -1;
-	}
-	SDL_Rect r = *rect, tl = *tile;
-	if(tl.x > 0) tl.x -= r.w;
-	if(tl.y > 0) tl.y -= r.h;
-	if(tl.w == 0) tl.x = 0;
-	if(tl.h == 0) tl.y = 0;
-	if(xtopscl >= 0) x = -x;
-	x += rcx;
-	rcy = -rcy;
-	if(yscl < 0) y = -y;
-	y += rcy;
 	bool modern = useModernRender();
-	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_paletteProg : g_mugenshader;
-	GLint alphaLoc  = modern ? g_gl33_uAlpha : g_uniformAlpha;
-	if(modern) glUseProgram((GLuint)prog);
-	else       glUseProgramObjectARB(prog);
+	GLuint prog = modern ? g_gl33_paletteProg : (GLuint)g_mugenshader;
+	GLint alphaLoc = modern ? g_gl33_uAlpha : g_uniformAlpha;
+	glUseProgramCached(prog, modern);
 	if(!modern) glUniform1iARB(g_uniformPal, 1); // samplers bound at init for modern
 	glUniform1iARB(modern ? g_gl33_uMask : g_uniformMsk, mask);
-	glEnable(GL_TEXTURE_1D);
-	glEnable(GL_TEXTURE_2D);
-	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(dstr->x, g_h - (dstr->y+dstr->h), dstr->w, dstr->h);
-	glActiveTexture(GL_TEXTURE1);
-	// [OPT] Reuse palette texture object via glTexSubImage1D instead of
-	// delete+gen+create cycle every draw call. First call allocates, subsequent
-	// calls only upload the 1 KB palette data without GPU-side reallocation.
-	if (ppal) {
-		if(!g_paltexInitialized) {
+	// Palette texture (unit 1) – dedup re-upload: a character's sprites share one
+	// palette, so it typically changes once per character, not once per sprite.
+	glActiveTextureCached(GL_TEXTURE1);
+	if (!g_paltexInitialized) {
 		glGenTextures(1, &g_paltex);
 		glBindTexture(GL_TEXTURE_1D, g_paltex);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -6151,26 +6236,21 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 			GL_TEXTURE_1D, 0, GL_RGBA, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
 		glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			g_paltexInitialized = true;
-		} else {
-			glBindTexture(GL_TEXTURE_1D, g_paltex);
-			glTexSubImage1D(
-				GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
-		}
+		g_paltexInitialized = true;
+		g_glCache.palPtr = ppal;
+	} else if (ppal && g_glCache.palPtr != ppal) {
+		glBindTex1dCached(g_paltex);
+		glTexSubImage1D(
+			GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, ppal);
+		g_glCache.palPtr = ppal;
 	}
-	else {
-		glBindTexture(GL_TEXTURE_1D, g_paltex);
-	}
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texid);
+	glBindTex1dCached(g_paltex);
+	glActiveTextureCached(GL_TEXTURE0);
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, prog, alphaLoc);
-	glDisable(GL_SCISSOR_TEST);
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_TEXTURE_1D);
-	if(modern) glUseProgram(0);
-	else       glUseProgramObjectARB(0);
+		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
+	glSpriteEnd();
 	return true;
 }
 
@@ -6183,53 +6263,24 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 {
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
-	g_perfCounters.spriteCount++;
-	g_perfCounters.drawCalls++;
-	g_perfCounters.textureBinds++;
-	g_perfCounters.shaderSwitches++;
-	if(
-		texid == 0
-		|| _finite(
-			x+y+rcx+rcy+xtopscl+xbotscl+yscl+vscl+rasterxadd+angle) == 0)
-	{
+	SDL_Rect r, tl;
+	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
+			tile, rect, r, tl, texid, dstr))
 		return false;
-	}
-	if(vscl < 0.0f){
-		vscl *= -1;
-		yscl *= -1;
-		angle *= -1;
-	}
-	SDL_Rect r = *rect, tl = *tile;
-	if(tl.x > 0) tl.x -= r.w;
-	if(tl.y > 0) tl.y -= r.h;
-	if(tl.w == 0) tl.x = 0;
-	if(tl.h == 0) tl.y = 0;
-	if(xtopscl >= 0) x = -x;
-	x += rcx;
-	rcy = -rcy;
-	if(yscl < 0) y = -y;
-	y += rcy;
 	bool modern = useModernRender();
-	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_fullcolorProg : g_mugenshaderFc;
-	GLint alphaLoc  = modern ? g_gl33fc_uAlpha : g_uniformAlphaFc;
-	if(modern) glUseProgram((GLuint)prog);
-	else       glUseProgramObjectARB(prog);
+	GLuint prog = modern ? g_gl33_fullcolorProg : (GLuint)g_mugenshaderFc;
+	GLint alphaLoc = modern ? g_gl33fc_uAlpha : g_uniformAlphaFc;
+	glUseProgramCached(prog, modern);
 	glUniform1iARB(modern ? g_gl33fc_uNeg : g_uniformNeg, neg ? 1 : 0);
 	glUniform1fARB(modern ? g_gl33fc_uGray : g_uniformGray, 1 - color);
 	glUniform3fARB(modern ? g_gl33fc_uAdd : g_uniformAdd, addr, addg, addb);
 	glUniform3fARB(modern ? g_gl33fc_uMul : g_uniformMul, mulr, mulg, mulb);
-	glEnable(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D, texid);
-	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(dstr->x, g_h - (dstr->y+dstr->h), dstr->w, dstr->h);
+	glActiveTextureCached(GL_TEXTURE0);
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, prog, alphaLoc);
-	glDisable(GL_SCISSOR_TEST);
-	glDisable(GL_TEXTURE_2D);
-	if(modern) glUseProgram(0);
-	else       glUseProgramObjectARB(0);
+		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
+	glSpriteEnd();
 	return true;
 }
 
@@ -6241,53 +6292,24 @@ bool SSZ_STDCALL RenderMugenGlFcS(uint32_t color,
 {
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
-	g_perfCounters.spriteCount++;
-	g_perfCounters.drawCalls++;
-	g_perfCounters.textureBinds++;
-	g_perfCounters.shaderSwitches++;
-	if(
-		texid == 0
-		|| _finite(
-			x+y+rcx+rcy+xtopscl+xbotscl+yscl+vscl+rasterxadd+angle) == 0)
-	{
+	SDL_Rect r, tl;
+	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
+			tile, rect, r, tl, texid, dstr))
 		return false;
-	}
-	if(vscl < 0.0f){
-		vscl *= -1;
-		yscl *= -1;
-		angle *= -1;
-	}
-	SDL_Rect r = *rect, tl = *tile;
-	if(tl.x > 0) tl.x -= r.w;
-	if(tl.y > 0) tl.y -= r.h;
-	if(tl.w == 0) tl.x = 0;
-	if(tl.h == 0) tl.y = 0;
-	if(xtopscl >= 0) x = -x;
-	x += rcx;
-	rcy = -rcy;
-	if(yscl < 0) y = -y;
-	y += rcy;
 	bool modern = useModernRender();
-	GLhandleARB prog = modern ? (GLhandleARB)g_gl33_shadowProg : g_mugenshaderFcS;
-	GLint alphaLoc  = modern ? g_gl33s_uAlpha : g_uniformAlphaFcS;
-	if(modern) glUseProgram((GLuint)prog);
-	else       glUseProgramObjectARB(prog);
+	GLuint prog = modern ? g_gl33_shadowProg : (GLuint)g_mugenshaderFcS;
+	GLint alphaLoc = modern ? g_gl33s_uAlpha : g_uniformAlphaFcS;
+	glUseProgramCached(prog, modern);
 	glUniform3fARB(
 		modern ? g_gl33s_uColor : g_uniformColor,
 		(float)(color >> 16 & 0xff) / 255, (float)(color >> 8 & 0xff) / 255,
 		(float)(color & 0xff) / 255);
-	glEnable(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D, texid);
-	// [OPT] GL_DEPTH_TEST disabled persistently in InitMugenGl
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(dstr->x, g_h - (dstr->y+dstr->h), dstr->w, dstr->h);
+	glActiveTextureCached(GL_TEXTURE0);
+	glBindTex2dCached(texid);
 	renderMugenGl(
 		rcy, rcx, alpha, angle, rasterxadd, vscl, yscl, xbotscl, xtopscl,
-		tl, y, x, r, prog, alphaLoc);
-	glDisable(GL_SCISSOR_TEST);
-	glDisable(GL_TEXTURE_2D);
-	if(modern) glUseProgram(0);
-	else       glUseProgramObjectARB(0);
+		tl, y, x, r, (GLhandleARB)prog, alphaLoc);
+	glSpriteEnd();
 	return true;
 }
 
@@ -6302,14 +6324,13 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 		(float)rect.x,           -(float)rect.y,          0.0f, 0.0f,
 		(float)(rect.x+rect.w),  -(float)rect.y,          0.0f, 0.0f,
 	};
-	glUseProgram(g_gl33_flatProg);
+	glUseProgramCached(g_gl33_flatProg, true);
 	glUniform4f(g_gl33flat_uColor, r, g, b, a);
 	glBindVertexArray(g_gl33_vao);
 	glBindBuffer(GL_ARRAY_BUFFER, g_gl33_vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	glBindVertexArray(0);
-	glUseProgram(0);
 	return;
 	}
 	glBegin(GL_QUADS);
@@ -6347,28 +6368,29 @@ void SSZ_STDCALL MugenFillGl(int32_t alpha, uint32_t color, SDL_Rect rect)
 	glOrtho(0, g_w, 0, g_h, -1, 1);
 	glMatrixMode(GL_MODELVIEW);
 	}
+	glUseProgramCached(0, false); // fixed-function fill needs no program bound
 	glPushMatrix();
 	glTranslated(0, g_h, 0);
 	}
 	if(alpha == -1){
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE);
 		rectFillGl(r, g, b, 1.0f, rect);
 	}else if(alpha == -2){
-		glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
+		glBlendFuncCached(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
 		rectFillGl(r, g, b, 1.0f, rect);
 	}else if(alpha <= 0){
 	}else if(alpha < 255){
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		rectFillGl(r, g, b, (GLfloat)alpha / 256.0f, rect);
 	}else if(alpha < 512){
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		rectFillGl(r, g, b, 1.0f, rect);
 	}else{
 		int src = alpha & 0xff;
 		int dst = (alpha & 0x3fc00) >> 10;
-		glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendFuncCached(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
 		rectFillGl(r, g, b, 1.0f - (GLfloat)dst / 255.0f, rect);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glBlendFuncCached(GL_SRC_ALPHA, GL_ONE);
 		rectFillGl(r, g, b, (GLfloat)src / 255.0f, rect);
 	}
 	if(!useModernRender()){
