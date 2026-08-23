@@ -1618,8 +1618,9 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 		// Log D3D device info
 		if (g_directxVersion == 11)
 		{
-			ID3D11Device* d3d11Dev = SDL_RenderGetD3D11Device(g_renderer);
-			INIT_LOG("Direct3D 11 device: %s", d3d11Dev ? "obtained" : "not available");
+		ID3D11Device* d3d11Dev = SDL_RenderGetD3D11Device(g_renderer);
+		INIT_LOG("Direct3D 11 device: %s", d3d11Dev ? "obtained" : "not available");
+
 		}
 		else
 		{
@@ -2815,7 +2816,6 @@ void SSZ_STDCALL Flip()
 		if (g_perfCounters.totalFrames % 60 == 0)
 			MemSampleProcess(g_perfCounters.totalFrames, now);
 	}
-
 	// Begin next frame perf tracking
 	g_perfCounters.frameStartTick = SDL_GetTicks();
 	perfFrameBegin(g_perfCounters);
