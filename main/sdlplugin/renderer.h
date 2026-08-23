@@ -101,6 +101,7 @@ struct PerfCounters
 	uint32_t atlasMisses;   // textures that fell through to pool/individual
 	uint32_t atlasPagesCreated;
 	uint32_t atlasSlotsUsed;
+	uint32_t atlasMaxSlots;
 
 	// Worst sprite info (the single slowest RenderMugenZoom call)
 	double   worstSpriteUs;
@@ -383,8 +384,8 @@ inline void perfPrintFrame(const PerfCounters& pc, const RendererInfo& ri)
 	if (pc.atlasPagesCreated > 0)
 	{
 		uint32_t total = pc.atlasHits + pc.atlasMisses;
-		PERF_LOG("Atlas: pages=%u slots=%u  hits=%u misses=%u (%.0f%% hit)  %.0f slots/page",
-			pc.atlasPagesCreated, pc.atlasSlotsUsed,
+		PERF_LOG("Atlas: pages=%u slots=%u/%u  hits=%u misses=%u (%.0f%% hit)  %.0f slots/page",
+			pc.atlasPagesCreated, pc.atlasSlotsUsed, pc.atlasMaxSlots,
 			pc.atlasHits, pc.atlasMisses,
 			total > 0 ? (double)pc.atlasHits / total * 100.0 : 0.0,
 			pc.atlasPagesCreated > 0 ? (double)pc.atlasSlotsUsed / pc.atlasPagesCreated : 0.0);

@@ -227,7 +227,7 @@ static void texPoolDrain()
 // ---------------------------------------------------------------------------
 static const int ATLAS_PAGE_SIZE  = 512;
 static const int ATLAS_MAX_PAGES = 64;
-static const int ATLAS_MAX_SLOTS = 32768;
+static int g_atlasMaxSlots = 128;  // auto-grows: 128 → 256 → 512 → ...
 static const uint32_t ATLAS_VIRT_BIT = 0x80000000u;
 
 struct AtlasPage {
@@ -243,8 +243,20 @@ struct AtlasSlot {
 };
 static AtlasPage g_atlasPages[2][ATLAS_MAX_PAGES];
 static int g_atlasPageCount[2] = {};
-static AtlasSlot g_atlasSlots[ATLAS_MAX_SLOTS];
+static AtlasSlot* g_atlasSlots = nullptr;
 static int g_atlasSlotCount = 0;
+
+static void atlasGrowSlots()
+{
+	int newCap = g_atlasMaxSlots * 2;
+	AtlasSlot* newSlots = new AtlasSlot[newCap]();
+	if (g_atlasSlots) {
+		memcpy(newSlots, g_atlasSlots, g_atlasSlotCount * sizeof(AtlasSlot));
+		delete[] g_atlasSlots;
+	}
+	g_atlasSlots = newSlots;
+	g_atlasMaxSlots = newCap;
+}
 
 // Per-sprite atlas UV state — set BEFORE drawTile is called.
 // drawQuads bakes these into each vertex's UV coords at push time.
@@ -280,7 +292,8 @@ static uint32_t atlasAlloc(int32_t w, int32_t h, GLenum internalFmt, const void*
 {
 	if (w <= 0 || h <= 0 || !pixels) return 0;
 	if (w > ATLAS_PAGE_SIZE || h > ATLAS_PAGE_SIZE) return 0;
-	if (g_atlasSlotCount >= ATLAS_MAX_SLOTS) return 0;
+	if (!g_atlasSlots) atlasGrowSlots();
+	if (g_atlasSlotCount >= g_atlasMaxSlots) atlasGrowSlots();
 	int fi = atlasFmtIdx(internalFmt);
 	for (int i = 0; i < g_atlasPageCount[fi]; i++) {
 		AtlasPage& p = g_atlasPages[fi][i];
@@ -343,7 +356,8 @@ static void atlasDrain()
 			if (g_atlasPages[fi][i].texId) glDeleteTextures(1, &g_atlasPages[fi][i].texId);
 		g_atlasPageCount[fi] = 0;
 	}
-	g_atlasSlotCount = 0;
+	delete[] g_atlasSlots; g_atlasSlots = nullptr;
+	g_atlasSlotCount = 0; g_atlasMaxSlots = 128;
 }
 
 
@@ -1226,7 +1240,7 @@ static bool initGL33Shaders()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	INIT_LOG("  Palette atlas: 256x%d created", (int)GL33_PAL_ATLAS_SLOTS);
 	INIT_LOG("  P5: texture pool (%d slots) ready", GL_TEX_POOL_MAX);
-	INIT_LOG("  Atlas: %dx%d pages, max %d slots", ATLAS_PAGE_SIZE, ATLAS_PAGE_SIZE, ATLAS_MAX_SLOTS);
+	INIT_LOG("  Atlas: %dx%d pages, initial %d slots (auto-grows)", ATLAS_PAGE_SIZE, ATLAS_PAGE_SIZE, g_atlasMaxSlots);
 
 	return true;
 }
@@ -6086,6 +6100,7 @@ void SSZ_STDCALL GlSwapBuffers()
 	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
 	// Capture atlas stats for perf logging.
 	g_perfCounters.atlasSlotsUsed = g_atlasSlotCount;
+	g_perfCounters.atlasMaxSlots = g_atlasMaxSlots;
 	SDL_GL_SwapWindow(g_window);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// Reset per-frame GL state cache: palette dedup must not leak a stale
@@ -6116,7 +6131,7 @@ void SSZ_STDCALL GlSwapBuffers()
 		ASSET_LOG("Atlas: %d pages (%d LUM + %d RGBA), %d/%d slots, %d hits, %d misses",
 			g_atlasPageCount[0] + g_atlasPageCount[1],
 			g_atlasPageCount[0], g_atlasPageCount[1],
-			g_atlasSlotCount, ATLAS_MAX_SLOTS,
+			g_atlasSlotCount, g_atlasMaxSlots,
 			g_perfCounters.atlasHits, g_perfCounters.atlasMisses);
 	}
 	// Begin next frame perf tracking
