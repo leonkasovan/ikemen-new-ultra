@@ -174,7 +174,6 @@ static void vectorToRefList(
     Reference* fls,
     const std::vector<std::wstring>& items)
 {
-    pu->setSSZFunc();
     fls->releaseanddelete();
     if (items.empty()) return;
     for (size_t i = 0; i < items.size(); i++)
@@ -236,7 +235,6 @@ extern "C" bool SSZ_STDCALL Seek(PluginUtil* pu, int32_t origin, int64_t offset,
 
 extern "C" void SSZ_STDCALL LoadAsciiText(PluginUtil* pu, Reference *pr, Reference r)
 {
-    pu->setSSZFunc();
     std::wstring text = LoadAsciiText(
 ikemen::ssz_bridge::refToWstring(pu, r));
     pr->releaseanddelete();
@@ -300,7 +298,6 @@ extern "C" bool SSZ_STDCALL SetCurrentDir(PluginUtil* pu, Reference dir)
 
 extern "C" void SSZ_STDCALL GetCurrentDir(PluginUtil* pu, Reference* dir)
 {
-    pu->setSSZFunc();
     std::wstring curdir = GetCurrentDir();
     dir->releaseanddelete();
     if (curdir.empty()) return;
@@ -474,7 +471,6 @@ extern "C" bool SSZ_STDCALL IsString(PluginUtil* pu, int32_t idx, lua_State* L)
 
 extern "C" void SSZ_STDCALL ToString(PluginUtil* pu, int32_t idx, Reference* s, lua_State* L)
 {
-    pu->setSSZFunc();
     std::string output;
     ToString(idx, L, output);
     if (output.empty()) return;
@@ -510,7 +506,6 @@ extern "C" void SSZ_STDCALL VeryUnsafeCopy(PluginUtil* pu, intptr_t size, void *
 
 extern "C" bool SSZ_STDCALL GetClipboardStr(PluginUtil* pu, Reference *r)
 {
-    pu->setSSZFunc();
     std::wstring result = GetClipboardStr();
     if (result.empty()) return false;
     pu->wstrToRef(*r, result);
@@ -531,7 +526,6 @@ extern "C" void SSZ_STDCALL CloseTazyuuHandle(PluginUtil* pu, intptr_t mutex)
 extern "C" void SSZ_STDCALL GetInifileString(PluginUtil* pu, Reference* pstr,
     Reference def, Reference key, Reference app, Reference file)
 {
-    pu->setSSZFunc();
     std::wstring result = GetInifileString(
         ikemen::ssz_bridge::refToWstring(pu, def),
         ikemen::ssz_bridge::refToWstring(pu, key),
@@ -563,7 +557,6 @@ extern "C" bool SSZ_STDCALL WriteInifileString(PluginUtil* pu,
 
 extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference *dst)
 {
-    pu->setSSZFunc();
     std::vector<uint8_t> output;
     bool ok = UnCompress(src.atpos(), src.len(), output);
     dst->releaseanddelete();
@@ -574,7 +567,6 @@ extern "C" bool SSZ_STDCALL UnCompress(PluginUtil* pu, Reference src, Reference 
 
 extern "C" void SSZ_STDCALL UbytesToStr(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
 {
-    pu->setSSZFunc();
     dst->releaseanddelete();
     std::wstring output;
     UbytesToStr(src.atpos(), src.len(), cp, output);
@@ -584,7 +576,6 @@ extern "C" void SSZ_STDCALL UbytesToStr(PluginUtil* pu, Reference src, Reference
 
 extern "C" void SSZ_STDCALL StrToUbytes(PluginUtil* pu, Reference src, Reference *dst, UINT cp)
 {
-    pu->setSSZFunc();
     dst->releaseanddelete();
     std::vector<uint8_t> output;
     StrToUbytes(src.atpos(), src.len(), cp, output);
@@ -594,7 +585,6 @@ extern "C" void SSZ_STDCALL StrToUbytes(PluginUtil* pu, Reference src, Reference
 
 extern "C" void SSZ_STDCALL AsciiToLocal(PluginUtil* pu, Reference src, Reference *dst)
 {
-    pu->setSSZFunc();
     dst->releaseanddelete();
     std::wstring output;
     AsciiToLocal(src.atpos(), src.len(), output);
@@ -609,7 +599,6 @@ extern "C" void SSZ_STDCALL SetSharedString(PluginUtil* pu, Reference str)
 
 extern "C" void SSZ_STDCALL GetSharedString(PluginUtil* pu, Reference *str)
 {
-    pu->setSSZFunc();
     std::wstring result = GetSharedString();
     str->releaseanddelete();
     pu->wstrToRef(*str, result);
@@ -617,7 +606,6 @@ extern "C" void SSZ_STDCALL GetSharedString(PluginUtil* pu, Reference *str)
 
 extern "C" void SSZ_STDCALL InputStr(PluginUtil* pu, Reference *pr, Reference title)
 {
-    pu->setSSZFunc();
     std::wstring result = InputStr(ikemen::ssz_bridge::refToWstring(pu, title));
     pr->releaseanddelete();
     if (result.empty()) return;
@@ -729,7 +717,6 @@ extern "C" int32_t SSZ_STDCALL OggVorbisSeek(PluginUtil* pu, double time, OggVor
 
 extern "C" RNS::wregex* SSZ_STDCALL NewRegex(PluginUtil* pu, Reference* error, bool i, Reference ptn)
 {
-    pu->setSSZFunc();
     error->releaseanddelete();
     std::wstring errorStr;
     RNS::wregex* re = NewRegex(i, ikemen::ssz_bridge::refToWstring(pu, ptn), &errorStr);
@@ -750,7 +737,6 @@ extern "C" void SSZ_STDCALL DeleteRegex(PluginUtil* pu, RNS::wregex* re)
 
 extern "C" void SSZ_STDCALL RegexSearch(PluginUtil* pu, Reference* matches, Reference str, RNS::wregex* re)
 {
-    pu->setSSZFunc();
     matches->releaseanddelete();
     if(!re) return;
 
@@ -1174,7 +1160,6 @@ extern "C" intptr_t SSZ_STDCALL IMGLoad(PluginUtil* pu, Reference fn)
 
 extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w, Reference* out)
 {
-    pu->setSSZFunc();
     std::vector<uint8_t> decoded;
     DecodePNG8(fp, h, w, decoded);
     ikemen::ssz_bridge::vectorToRefBytes(decoded, out);

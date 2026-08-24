@@ -234,16 +234,9 @@ struct GlobalPluginSSZFuncs
 	MEMBER GlobalPluginSSZFuncs()
 	{
 		sf.callback = SSZCallBack;
-		sf.newfunc = sszrefnewfunc;
-		sf.deletefunc = sszrefdeletefunc;
 	}
 };
 static GlobalPluginSSZFuncs g_gpsf;
-
-extern "C" PluginSSZFuncs* SSZ_STDCALL GetSSZFuncs()
-{
-	return &g_gpsf.sf;
-}
 
 
 

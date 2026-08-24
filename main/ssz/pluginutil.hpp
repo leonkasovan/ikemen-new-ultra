@@ -4,7 +4,7 @@
 typedef void* (SSZ_STDCALL* SSZCALLBACK)
 	(void*, intptr_t, void*, intptr_t, intptr_t);
 #define TUserFunc(R_TYPE, FUNC, ...) \
-	extern "C" __declspec(dllexport) R_TYPE SSZ_STDCALL \
+	extern "C" R_TYPE SSZ_STDCALL \
 	FUNC(PluginUtil* pu, ##__VA_ARGS__)
 
 const int g_AlignmentSize = 4;
@@ -22,8 +22,6 @@ template<typename TYPE> static inline intptr_t Aliszof()
 struct PluginSSZFuncs
 {
 	SSZCALLBACK callback;
-	void* (SSZ_STDCALL* newfunc)(intptr_t);
-	void (SSZ_STDCALL* deletefunc)(void*);
 };
 
 struct PluginUtil
@@ -35,13 +33,6 @@ struct PluginUtil
 		handle = hn;
 		psf = ps;
 	}
-#ifndef SSZ_CORE
-	MEMBER void setSSZFunc()
-	{
-		sszrefnewfunc = psf->newfunc;
-		sszrefdeletefunc = psf->deletefunc;
-	}
-#endif
 	STAMEM std::WSTR refToWstr(const Reference& strref)
 	{
 		std::WSTR wstr;

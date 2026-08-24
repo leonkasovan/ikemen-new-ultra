@@ -25,16 +25,10 @@ static const intptr_t TNT_OFFSET =
 
 class SDLLItem
 {
-	HINSTANCE hin;
 	std::string baseName_; // Library base name for static registry lookup
 public:
 	MEMBER SDLLItem()
 	{
-		hin = nullptr;
-	}
-	MEMBER ~SDLLItem()
-	{
-		if(hin) FreeLibrary(hin);
 	}
 	MEMBER bool loadDll(const std::WSTR& la)
 	{
@@ -45,18 +39,9 @@ public:
 		}
 		baseName_ = StaticPluginRegistry::extractBaseName(path);
 
-		// Check the static plugin registry first
-		// LOG_DEBUG("SSZ", "loadDll: path='%s' baseName='%s'", path.c_str(), baseName_.c_str());
-		if(StaticPluginRegistry::instance().hasLibrary(baseName_)){
-			// LOG_DEBUG("SSZ", "loadDll: found static plugin '%s'", baseName_.c_str());
-			return true;
-		}
-		LOG_DEBUG("SSZ", "loadDll: '%s' not in static registry", baseName_.c_str());
-
-		// Fall back to dynamic DLL loading
-		hin = LoadLibraryW(la.c_str());
-		LOG_DEBUG("SSZ", "loadDll[%p]: %ls", (void*)hin, la.c_str());
-		return hin != nullptr;
+		// Static plugins only — the DLL loading path was removed when the
+		// plugins became statically registered.
+		return StaticPluginRegistry::instance().hasLibrary(baseName_);
 	}
 	MEMBER FARPROC getfunc(const std::WSTR& fn)
 	{
@@ -65,17 +50,8 @@ public:
 			if(fn[i] > 255) return nullptr;
 			s += (char)fn[i];
 		}
-
-		// Check static registry first
-		// LOG_DEBUG("SSZ", "getfunc: lib='%s' func='%s'", baseName_.c_str(), s.c_str());
-		void* ptr = StaticPluginRegistry::instance()
+		return (FARPROC)StaticPluginRegistry::instance()
 			.lookupFunction(baseName_, s);
-		if(ptr){
-			// LOG_DEBUG("SSZ", "getfunc: found '%s' -> %p", s.c_str(), ptr);
-			return (FARPROC)ptr;
-		}
-		LOG_DEBUG("SSZ", "getfunc: '%s' not in '%s', falling back to dynamic", s.c_str(), baseName_.c_str());
-		return GetProcAddress(hin, s.c_str());
 	}
 };
 
