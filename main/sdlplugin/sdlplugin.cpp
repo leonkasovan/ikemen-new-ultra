@@ -2039,92 +2039,17 @@ void SSZ_STDCALL SetOpacity(float wo)
 	SDL_SetWindowOpacity(g_window, w_opacity); //(0.0f - transparent, 1.0f - opaque)
 }
 
-bool winMaximized = false;
-void SSZ_STDCALL TakeScreenShot(const std::wstring& dir)
+//Deferred screenshot: the script runs before draw+present, so the frame is
+//only complete inside GlSwapBuffers right before the swap. TakeScreenShot
+//sets this flag; GlSwapBuffers captures there (GL_BACK for OpenGL, the SDL
+//renderer backbuffer for SDL2/DirectX).
+static bool g_shotPending = false;
+static std::string g_shotPath;
+
+void SSZ_STDCALL TakeScreenShot(const std::wstring& path)
 {
-//Software Render
-	if (isOpenGL == 0)
-	{
-	//Window Mode
-		if (fullscreenChecker == false)
-		{
-		//Check Window State
-			Uint32 flags = SDL_GetWindowFlags(g_window);
-			if (flags & SDL_WINDOW_MAXIMIZED)
-			{
-				winMaximized = true; //Window Maximized
-			}
-			else
-			{
-				winMaximized = false;
-			}
-		//Window is not Maximized
-			if (winMaximized == false)
-			{
-				SDL_Surface *screenshot = SDL_CreateRGBSurface(0, g_w, g_h, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
-				SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-				IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
-				SDL_FreeSurface(screenshot);
-			}
-		//Window is Maximized (Reuse Fullscreen screenshot logic to avoid crash)
-			else
-			{
-				SDL_Surface *screenshot = SDL_CreateRGBSurface(0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
-				SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-				IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
-				SDL_FreeSurface(screenshot);
-			}
-		}
-	//Fullscreen Mode or Maximized Screen
-		else
-		{
-			SDL_Surface *screenshot = SDL_CreateRGBSurface(0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
-			SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
-			IMG_SavePNG(screenshot, WstrToStr(dir).c_str());
-			SDL_FreeSurface(screenshot);
-		}
-	}
-//OpenGL Render
-	else
-	{
-	//Capture using glReadPixels
-		glReadBuffer(GL_FRONT); //buffer can be GL_FRONT o GL_BACK
-		unsigned char* pixels = new unsigned char[g_w * g_h * 4];
-		glReadPixels(0, 0, g_w, g_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-	//Since OpenGL reads from the bottom, the image will be vertically inverted. Here we can fix that flipping
-		unsigned char* flippedPixels = new unsigned char[g_w * g_h * 4];
-		for (int y = 0; y < g_h; y++)
-		{
-			memcpy(flippedPixels + y * g_w * 4, pixels + (g_h - 1 - y) * g_w * 4, g_w * 4);
-		}
-	//Save using libpng
-		{
-			std::string path = WstrToStr(dir);
-			FILE* fp = fopen(path.c_str(), "wb");
-			if(fp){
-				png_structp png_ptr = png_create_write_struct(
-					PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-				png_infop info_ptr = png_ptr
-					? png_create_info_struct(png_ptr) : nullptr;
-				if(png_ptr && info_ptr && !setjmp(png_jmpbuf(png_ptr))){
-					png_init_io(png_ptr, fp);
-					png_set_IHDR(png_ptr, info_ptr,
-						g_w, g_h, 8, PNG_COLOR_TYPE_RGBA,
-						PNG_INTERLACE_NONE,
-						PNG_COMPRESSION_TYPE_DEFAULT,
-						PNG_FILTER_TYPE_DEFAULT);
-					png_write_info(png_ptr, info_ptr);
-					for(int y = 0; y < g_h; y++)
-						png_write_row(png_ptr, flippedPixels + y * g_w * 4);
-					png_write_end(png_ptr, nullptr);
-				}
-				if(png_ptr) png_destroy_write_struct(&png_ptr, &info_ptr);
-				fclose(fp);
-			}
-		}
-		delete[] pixels;
-		delete[] flippedPixels;
-	}
+	g_shotPath = WstrToStr(path);
+	g_shotPending = true;
 }
 
 //To update window resize in OpenGL context
@@ -2819,6 +2744,34 @@ void SSZ_STDCALL SetColorKey(uint32_t key, SDL_Surface* psur)
 	SDL_SetColorKey(psur, key < 256, key);
 }
 
+//Deferred screenshot capture for SDL2/DirectX renderers: reads the SDL
+//renderer backbuffer after the frame is composed, before it is presented.
+static void CapturePendingShotSDL()
+{
+	if (!g_shotPending || !g_renderer) return;
+	g_shotPending = false;
+	SDL_Surface *screenshot = SDL_CreateRGBSurface(0, g_w, g_h, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
+	if (!screenshot)
+	{
+		LOG_INFO("SSZ", "Error creating surface for screenshot");
+		return;
+	}
+	SDL_RenderReadPixels(g_renderer, NULL, SDL_PIXELFORMAT_ARGB8888, screenshot->pixels, screenshot->pitch);
+//Backbuffer alpha is meaningless for display, but PNG viewers honor it
+//-> force opaque screenshot
+	for (int y = 0; y < g_h; y++)
+	{
+		unsigned char* row = (unsigned char*)screenshot->pixels + y * screenshot->pitch;
+		for (int x = 3; x < g_w * 4; x += 4)
+			row[x] = 255;
+	}
+	if (IMG_SavePNG(screenshot, g_shotPath.c_str()) == 0)
+		LOG_INFO("SSZ", "Screenshot saved in: %s", g_shotPath.c_str());
+	else
+		LOG_INFO("SSZ", "Error saving screenshot to: %s", g_shotPath.c_str());
+	SDL_FreeSurface(screenshot);
+}
+
 void SSZ_STDCALL Flip()
 {
 	LARGE_INTEGER flipT0, flipT1;
@@ -2830,6 +2783,7 @@ void SSZ_STDCALL Flip()
 		SDL_RenderCopy(g_renderer, g_target, nullptr, nullptr);
 		lockTarget();
 	}
+	CapturePendingShotSDL();
 	SDL_RenderPresent(g_renderer);
 	QueryPerformanceCounter(&flipT1);
 	g_perfCounters.flipTimeUs = qpcElapsedUs(flipT0, flipT1, g_perfCounters.qpcFreq);
@@ -6116,6 +6070,8 @@ void SSZ_STDCALL GlSwapBuffers()
 				SDL_RenderCopy(g_renderer, g_target, NULL, NULL);
 				lockTarget();
 			}
+		//Deferred screenshot: frame composed, not yet presented
+			CapturePendingShotSDL();
 			SDL_RenderPresent(g_renderer);
 		}
 		// Begin next frame perf tracking
@@ -6125,6 +6081,36 @@ void SSZ_STDCALL GlSwapBuffers()
 	}
 
 	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
+//Deferred GL screenshot: frame is fully drawn but not yet presented
+	if (g_shotPending)
+	{
+		g_shotPending = false;
+		glReadBuffer(GL_BACK); //complete frame about to be presented
+		unsigned char* pixels = new unsigned char[g_w * g_h * 4];
+		glReadPixels(0, 0, g_w, g_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+	//OpenGL reads bottom-up: flip rows for top-down PNG
+		unsigned char* flippedPixels = new unsigned char[g_w * g_h * 4];
+		for (int y = 0; y < g_h; y++)
+			memcpy(flippedPixels + y * g_w * 4, pixels + (g_h - 1 - y) * g_w * 4, g_w * 4);
+	//Framebuffer alpha is meaningless for display (blended sprite passes leave
+	//a<255 behind), but PNG viewers honor it -> force opaque screenshot
+		for (int i = 3; i < g_w * g_h * 4; i += 4)
+			flippedPixels[i] = 255;
+		SDL_Surface *screenshot = SDL_CreateRGBSurfaceWithFormatFrom(
+			flippedPixels, g_w, g_h, 32, g_w * 4, SDL_PIXELFORMAT_ABGR8888);
+		if (screenshot)
+		{
+			if (IMG_SavePNG(screenshot, g_shotPath.c_str()) == 0)
+				LOG_INFO("SSZ", "Screenshot saved in: %s", g_shotPath.c_str());
+			else
+				LOG_INFO("SSZ", "Error saving screenshot to: %s", g_shotPath.c_str());
+			SDL_FreeSurface(screenshot);
+		}
+		else
+			LOG_INFO("SSZ", "Error creating surface for screenshot");
+		delete[] pixels;
+		delete[] flippedPixels;
+	}
 	// Capture atlas stats for perf logging.
 	g_perfCounters.atlasSlotsUsed = g_atlasSlotCount;
 	g_perfCounters.atlasMaxSlots = g_atlasMaxSlots;

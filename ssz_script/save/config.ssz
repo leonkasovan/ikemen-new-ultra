@@ -1,5 +1,5 @@
 //Video Settings
-const int Renderer = 2;
+const int Renderer = 2; //0: SDL2/Software, 1: OpenGL 2.1, 2: OpenGL 3.3, 3: OpenGL 4.6, 4: DirectX
 const bool AspectRatio = false;
 const bool FullScreen = false;
 const bool FullScreenExclusive = false; //False: Borderless FullScreen, True: Exclusive FullScreen
@@ -17,7 +17,7 @@ const float PanStr = 0.8;
 const int VideoVol = 100;
 
 //Perfomance Settings
-const bool PerformanceMonitor = false; //Enable FPS/GL API profiling output
+const bool PerformanceMonitor = true; //Enable FPS/GL API profiling output
 const bool SaveMemory = false;
 const int HelperMax = 56;
 const int PlayerProjectileMax = 50;
