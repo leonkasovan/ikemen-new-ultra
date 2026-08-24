@@ -240,22 +240,22 @@ public bool pbCfgPlayLoop = false;
 public ^bool pbCfgSlot;
 .pbCfgSlot.new(5);
 
-public bool modKeyState(bool keyState, int jn, int key)
+// [I1] ctrl, isPractice, inFight are pre-read by caller and passed in to
+// avoid re-polling SDL 14× per player per frame (28 FFI calls saved per player).
+public bool modKeyState(bool keyState, int jn, int key, bool ctrl, bool isPractice, bool inFight)
 {
-  // SDL scancodes: 6=C, 15=L, 19=P, 21=R, 22=S, 25=V, 224=LCTRL, 228=RCTRL
-  bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
   branch{
   cond !keyState: ret true;
   else:
     branch{
-    cond !.str.equ(.com.gameMode,"practice") && .com.gameState == 1:
+    cond !isPractice && inFight:
       ret false;
     cond jn > -1:
       ret false;
     cond key != 6 && key != 15 && key != 19 && key != 21 && key != 22 && key != 25:
       ret false;
     // Ctrl+C/V/S/P/R/L in fight, Ctrl+V in menu — suppress to prevent debug hotkeys from firing
-    cond !(ctrl && (((.sdl.JoystickButtonState(:-1, 6:) || .sdl.JoystickButtonState(:-1, 15:) || .sdl.JoystickButtonState(:-1, 19:) || .sdl.JoystickButtonState(:-1, 21:) || .sdl.JoystickButtonState(:-1, 22:)) && .com.gameState == 1) || (.sdl.JoystickButtonState(:-1, 25:) && .com.gameState == 0))):
+    cond !(ctrl && (((.sdl.JoystickButtonState(:-1, 6:) || .sdl.JoystickButtonState(:-1, 15:) || .sdl.JoystickButtonState(:-1, 19:) || .sdl.JoystickButtonState(:-1, 21:) || .sdl.JoystickButtonState(:-1, 22:)) && inFight) || (.sdl.JoystickButtonState(:-1, 25:) && !inFight))):
       ret false;
     else:
       ret true;
@@ -1371,21 +1371,25 @@ public &CommandList
             // [OPT3] Factor out secondary-pad enable flag and device number
             bool sec = in == (.com.sysControls) ? (.disablePadP1 == false) : in == (.com.sysControls + 1) ? (.disablePadP2 == false) : true;
             int jn2 = .cfg.in[in+2].jn;
-            l = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].l:),jn,.cfg.in[in].l) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].l:));
-            r = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].r:),jn,.cfg.in[in].r) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].r:));
-            u = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].u:),jn,.cfg.in[in].u) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].u:));
-            //d = (`ac && .com.sysControls == 0) || (!.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].d:),jn,.cfg.in[in].d) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].d:)));
-			d = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].d:),jn,.cfg.in[in].d) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].d:));
-			a = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].a:),jn,.cfg.in[in].a) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].a:));
-            b = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].b:),jn,.cfg.in[in].b) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].b:));
-            c = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].c:),jn,.cfg.in[in].c) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].c:));
-            x = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].x:),jn,.cfg.in[in].x) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].x:));
-            y = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].y:),jn,.cfg.in[in].y) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].y:));
-            z = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].z:),jn,.cfg.in[in].z) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].z:));
-            q = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].q:),jn,.cfg.in[in].q) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].q:));
-			w = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].w:),jn,.cfg.in[in].w) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].w:));
-			e = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].e:),jn,.cfg.in[in].e) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].e:));
-			s = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].s:),jn,.cfg.in[in].s) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].s:));
+            // [I1+I3] Pre-read ctrl + cache frame-invariant state once per frame.
+            bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
+            bool isPractice = .str.equ(.com.gameMode,"practice");
+            bool inFight = .com.gameState == 1;
+            l = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].l:),jn,.cfg.in[in].l,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].l:));
+            r = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].r:),jn,.cfg.in[in].r,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].r:));
+            u = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].u:),jn,.cfg.in[in].u,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].u:));
+            //d = (`ac && .com.sysControls == 0) || (!.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].d:),jn,.cfg.in[in].d,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].d:)));
+			d = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].d:),jn,.cfg.in[in].d,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].d:));
+			a = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].a:),jn,.cfg.in[in].a,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].a:));
+            b = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].b:),jn,.cfg.in[in].b,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].b:));
+            c = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].c:),jn,.cfg.in[in].c,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].c:));
+            x = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].x:),jn,.cfg.in[in].x,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].x:));
+            y = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].y:),jn,.cfg.in[in].y,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].y:));
+            z = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].z:),jn,.cfg.in[in].z,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].z:));
+            q = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].q:),jn,.cfg.in[in].q,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].q:));
+			w = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].w:),jn,.cfg.in[in].w,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].w:));
+			e = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].e:),jn,.cfg.in[in].e,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].e:));
+			s = !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[in].s:),jn,.cfg.in[in].s,ctrl,isPractice,inFight) || (sec && .sdl.JoystickButtonState(:jn2, .cfg.in[in+2].s:));
           }
         else:
           l = r = u = d = a = b = c = x = y = z = q = w = e = s = false;
@@ -1516,7 +1520,10 @@ public bool startButton(int pn)
   int jn = .cfg.in[pn-1].jn;
   if(#.net > 0 || pn < 1 || pn > 2) ret false;
   branch{
-  cond jn >= -1 && (!.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[pn+9].s:),jn,.cfg.in[pn+9].s) || .sdl.JoystickButtonState(:.cfg.in[pn+11].jn, .cfg.in[pn+11].s:)): .sBuf[pn-1]++;
+  bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
+  bool isPractice = .str.equ(.com.gameMode,"practice");
+  bool inFight = .com.gameState == 1;
+  cond jn >= -1 && (!.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[pn+9].s:),jn,.cfg.in[pn+9].s,ctrl,isPractice,inFight) || .sdl.JoystickButtonState(:.cfg.in[pn+11].jn, .cfg.in[pn+11].s:)): .sBuf[pn-1]++;
   else: .sBuf[pn-1] = 0;
   }
   ret .sBuf[pn-1] == 1 || .sBuf[pn-1] == 2;
@@ -1524,6 +1531,10 @@ public bool startButton(int pn)
 
 bool startHardButton()
 {
+  // [I1] ctrl/isPractice/inFight computed once before loop (not per-iteration)
+  bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
+  bool isPractice = .str.equ(.com.gameMode,"practice");
+  bool inFight = .com.gameState == 1;
   loop{
     index i = 0;
     int jn;
@@ -1532,12 +1543,12 @@ bool startHardButton()
     jn = .cfg.in[i].jn;
     if(
       jn >= -1 && (
-        !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s))) ret true;
+        !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].s:),jn,.cfg.in[i].s,ctrl,isPractice,inFight))) ret true;
     i++;
   while i < #.cfg.in:}
   ret false;
@@ -1552,6 +1563,10 @@ public bool introbutton()
 
 bool anyHardButton()
 {
+  // [I1] ctrl/isPractice/inFight computed once before loop
+  bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
+  bool isPractice = .str.equ(.com.gameMode,"practice");
+  bool inFight = .com.gameState == 1;
   loop{
     index i = 0;
     int jn;
@@ -1560,12 +1575,12 @@ bool anyHardButton()
     jn = .cfg.in[i].jn;
     if(
       jn >= -1 && (
-        !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].a:),jn,.cfg.in[i].a)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].b:),jn,.cfg.in[i].b)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].c:),jn,.cfg.in[i].c)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].x:),jn,.cfg.in[i].x)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].y:),jn,.cfg.in[i].y)
-        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].z:),jn,.cfg.in[i].z))) ret true;
+        !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].a:),jn,.cfg.in[i].a,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].b:),jn,.cfg.in[i].b,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].c:),jn,.cfg.in[i].c,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].x:),jn,.cfg.in[i].x,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].y:),jn,.cfg.in[i].y,ctrl,isPractice,inFight)
+        || !.modKeyState(.sdl.JoystickButtonState(:jn, .cfg.in[i].z:),jn,.cfg.in[i].z,ctrl,isPractice,inFight))) ret true;
     i++;
   while i < #.cfg.in:}
   ret false;

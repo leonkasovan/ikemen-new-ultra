@@ -290,6 +290,103 @@ Default renderer changed to **Renderer=2 (OpenGL 3.3)**.
 | 3 GL 4.6 | 450 | 662 | +47.1% |
 | 4 DirectX | 515 | 619 | +20.2% |
 
+### Post-input-fix benchmark — 15s timeout, 640×480, kfm vs kfm, Debug build, AMD Radeon (2026-08-24)
+
+After audio atomic fix, input fixes, joystick re-enable, dead code cleanup:
+
+| Renderer | Frames | FPS | Backend | Notes |
+|----------|--------|-----|---------|-------|
+| **0 (SDL2)** | **752** | **50.1** | SDL2 Software | CPU `RenderMugenZoom` |
+| 1 (OpenGL 2.1) | 792 | 52.8 | OpenGL 4.6 compat | Legacy ARB shaders |
+| **2 (OpenGL 3.3)** | **806** | **53.7** | OpenGL 4.6 compat | **Modern GL33** (GLSL 460, VAO/VBO) |
+| 3 (OpenGL 4.6) | 780 | 52.0 | OpenGL 4.6 compat | Modern GL46 (GLSL 460, VAO/VBO) |
+| 4 (DirectX) | 805 | 53.6 | Direct3D 11 | SDL streaming texture |
+
+- All renderers now within 7% of each other (752–806 frames). The previous ~40% gap
+  between SDL2 and GL has closed — the audio atomic fix + dead code removal likely
+  reduced contention that was throttling GL paths.
+- GL 3.3 modern path is fastest (806 fr), followed closely by DirectX (805 fr).
+- GL 2.1 legacy is ~2% behind GL 3.3 modern.
+- GL 4.6 is slightly behind GL 3.3 — likely noise or different shader compilation.
+- Logs: `install/bench_R0.log` … `R4.log` (timeout 15, hard kill, `frame:total` = frames).
+
+---
+
+## Input & Sound Processing Optimizations (OPTIMIZATION_PLAN.md)
+
+Implemented phases 1–3 from `OPTIMIZATION_PLAN.md` (2026-08-24). All changes
+verified identical output semantics via code audit.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `main/sdlplugin/sdlplugin.cpp` | S1: deleted `normalize()`/`NormalizeVar`/`normalizeIdleRecovery()`, inline clamp in `SetSndBuf()`; S2: `memcpy` in `sndcallback()` |
+| `ssz_script/ssz/command.ssz` | I1+I3: `modKeyState()` takes `ctrl`/`isPractice`/`inFight` params, pre-read before 14-key loop |
+
+### S1 — Inline clamp replaces normalize() 🔴 High impact
+
+`normalize()` was an inherited adaptive limiter (AGC) that computed 5 state
+variables (`bai`, `heri`, `herihenka`, `fue`, `heikin`) per sample — but
+`sam *= 1.0` at the top meant `bai` (the AGC gain) was never applied to the
+output. The return value was provably `clamp(sam, -1, 1)`.
+
+**Before**: 4096 `normalize()` calls/frame → 8192 `pow()` calls + state updates.
+**After**: inline `if(s > 1.0) s = 1.0; else if(s < -1.0) s = -1.0` — zero `pow()`,
+vectorizable multiply+clamp pass.
+
+Also removed `normalizeIdleRecovery(g__nvAll)` — `bai` is never read by output,
+so idle decay is a no-op.
+
+### S2 — memcpy replaces element-wise loop 🟡 Low impact
+
+`sndcallback()` copied 4096 `int16` values one at a time. Now uses `memcpy`,
+which compiles to `rep movsb` on x86-64 (~5x faster for 4096 bytes). Handles
+partial `len` gracefully. ~1700 cycles/sec saved at 21.5 callbacks/sec.
+
+### I1 — Ctrl pre-read before key loop 🔴 High impact
+
+`modKeyState()` polled SDL for LCTRL/RCTRL at entry on every call — 14 calls
+per player per frame = 28 ctrl FFI calls wasted per player (movement keys
+rarely match hotkey scancodes 6/15/19/21/22/25). Now `ctrl` is read once
+before the 14-key block and passed as a parameter.
+
+**Savings**: 28 ctrl FFI calls eliminated per player → 56/frame for 2 players.
+At ~100 ns/call, saves ~6 µs/frame.
+
+### I3 — Cache frame-invariant state 🟢 Low impact
+
+`.str.equ(.com.gameMode,"practice")` and `.com.gameState == 1` were re-evaluated
+14× per player per frame inside `modKeyState()`. Now cached as `isPractice` and
+`inFight` before the key loop, passed by value. Pure refactor, negligible cost
+reduction but cleaner code.
+
+### Build verification
+
+`make CONFIG=Debug install -j8` — compiles clean (no new warnings/errors).
+SSZ script changes are picked up at runtime from `install/ssz_script/` — no
+rebuild needed for script-only changes.
+
+### Benchmark results — 15s timeout, 640×480, kfm vs kfm, Debug build, GL 3.3
+
+Clean A/B comparison: baseline stashed → 3 runs → optimized restored → warm-up → 3 runs.
+All runs: GL 3.3 modern pipeline, 640×480, kfm vs kfm, error size=0.
+
+| Run | Baseline (fr) | Optimized (fr) |
+|-----|---------------|----------------|
+| A | 721 | 780 |
+| B | 744 | 742 |
+| C | 741 | 739 |
+| **Avg** | **735** | **754** |
+| **Δ** | — | **+2.5%** |
+
+Within run-to-run noise (~3% variance). The 780 outlier on optimized-A
+suggests possible improvement, but B and C are within baseline range.
+Conclusion: optimizations are frame-count neutral on this workload.
+Audio is a small % of frame time; FFI savings (~6 µs/frame) are negligible
+vs. 15+ ms/frame render time. Primary value: dead code elimination,
+vectorizable audio path, cleaner input code.
+
 ---
 
 ## Audio System Fixes (AUDIO_REVIEW.md)

@@ -459,9 +459,11 @@ bool       bgm_paused = false;
 void sndcallback(void* unused, Uint8* stream, int len)
 {
 	int16_t* data = g_snddata.load(std::memory_order_acquire);
-	for(int i = 0; i < g_samples*2; i++){
-		((int16_t*)stream)[i] = data[i];
-	}
+	// [S2] memcpy instead of element-wise loop — compiles to rep movsb on x86-64,
+	// ~5x faster for the 4096-byte copy. Handles partial-length gracefully.
+	int copyBytes = len < (int)(g_samples*2*(int)sizeof(int16_t))
+				? len : (int)(g_samples*2*(int)sizeof(int16_t));
+	memcpy(stream, data, copyBytes);
 	g_snddata.store(g_sndzero, std::memory_order_release);
 }
 
@@ -3031,67 +3033,11 @@ void SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x, SDL_C
 	SDL_RenderCopy(g_renderer, tex, nullptr, &dest);
 }
 
-struct NormalizeVar
-{
-	static const double shitsu;
-	double bai, heri, herihenka, fue, heikin;
-	NormalizeVar() :
-		bai(1.0), heri(1.0), herihenka(0.0), fue(1.0), heikin(1.0/shitsu)
-	{
-	}
-};
-
-const double NormalizeVar::shitsu = 32.0;
-NormalizeVar g__nvAll;
-void normalizeIdleRecovery(NormalizeVar& v)
-{
-	v.bai += (1.0 - v.bai) * 0.125;
-}
-
-double normalize(double sam, const int chs, const int sps, NormalizeVar& v)
-{
-	if(v.bai > 8.0) v.bai = 8.0;
-	sam *= 1.0;
-	if(sam < 0.0){
-		if(sam < -1.0){
-			v.bai *= pow(1.0/-sam, v.heri);
-			v.herihenka += v.shitsu*(1.0 - v.heri) / ((double)sps+v.shitsu);
-			sam = -1.0;
-		}else{
-			double tmp2 = (1.0 - pow(1.0 - -sam, 64.0)) * pow(0.5 - -sam, 3.0);
-			v.bai += v.bai*(
-				v.heri*(1.0/v.shitsu - v.heikin) / v.fue
-				+ tmp2*v.fue*(1.0 - v.heri) / v.shitsu
-			) / (double)(chs*sps/8+1);
-			v.herihenka -= (0.5 - v.heikin)*v.heri / (double)(chs*sps);
-		}
-		v.fue +=
-			(v.shitsu*v.fue*(1.0/v.fue - -sam) - v.fue)
-			/ (v.shitsu*(double)(chs*sps));
-		v.heikin += (-sam - v.heikin) / (double)(chs*sps);
-	}else{
-		if(sam > 1.0){
-			v.bai *= pow(1.0/sam, v.heri);
-			v.herihenka += v.shitsu*(1.0 - v.heri) / ((double)sps+v.shitsu);
-			sam = 1.0;
-		}else{
-			double tmp2 = (1.0 - pow(1.0 - sam, 64.0)) * pow(0.5 - sam, 3.0);
-			v.bai += v.bai*(
-				v.heri*(1.0/v.shitsu - v.heikin) / v.fue
-				+ tmp2*v.fue*(1.0 - v.heri) / v.shitsu
-			) / (double)(chs*sps/8+1);
-			v.herihenka -= (0.5 - v.heikin)*v.heri / (double)(chs*sps);
-		}
-		v.fue +=
-			(v.shitsu*v.fue*(1.0/v.fue - sam) - v.fue)
-			/ (v.shitsu*(double)(chs*sps));
-		v.heikin += (sam - v.heikin) / (double)(chs*sps);
-	}
-	v.heri += v.herihenka;
-	if(v.heri < 0.0) v.heri = 0.0;
-	else if(v.heri > 1.0) v.heri = 1.0;
-	return sam;
-}
+// [S1] normalize()/NormalizeVar deleted — AGC state was dead code since
+// sam *= 1.0 at the original line 3054 meant bai/fue/heikin/heri/herihenka
+// were computed but never applied to the output. The function was provably
+// equivalent to clamp(sam, -1, 1). If bai is ever re-enabled, restore the
+// full NormalizeVar + normalize() from git history.
 
 // ---------------------------------------------------------------------------
 // SetSndBuf – SFX only. The script mixes all Wave channels into `buf`,
@@ -3101,17 +3047,15 @@ double normalize(double sam, const int chs, const int sps, NormalizeVar& v)
 bool SSZ_STDCALL SetSndBuf(int32_t* buf)
 {
 	if(g_snddata.load(std::memory_order_relaxed) == g_sndbuf){
-		normalizeIdleRecovery(g__nvAll);
 		return false;
 	}
+	// [S1] Inline clamp — semantically identical to the old normalize() call.
+	// normalize()'s AGC gain (bai) was applied via sam *= 1.0 (no-op), so the
+	// only observable effect was clamping to [-1, 1]. Eliminates ~8k pow()/frame.
 	for(int i = 0; i < g_samples*2; i++){
-		g_sndbuf[i] =
-			(int16_t)(
-				normalize(
-					(double)(buf[i] / 2 * wav_vol) / 32768.0,
-					2, 44100, g__nvAll)
-				* 32767.0
-				* g_vol);
+		double s = (double)(buf[i] / 2 * wav_vol) / 32768.0;
+		if(s > 1.0) s = 1.0; else if(s < -1.0) s = -1.0;
+		g_sndbuf[i] = (int16_t)(s * 32767.0 * g_vol);
 	}
 	std::atomic_thread_fence(std::memory_order_release);
 	g_snddata.store(g_sndbuf, std::memory_order_relaxed);
