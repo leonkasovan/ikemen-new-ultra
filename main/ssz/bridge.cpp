@@ -949,10 +949,11 @@ void       SSZ_STDCALL SetOpacity(float wo);
 void       SSZ_STDCALL TakeScreenShot(const std::wstring& dir);
 bool       SSZ_STDCALL UpdateGLViewport(const SDL_Event& event);
 int        SSZ_STDCALL PlayVideo(const std::wstring& fn, const std::wstring& screenshotPath, int volume, int audioTrack);
+bool       SSZ_STDCALL EnableJoystick(bool enable);
 bool       SSZ_STDCALL PollEvent(int8_t* pb);
 char16_t   SSZ_STDCALL GetLastChar();
 bool       SSZ_STDCALL KeyState(int32_t key);
-bool       SSZ_STDCALL JoystickButtonState(int32_t btn, int32_t joy);
+bool       SSZ_STDCALL JoystickButtonState(int32_t joy, int32_t btn);
 int32_t    SSZ_STDCALL PollInputBitmask(int32_t jn, int32_t u, int32_t d, int32_t l, int32_t r, int32_t a, int32_t b, int32_t c, int32_t x, int32_t y, int32_t z, int32_t q, int32_t w, int32_t e, int32_t s, int32_t jn2, int32_t u2, int32_t d2, int32_t l2, int32_t r2, int32_t a2, int32_t b2, int32_t c2, int32_t x2, int32_t y2, int32_t z2, int32_t q2, int32_t w2, int32_t e2, int32_t s2, int32_t sec);
 void       SSZ_STDCALL SoftFill(uint32_t color, SDL_Rect* prect);
 void       SSZ_STDCALL Fill(uint32_t color, SDL_Rect* prect);
@@ -1104,6 +1105,12 @@ extern "C" int SSZ_STDCALL PlayVideo(PluginUtil* pu, Reference fn, Reference scr
         volume, audioTrack);
 }
 
+extern "C" bool SSZ_STDCALL EnableJoystick(PluginUtil* pu, bool enable)
+{
+    (void)pu;
+    return EnableJoystick(enable);
+}
+
 extern "C" bool SSZ_STDCALL PollEvent(PluginUtil* pu, int8_t* pb)
 {
     (void)pu;
@@ -1122,10 +1129,10 @@ extern "C" bool SSZ_STDCALL KeyState(PluginUtil* pu, int32_t key)
     return KeyState(key);
 }
 
-extern "C" bool SSZ_STDCALL JoystickButtonState(PluginUtil* pu, int32_t btn, int32_t joy)
+extern "C" bool SSZ_STDCALL JoystickButtonState(PluginUtil* pu, int32_t joy, int32_t btn)
 {
     (void)pu;
-    return JoystickButtonState(btn, joy);
+    return JoystickButtonState(joy, btn);
 }
 
 extern "C" int32_t SSZ_STDCALL PollInputBitmask(PluginUtil* pu,

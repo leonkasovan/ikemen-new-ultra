@@ -248,6 +248,7 @@ void main()
   if(.cfg.AspectRatio) .se.aspect = true;
   .sdl.setOpacity(.cfg.Opacity);
   .sdl.setWindowType(.cfg.WindowType);
+.sdl.enableJoystick(.cfg.UseJoystick);
   .ssz.memMarkBefore("EXIT");
   &.lua.State L;
   if(!.init(L=)){

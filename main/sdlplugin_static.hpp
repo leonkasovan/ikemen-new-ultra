@@ -72,6 +72,7 @@ extern "C"
 	bool      SSZ_STDCALL UpdateGLViewport   (PluginUtil*, const SDL_Event&);
 
 	// Input
+	bool      SSZ_STDCALL EnableJoystick     (PluginUtil*, bool);
 	bool      SSZ_STDCALL PollEvent          (PluginUtil*, int8_t*);
 	char16_t  SSZ_STDCALL GetLastChar        (PluginUtil*);
 	bool      SSZ_STDCALL KeyState           (PluginUtil*, int32_t);
@@ -183,6 +184,7 @@ inline bool sdlplugin_static_register()
 		{ "TakeScreenShot",      (void*)TakeScreenShot      },
 		{ "Flip",                (void*)Flip                },
 		{ "UpdateGLViewport",    (void*)UpdateGLViewport    },
+		{ "EnableJoystick",      (void*)EnableJoystick      },
 		{ "PollEvent",           (void*)PollEvent           },
 		{ "GetLastChar",         (void*)GetLastChar         },
 		{ "KeyState",            (void*)KeyState            },

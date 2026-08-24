@@ -413,7 +413,6 @@ LRESULT CALLBACK wrapProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		m.wParam = wParam;
 		m.lParam = lParam;
 		m.time = 0;
-		TranslateMessage(&m);
 		if(
 			TranslateMessage(&m)
 			&& PeekMessage(&m, hWnd, WM_CHAR, WM_CHAR, PM_REMOVE))
@@ -2515,9 +2514,39 @@ bool SSZ_STDCALL KeyState(int32_t key)
 	return state[key] == SDL_PRESSED;
 }
 
-bool SSZ_STDCALL JoystickButtonState(int32_t btn, int32_t joy)
+bool SSZ_STDCALL JoystickButtonState(int32_t joy, int32_t btn)
 {
 	return g_js.getState(joy, btn);
+}
+
+bool SSZ_STDCALL EnableJoystick(bool enable)
+{
+	if(enable){
+		if(SDL_WasInit(SDL_INIT_JOYSTICK)){
+			INIT_LOG("EnableJoystick: already initialized");
+			return true;
+		}
+		INIT_LOG("EnableJoystick: initializing SDL_INIT_JOYSTICK...");
+		if(SDL_InitSubSystem(SDL_INIT_JOYSTICK) < 0){
+			INIT_LOG("EnableJoystick: SDL_InitSubSystem failed: %s", SDL_GetError());
+			return false;
+		}
+		INIT_LOG("EnableJoystick: SDL_INIT_JOYSTICK OK, enumerating devices...");
+		g_js.init();
+		int numJoys = SDL_NumJoysticks();
+		INIT_LOG("EnableJoystick: found %d joystick(s)", numJoys);
+		return true;
+	}else{
+		if(!SDL_WasInit(SDL_INIT_JOYSTICK)){
+			INIT_LOG("EnableJoystick: not initialized, nothing to disable");
+			return true;
+		}
+		INIT_LOG("EnableJoystick: closing joysticks and quitting subsystem...");
+		g_js.close();
+		SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+		INIT_LOG("EnableJoystick: joystick disabled");
+		return true;
+	}
 }
 
 // ---------------------------------------------------------------------------

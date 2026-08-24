@@ -57,6 +57,12 @@ public ^ubyte decodePNG8(int w=, int h=, &.f.File file=)
 plugin bool KeyState(:|SDLKey:)             = "dll/sdlplugin.dll";
 plugin bool JoystickButtonState(:int, int:) = "dll/sdlplugin.dll";
 
+public bool enableJoystick(bool enable)
+{
+  plugin bool EnableJoystick(:bool:) = "dll/sdlplugin.dll";
+  ret EnableJoystick(:enable:);
+}
+
 public int pollInputBitmask(
   int jn,
   int u, int d, int l, int r,

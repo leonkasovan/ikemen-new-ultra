@@ -242,6 +242,7 @@ public ^bool pbCfgSlot;
 
 public bool modKeyState(bool keyState, int jn, int key)
 {
+  // SDL scancodes: 6=C, 15=L, 19=P, 21=R, 22=S, 25=V, 224=LCTRL, 228=RCTRL
   bool ctrl = .sdl.JoystickButtonState(:-1, 224:) || .sdl.JoystickButtonState(:-1, 228:);
   branch{
   cond !keyState: ret true;
@@ -253,6 +254,7 @@ public bool modKeyState(bool keyState, int jn, int key)
       ret false;
     cond key != 6 && key != 15 && key != 19 && key != 21 && key != 22 && key != 25:
       ret false;
+    // Ctrl+C/V/S/P/R/L in fight, Ctrl+V in menu — suppress to prevent debug hotkeys from firing
     cond !(ctrl && (((.sdl.JoystickButtonState(:-1, 6:) || .sdl.JoystickButtonState(:-1, 15:) || .sdl.JoystickButtonState(:-1, 19:) || .sdl.JoystickButtonState(:-1, 21:) || .sdl.JoystickButtonState(:-1, 22:)) && .com.gameState == 1) || (.sdl.JoystickButtonState(:-1, 25:) && .com.gameState == 0))):
       ret false;
     else:
@@ -295,6 +297,7 @@ public bool modKeyState(bool keyState, int jn, int key)
   {
     if(!.m.inRange!int?(0, #.cfg.in-1, in)) ret false;
     int pn = in +.com.sysControls;
+    if(pn < 0 || pn >= #.cfg.in) ret false;
     int jn = .cfg.in[pn].jn;
     if(jn < -1) ret false;
     // [OPT3] Single batched FFI call replaces 28 individual JoystickButtonState calls

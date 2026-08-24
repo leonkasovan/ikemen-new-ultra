@@ -305,7 +305,7 @@ for full rationale and source verification.
 | `ssz_script/ssz/sound.ssz` | Equal-power pan law (`cos`/`sin`), pan applied to stereo sources, `Bgm.write()` removed |
 | `ssz_script/lib/alpha/sdlplugin.ssz` | Removed `sendOpenBGM`/`sendCloseBGM`/`sendWriteBGM` SSZ declarations |
 | `main/ssz/bridge.cpp` | Removed `Send*BGM` bridge wrappers |
-| `main/ssz/old_bridge.cpp` | Removed `Send*BGM` old-bridge wrappers |
+
 | `main/sdlplugin_static.hpp` | Removed `Send*BGM` static registry entries |
 
 ### Fix Details
