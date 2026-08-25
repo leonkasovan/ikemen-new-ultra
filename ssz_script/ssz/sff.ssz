@@ -745,6 +745,7 @@ public &Sff
        ushort group, item, link, dummy;
        uint ofs, siz;
        ^index idx;
+       ^index existing;
        `palList.clear();
        while;
     do:
@@ -756,7 +757,13 @@ public &Sff
       if(!f.read!uint?(ofs=)) ret .com.FileReadError;
       if(!f.read!uint?(siz=)) ret .com.FileReadError;
       idx.new(1);
+      //Dedup: check if this (group,item) key was already loaded via palTable
+      existing = `palList.palTable.get((uint)group<<0d16 | item);
       branch{
+      cond #existing > 0:
+      //Duplicate (group,item) key: share the already-loaded palette
+        idx<> = existing<>;
+        pal = `palList.get(existing<>);
       cond siz == 0x0:
         pal = `palList.get((index)link);
         idx<> = (index)link;
@@ -776,7 +783,6 @@ public &Sff
         while i < l:}
         idx<> = i;
       }
-      //uniquePals.set(palKey, idx<>);
       `palList.setSource(i, pal);
       `palList.palTable.set((uint)group<<0d16 | item, idx);
       i++;

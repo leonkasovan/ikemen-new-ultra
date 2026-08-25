@@ -509,6 +509,13 @@ if(cond){ ... } else { ... }
 `if` does not require braces around the body — the body runs until `;` or a block
 (also see `break`-driven forms below).
 
+> **⚠ Compiler quirk:** `if(cond){...} else {...}` blocks are **unreliable**
+> inside class methods when they contain local variable declarations, `loop{}`
+> blocks, or appear nested inside `branch{}` / `loop{}` constructs. The compiler
+> reports `"You can't do that here."` or `"Syntax error."` at the `}else{` line.
+> Use `branch{cond ... else: ...}` instead (see below) — it handles all these
+> cases correctly. Simple `if(cond){...}` without `else` is always safe.
+
 ### `switch`
 
 ```ssz
@@ -553,6 +560,13 @@ diff<minus>:
 - The compiler builds a jump table; each condition is evaluated only until one
   matches. Local declarations are allowed at the top of the branch block.
 - `break` exits the whole `branch`.
+
+> **Preferred over `if/else`** for all conditional logic inside class methods.
+> `branch{cond ... else: ...}` is a reliable two-way conditional, unlike
+> `if/else` which has compiler quirks (see §6 `if / else` above). It also
+> supports local variable declarations and nested `loop{}` blocks without
+> issues. Use `branch{cond<skip> true: ...}` for an unconditional skip-out if
+> needed.
 
 ### `loop` (universal loop)
 
@@ -601,6 +615,13 @@ while shift != 0x0:}
   (see multi-statements). `continue` jumps to the loop condition.
 - `break, do;` jumps to the `do:` body (used to re-enter the loop from a `break`
   inside a nested block).
+
+> **⚠ Variable declarations in `do:` blocks:** variables declared with
+> initialization (`uint x = expr;`) inside a `loop{...do:...}` block's `do:`
+> section cause `"It cannot be defined here."` errors. Declare variables
+> **before** the `loop{}` block (in the init section or the enclosing scope),
+> then assign inside `do:`. Bare declarations without initialization
+> (`uint x;`) at the top of the loop block (before `while;`) are fine.
 
 ### `ret` (return)
 
@@ -1100,6 +1121,14 @@ Objects: `^T`, `%T`, `ref`/`list`, and `thread` values.
 - Guard cross-thread access to shared objects with `lock(...)`.
 - Use `branch` for multiple exclusive conditions with shared cleanup (`comm:`) and
   per-case epilogue (`diff<label>:`).
+- **Prefer `branch{cond ... else: ...}` over `if(cond){...} else {...}`** inside
+  class methods — `if/else` is unreliable with variable declarations, `loop{}`
+  blocks, or `branch{}` nesting (compiler quirk: `"You can't do that here."` /
+  `"Syntax error."` at the `}else{` line). Simple `if(cond){...}` without `else`
+  is always safe.
+- Declare variables at the top of the enclosing scope, not inside `loop{}` `do:`
+  blocks — declarations with initialization there cause
+  `"It cannot be defined here."` errors.
 
 ---
 
