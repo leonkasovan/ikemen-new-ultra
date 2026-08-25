@@ -15,7 +15,7 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 | 13 plugin sources | `main/*/` | 50–200 each |
 | 13 static headers | `main/*_static.hpp` | 30–240 each |
 
-**External dependencies:** Lua 5.2.4, SDL2, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, OpenGL.
+**External dependencies:** Lua 5.2.4, SDL2 2.32.10, SDL2_image, SDL2_ttf, SDL2_mixer, FLAC, libogg, libvorbis, Freetype, libpng, zlib, GLEW, VLC, OpenGL.
 
 ---
 
@@ -74,10 +74,13 @@ Set-Location -LiteralPath "install"
 .\ikemen-debug.exe 2>&1 | Out-File -FilePath "ikemen-debug.log" -Encoding ascii
 Set-Location ..
 
-# 3. Review the log
+# 3. Review the log (ripgrep `rg` — available in PATH, much faster than grep)
 Get-Content -Path "install\ikemen-debug.log" -Tail 30   # last 30 lines
-Get-Content -Path "install\ikemen-debug.log" | Select-String "PATTERN"  # grep
+rg "PATTERN" install/ikemen-debug.log                   # search
+rg -i "error|failed" install/ikemen-debug.log           # case-insensitive, multi-pattern
 ```
+
+- `rg` (ripgrep) is the preferred log/code search tool in this environment — use it instead of `grep` (the BusyBox grep in w64devkit chokes on common flags like `--include`, and the `rtk` wrapper mangles grep args). In PowerShell, `Select-String` works too but `rg` is faster and consistent with the sh side.
 
 - `make install` copies `build/Debug/ikemen-debug.exe` to `install/ikemen-debug.exe`
 - Runtime layout (what the exe actually reads): Lua scripts in `install/script/`, SSZ scripts in `install/ssz/`, config in `install/save/config.ssz` — sources live in `lua_script/script/`, `ssz_script/`, `ssz_script/save/` and are copied by `make install`; script/config-only changes just need re-copying (no rebuild)

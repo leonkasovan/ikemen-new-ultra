@@ -124,6 +124,9 @@ void (SSZ_STDCALL* sszrefdeletefunc)(void*) = MemoryKaihou;
 #include "mem_profiler.hpp"
 #include "time_profiler.hpp"
 
+// Master switch for [Memory]/[Time] profiler output (declared in sszdef.h).
+bool g_profilerLog = false;
+
 // Memory profiling event log — single definition for the extern in mem_profiler.hpp
 std::vector<MemorySnapshot> g_memEvents;
 
@@ -716,7 +719,7 @@ extern "C" void SSZ_STDCALL MemMarkBefore(PluginUtil* pu, Reference tag)
 	uint64_t mem = GetLiveMemory();
 	g_memBeforeMap[wtag] = mem;
 	std::string tagA = toNarrow(wtag);
-	LOG_DEBUG("Memory", "[%s] BEFORE = %llu", tagA.c_str(), (unsigned long long)mem);
+	if (g_profilerLog) LOG_DEBUG("Memory", "[%s] BEFORE = %llu", tagA.c_str(), (unsigned long long)mem);
 }
 
 extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
@@ -730,11 +733,11 @@ extern "C" void SSZ_STDCALL MemMarkAfter(PluginUtil* pu, Reference tag)
 		uint64_t before = it->second;
 		g_memBeforeMap.erase(it);
 		MemRecord(tagA.c_str(), before, mem);
-		LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (delta=%+lld)",
+		if (g_profilerLog) LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (delta=%+lld)",
 		tagA.c_str(), (unsigned long long)mem,
 			(long long)(int64_t)(mem - before));
 	} else {
-		LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (WARNING: no matching BEFORE)",
+		if (g_profilerLog) LOG_DEBUG("Memory", "[%s] AFTER  = %llu  (WARNING: no matching BEFORE)",
 			tagA.c_str(), (unsigned long long)mem);
 	}
 }
@@ -753,7 +756,14 @@ extern "C" void SSZ_STDCALL ProcMemMark(PluginUtil* pu, Reference tag)
 {
 	std::string tagA = toNarrow(pu->refToWstr(tag));
 	MemMarkProcess(tagA.c_str());
-	LOG_DEBUG("Memory", "[%s] process mark", tagA.c_str());
+	if (g_profilerLog) LOG_DEBUG("Memory", "[%s] process mark", tagA.c_str());
+}
+
+// SetProfilerLog – config wiring: config.ssz::ProfilerLog -> ikemen.ssz -> here
+extern "C" void SSZ_STDCALL SetProfilerLog(PluginUtil* pu, bool enable)
+{
+	(void)pu;
+	g_profilerLog = enable;
 }
 
 // =========================================================================

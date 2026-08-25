@@ -68,13 +68,13 @@ local stageNo = math.random(#t_selStages)
 print("Selected stage: " .. stageNo)
 
 -- Match config
-setGameMode("arcade")
+setGameMode("training")
 setRoundTime(99)
 setRoundsToWin(2)
 setLifeMul(1.0)
 setTeamMode(1, 0, 1)   -- P1 single, 1 char
 setTeamMode(2, 0, 1)   -- P2 single, 1 char
-setCom(1, 4)            -- P1 CPU (difficulty 4)
+setCom(1, 0)            -- P1 human (gamepad/keyboard)
 setCom(2, 4)            -- P2 CPU (difficulty 4)
 
 -- Start match session

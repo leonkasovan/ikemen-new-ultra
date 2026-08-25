@@ -240,6 +240,7 @@ void main()
   }
 /*?*/
   .sdl.enablePerfMonitor(.cfg.PerformanceMonitor);
+  .ssz.setProfilerLog(.cfg.ProfilerLog);
   .sdl.fullScreenMode(.cfg.FullScreenExclusive);
   if(.cfg.FullScreenExclusive) .se.fullReal = true;
   if(.sdl.fullScreen(.cfg.FullScreen)) .sdl.showCursor(!.cfg.FullScreen || .cfg.FullScreen && !.cfg.FullScreenExclusive);

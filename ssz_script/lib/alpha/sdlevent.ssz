@@ -21,6 +21,8 @@ f1Key = false, f2Key = false, f3Key = false, f4Key = false, f5Key = false, f9Key
 insertKey = false, homeKey = false, pageupKey = false, deleteKey = false, endKey = false, pagedownKey = false,
 getGamepadKeyA = false, getGamepadKeyB = false, getGamepadKeyC = false;
 
+public bool gamepadMappingsLoaded = false;
+
 public &Key
 {
   public |.sdl.K key = .sdl.K::UNKNOWN;
@@ -47,6 +49,10 @@ public %&Key eventKeys;
 
 public bool eventUpdate()
 {
+  if(!.gamepadMappingsLoaded){
+    .sdl.LoadGamepadMappings(:.cfg.GamepadMappings:);
+    .gamepadMappingsLoaded = true;
+  }
   loop{index i = 0; while; do:
     .eventKeys[i].reset();
     i++;

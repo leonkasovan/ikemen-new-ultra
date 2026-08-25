@@ -192,3 +192,8 @@ extern volatile int64_t g_jitDataBytes;
 #define LOG_DEBUG(tag, fmt, ...)   ((void)0)
 #endif
 
+// Master switch for the [Memory]/[Time] profiler output (per-mark spam and
+// exit-time rankings). Independent of PerformanceMonitor (which controls the
+// per-frame [Perf] lines in the SDL plugin). Default: off.
+extern bool g_profilerLog;
+

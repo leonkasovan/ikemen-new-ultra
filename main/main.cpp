@@ -40,6 +40,7 @@ static bool g_memRankingPrinted = false;
 
 static void SafePrintRanking()
 {
+	if (!g_profilerLog) return;
 	if (!g_memRankingPrinted)
 	{
 		g_memRankingPrinted = true;

@@ -16,6 +16,12 @@ public void procMemMark(^/char label)
   ProcMemMark(:label:);
 }
 
+public void setProfilerLog(bool enable)
+{
+  plugin void SetProfilerLog(:bool:) = <dll/ssz.dll>;
+  SetProfilerLog(:enable:);
+}
+
 public void profBegin(^/char label)
 {
   plugin void ProfBegin(:^/char:) = <dll/ssz.dll>;

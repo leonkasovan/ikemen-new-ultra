@@ -933,6 +933,7 @@ void       SSZ_STDCALL WindowSize(int height, int width);
 void       SSZ_STDCALL AspectRatio(bool aspect);
 void       SSZ_STDCALL SetOpacity(float wo);
 void       SSZ_STDCALL TakeScreenShot(const std::wstring& dir);
+int        SSZ_STDCALL LoadGamepadMappingsDb(const char* path);
 bool       SSZ_STDCALL UpdateGLViewport(const SDL_Event& event);
 int        SSZ_STDCALL PlayVideo(const std::wstring& fn, const std::wstring& screenshotPath, int volume, int audioTrack);
 bool       SSZ_STDCALL EnableJoystick(bool enable);
@@ -1095,6 +1096,12 @@ extern "C" bool SSZ_STDCALL EnableJoystick(PluginUtil* pu, bool enable)
 {
     (void)pu;
     return EnableJoystick(enable);
+}
+
+extern "C" int32_t SSZ_STDCALL LoadGamepadMappings(PluginUtil* pu, Reference path)
+{
+    return LoadGamepadMappingsDb(
+ikemen::ssz_bridge::refToNarrowUtf8(pu, path).c_str());
 }
 
 extern "C" bool SSZ_STDCALL PollEvent(PluginUtil* pu, int8_t* pb)

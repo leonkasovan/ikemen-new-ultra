@@ -107,6 +107,7 @@ struct TimeScope
 // --------------------------------------------------
 static inline void TimePrintRanking()
 {
+	if (!g_profilerLog) return;
 	if (g_timeSamples.empty())
 	{
 		LOG_INFO("Time", "==== TIME USAGE RANKING ====");

@@ -21,6 +21,9 @@
 extern volatile int64_t g_allocBytes;
 extern volatile int64_t g_freeBytes;
 
+// Master output switch (defined in ssz.cpp, declared in sszdef.h).
+extern bool g_profilerLog;
+
 // Peak logically-live SSZ heap bytes (max of live = alloc - free);
 // maintained by the allocator in ssz.cpp.
 extern volatile int64_t g_peakLiveBytes;
@@ -129,6 +132,7 @@ static inline void MemMarkProcess(const char* name)
 // Print the process-memory report: peaks, milestones with deltas, timeline.
 static inline void MemPrintProcess()
 {
+	if (!g_profilerLog) return;
 	// Peaks are derived from the recorded samples/milestones (shared vectors)
 	// rather than maintained in per-TU statics, so every translation unit
 	// sees the same numbers.
@@ -237,6 +241,7 @@ static inline void MemRecord(const char* name, uint64_t before, uint64_t after)
 // --------------------------------------------------
 static inline void MemPrintRanking()
 {
+	if (!g_profilerLog) return;
 	if (g_memEvents.empty())
 	{
 		LOG_INFO("Memory", "==== MEMORY USAGE RANKING ====");
@@ -280,24 +285,24 @@ static inline void MemPrintRanking()
 // --------------------------------------------------
 #define MEM_MARK_BEFORE(tag) \
 	uint64_t mem_before_##tag = GetLiveMemory(); \
-	LOG_INFO("Memory", "[%s] BEFORE = %llu", #tag, (unsigned long long)mem_before_##tag);
+	if(g_profilerLog) LOG_INFO("Memory", "[%s] BEFORE = %llu", #tag, (unsigned long long)mem_before_##tag);
 
 #define MEM_MARK_AFTER(tag) \
 	uint64_t mem_after_##tag = GetLiveMemory(); \
 	int64_t mem_delta_##tag = (int64_t)(mem_after_##tag - mem_before_##tag); \
-	LOG_INFO("Memory", "[%s] AFTER  = %llu  (delta=%+lld)", \
+	if(g_profilerLog) LOG_INFO("Memory", "[%s] AFTER  = %llu  (delta=%+lld)", \
 		#tag, (unsigned long long)mem_after_##tag, (long long)mem_delta_##tag); \
 	MemRecord(#tag, mem_before_##tag, mem_after_##tag);
 
 // Named variants – include a per-instance identifier (e.g. file path)
 #define MEM_MARK_BEFORE_NAMED(tag, name) \
 	uint64_t mem_before_##tag = GetLiveMemory(); \
-	LOG_INFO("Memory", "[%s %s] BEFORE = %llu", #tag, name, (unsigned long long)mem_before_##tag);
+	if(g_profilerLog) LOG_INFO("Memory", "[%s %s] BEFORE = %llu", #tag, name, (unsigned long long)mem_before_##tag);
 
 #define MEM_MARK_AFTER_NAMED(tag, name) \
 	uint64_t mem_after_##tag = GetLiveMemory(); \
 	int64_t mem_delta_##tag = (int64_t)(mem_after_##tag - mem_before_##tag); \
-	LOG_INFO("Memory", "[%s %s] AFTER  = %llu  (delta=%+lld)", \
+	if(g_profilerLog) LOG_INFO("Memory", "[%s %s] AFTER  = %llu  (delta=%+lld)", \
 		#tag, name, (unsigned long long)mem_after_##tag, (long long)mem_delta_##tag); \
 	{ std::string _mem_tag = std::string(#tag) + " " + name; \
 		MemRecord(_mem_tag.c_str(), mem_before_##tag, mem_after_##tag); }

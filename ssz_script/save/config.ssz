@@ -1,73 +1,85 @@
 //Video Settings
-const int Renderer = 2; //0: SDL2/Software, 1: OpenGL 2.1, 2: OpenGL 3.3, 3: OpenGL 4.6, 4: DirectX
-const bool AspectRatio = false;
-const bool FullScreen = false;
+const int Renderer = 4; //0: SDL2/Software, 1: OpenGL 2.1, 2: OpenGL 3.3, 3: OpenGL 4.6, 4: DirectX
+const bool AspectRatio = false; //Lock window aspect ratio to the game resolution (no stretching)
+const bool FullScreen = false; //Run in fullscreen instead of a window
 const bool FullScreenExclusive = false; //False: Borderless FullScreen, True: Exclusive FullScreen
 const int WindowType = 1; //1: Resizable, 2: Bordered A, 3: Bordered B, 4: No Decoration
-const int Width = 640;
-const int Height = 480;
-const int Brightness = 256;
-const float Opacity = 1;
+const int Width = 640; //Game resolution width in pixels (localcoord)
+const int Height = 480; //Game resolution height in pixels (localcoord)
+const int Brightness = 256; //Screen brightness multiplier, 256 = 100% (MUGEN intensity scale)
+const float Opacity = 1; //Window opacity, 0.0 (transparent) - 1.0 (opaque); fullscreen window only
 
 //Audio Settings
-const float GlVol = 0.8;
-const float SEVol = 0.8;
-const float BGMVol = 0.5;
-const float PanStr = 0.8;
-const int VideoVol = 100;
+const float GlVol = 0.8; //Master volume, 0.0 - 1.0
+const float SEVol = 0.8; //Sound effect volume, 0.0 - 1.0
+const float BGMVol = 0.5; //Background music volume, 0.0 - 1.0
+const float PanStr = 0.8; //Stereo pan strength, 0.0 (mono) - 1.0 (full left/right separation)
+const int VideoVol = 100; //Video (VLC) playback volume in percent
 
 //Perfomance Settings
-const bool PerformanceMonitor = true; //Enable FPS/GL API profiling output
-const bool SaveMemory = false;
-const int HelperMax = 56;
-const int PlayerProjectileMax = 50;
-const int ExplodMax = 256;
-const int AfterImageMax = 8;
+const bool PerformanceMonitor = false; //Enable FPS/GL API profiling output
+const bool ProfilerLog = false; //Enable [Memory]/[Time] profiler log output (per-mark spam + exit rankings)
+const bool SaveMemory = false; //Skip SFF sprite caching to save RAM (software renderer only, slower reloads)
+const int HelperMax = 56; //Max helpers per player (MUGEN HelperMax)
+const int PlayerProjectileMax = 50; //Max projectiles per player (MUGEN PlayerProjectileMax)
+const int ExplodMax = 256; //Max explods per player (MUGEN ExplodMax)
+const int AfterImageMax = 8; //Max afterimages per player (MUGEN AfterImageMax)
 
 //Input Settings
-const bool UseJoystick = false; //Enable joystick/gamepad input (can hang on some Windows systems)
+const bool UseJoystick = true; //Enable joystick/gamepad input (WGI backend disabled at init - MinGW hang fixed)
 
 //Game Settings
-const int GameSpeed = 60; //frames/second
-const float Attack_LifeToPowerMul = 0.7;
-const float GetHit_LifeToPowerMul = 0.6;
-const float Super_TargetDefenceMul = 1.5;
-const float LifebarFontScale = 1;
+const int GameSpeed = 60; //Game logic rate in frames per second (60 = MUGEN default)
+const float Attack_LifeToPowerMul = 0.7; //Power gained by attacker per point of damage dealt (MUGen Attack.LifeToPowerMul)
+const float GetHit_LifeToPowerMul = 0.6; //Power gained by victim per point of damage taken (MUGEN GetHit.LifeToPowerMul)
+const float Super_TargetDefenceMul = 1.5; //Defence multiplier applied to targets while in a super pause (MUGEN Super.TargetDefenceMul)
+const float LifebarFontScale = 1; //Scale multiplier for lifebar fonts
 
 //Portraits Settings
-const int CharPortraitsGroup = 9000;
-const int CharFacePortraitIndex = 0;
-const int CharBigPortraitIndex = 1;
-const int CharWinnerPortraitIndex = 1; //2
-const int CharLoserPortraitIndex = 1; //3
-const int CharOrderPortraitIndex = 4;
-const int CharVSPortraitIndex = 1; //5
-const int CharResultsPortraitIndex = 2; //6
-const int CharExtraPortraitIndex = 7;
+//Portrait sprite = (Group, Index) looked up in each character's SFF;
+//Group 9000 is the standard MUGEN portrait group.
+const int CharPortraitsGroup = 9000; //SFF group containing all character portraits
+const int CharFacePortraitIndex = 0; //Sprite index: small face portrait (select screen)
+const int CharBigPortraitIndex = 1; //Sprite index: big portrait (VS screen)
+const int CharWinnerPortraitIndex = 1; //Sprite index: winner portrait (win screen)
+const int CharLoserPortraitIndex = 1; //Sprite index: loser portrait (win screen)
+const int CharOrderPortraitIndex = 4; //Sprite index: order/join portrait (arcade ladder)
+const int CharVSPortraitIndex = 1; //Sprite index: VS portrait (VS screen)
+const int CharResultsPortraitIndex = 2; //Sprite index: results portrait (score/results screen)
+const int CharExtraPortraitIndex = 7; //Sprite index: extra portrait (custom screens)
 
-const int StagePortraitsGroup = 9000;
-const int StageIconPortraitIndex = 0;
-const int StageBigPortraitIndex = 1;
-const int StageVSPortraitIndex = 2;
-const int StageWinPortraitIndex = 3;
-const int StageExtraPortraitIndex = 4;
+const int StagePortraitsGroup = 9000; //SFF group containing stage portraits (stage SFF)
+const int StageIconPortraitIndex = 0; //Sprite index: stage icon (select screen)
+const int StageBigPortraitIndex = 1; //Sprite index: big stage portrait (VS screen)
+const int StageVSPortraitIndex = 2; //Sprite index: VS stage portrait (VS screen)
+const int StageWinPortraitIndex = 3; //Sprite index: win stage portrait (win screen)
+const int StageExtraPortraitIndex = 4; //Sprite index: extra stage portrait (custom screens)
 
 //System Settings
-const ^/char Executable = "Ikemen Plus Ultra.exe";
-const ^/char WindowTitle = "I.K.E.M.E.N. PLUS ULTRA";
-const ^/char ScreenshotFolder = "screenshots"; //Path to directory where Screenshots will be saves (UNUSED).
-const ^/char listenPort = "7500";
-const ^/char UserName = "Nickname";
+const ^/char Executable = "Ikemen Plus Ultra.exe"; //Executable name shown in netplay/lobby identification
+const ^/char WindowTitle = "I.K.E.M.E.N. PLUS ULTRA"; //Window title bar text (also used in screenshot filenames)
+const ^/char ScreenshotFolder = "screenshots"; //Screenshot/video capture folder (relative to install/), read by Lua getScreenshotsPath().
+const ^/char listenPort = "7500"; //TCP port for netplay server
+const ^/char UserName = "Nickname"; //Netplay display name
 const ^/char GlobalAnims = "data/common.air"; //Common Animations using character's local sprites
 const ^/char GlobalCommands = "data/common.cmd"; //Common Commands
 const ^/char GlobalMatch = "data/match.cns"; //Common States (CNS)
 const ^/char system = "script/main.lua"; //Lua script file initializing game mode logic loop.
 
 //Input Settings
-const ^/char GamepadMappings = "lib/external/gamecontrollerdb.txt"; //Path to database of game controller mappings (currently not implemented).
+const ^/char GamepadMappings = "lib/external/gamecontrollerdb.txt"; //SDL2 GameController mapping database, loaded at startup.
 lib sdl = <alpha/sdlplugin.ssz>;
 type k_t = |sdl.SDLKey;
 /%&Keys in;
+
+//Key binding tables: &Keys.set(jn, u, d, l, r, a, b, c, x, y, z, q, w, e, s)
+//  jn = joystick number (-1 = keyboard, 0/1 = first/second gamepad)
+//  u/d/l/r = up/down/left/right; a/b/c/x/y/z/q/w/e/s = MUGEN attack buttons
+//  Positive value = SDL button/axis ID (GameController API when recognized;
+//  dpad = 11 up, 12 down, 13 left, 14 right via GameController API)
+//  Negative value = encoded axis/hat ID: -((slot << 3) | dir) - 1
+//    axis slot N: dir 0/1 = axis N*2 left/right, dir 2/3 = axis N*2+1 up/down
+//    hat slot N:  dir 4 = left (-5), 5 = right (-6), 6 = up (-7), 7 = down (-8)
 
 //P1 KEYBOARD - BATTLE
 in.new[0].set(
@@ -105,9 +117,9 @@ in.new[1].set(
   (int)k_t::KP_5,
   (int)k_t::KP_0);
 
-//P1 GAMEPAD - BATTLE
+//P1 GAMEPAD - BATTLE (d-pad; stick IDs are -1/-2 = left/right, -3/-4 = up/down)
 in.new[2].set(
-  0, -3, -4, -1, -2, 0, 1, 4, 2, 3, 5, 8, 9, -10, 6);
+  0, -7, -8, -5, -6, 0, 1, 4, 2, 3, 5, 8, 9, -10, 6);
 
 //P2 GAMEPAD - BATTLE
 in.new[3].set(
@@ -146,8 +158,8 @@ in.new[11].set(
   (int)k_t::l,
   (int)k_t::KP_7,
   (int)k_t::KP_9,
-  (int)k_t::KP_PERIOD,
-  (int)k_t::KP_ENTER);
+  (int)k_t::KP_5,
+  (int)k_t::KP_0);
 
 //P1 GAMEPAD - MENU
 in.new[12].set(
@@ -157,7 +169,7 @@ in.new[12].set(
 in.new[13].set(
   1, -7, -8, -5, -6, 2, 3, 4, 5, 8, 9, 6, 0, 1, 7);
 
-const bool IgnoreMostErrors = true;
+const bool IgnoreMostErrors = true; //Keep running on recoverable SSZ compile errors
 
 public &Keys
 {

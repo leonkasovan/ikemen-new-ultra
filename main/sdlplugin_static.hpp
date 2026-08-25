@@ -77,6 +77,7 @@ extern "C"
 	char16_t  SSZ_STDCALL GetLastChar        (PluginUtil*);
 	bool      SSZ_STDCALL KeyState           (PluginUtil*, int32_t);
 	bool      SSZ_STDCALL JoystickButtonState(PluginUtil*, int32_t, int32_t);
+	int32_t   SSZ_STDCALL LoadGamepadMappings(PluginUtil*, Reference);
 	int32_t   SSZ_STDCALL PollInputBitmask   (PluginUtil*,
 	              int32_t, int32_t, int32_t, int32_t, int32_t,
 	              int32_t, int32_t, int32_t, int32_t, int32_t,
@@ -189,6 +190,7 @@ inline bool sdlplugin_static_register()
 		{ "GetLastChar",         (void*)GetLastChar         },
 		{ "KeyState",            (void*)KeyState            },
 		{ "JoystickButtonState", (void*)JoystickButtonState },
+		{ "LoadGamepadMappings", (void*)LoadGamepadMappings },
 		{ "PollInputBitmask",   (void*)PollInputBitmask   },
 		{ "DrawTTF",             (void*)DrawTTF             },
 		{ "SoftFill",            (void*)SoftFill            },

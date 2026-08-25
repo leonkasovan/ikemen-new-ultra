@@ -56,7 +56,7 @@ endif
 
 # ---- Global include paths ----
 GLOBAL_INC  = -I $(MAIN) -I $(SSZ)
-GLOBAL_INC += -I $(EXT)/SDL2-2.0.20/include
+GLOBAL_INC += -I $(EXT)/SDL2-2.32.10/include
 GLOBAL_INC += -I $(EXT)/SDL2_image-2.0.5
 GLOBAL_INC += -I $(EXT)/SDL2_ttf-2.0.18
 GLOBAL_INC += -I $(EXT)/SDL2_mixer-2.0.4
@@ -123,7 +123,7 @@ MAIN_OBJS = $(patsubst $(MAIN)/%.cpp,$(BLD)/main/%.o,$(MAIN_SRCS))
 # ============================================================
 #  SDL2  (167 sources — Windows backend only)
 # ============================================================
-SDL2_DIR    = $(EXT)/SDL2-2.0.20
+SDL2_DIR    = $(EXT)/SDL2-2.32.10
 SDL2_SRCS   = \
   $(SDL2_DIR)/src/atomic/SDL_atomic.c \
   $(SDL2_DIR)/src/atomic/SDL_spinlock.c \
@@ -137,6 +137,7 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/audio/SDL_mixer.c \
   $(SDL2_DIR)/src/audio/SDL_wave.c \
   $(SDL2_DIR)/src/audio/winmm/SDL_winmm.c \
+  $(SDL2_DIR)/src/core/windows/SDL_immdevice.c \
   $(SDL2_DIR)/src/audio/wasapi/SDL_wasapi.c \
   $(SDL2_DIR)/src/audio/wasapi/SDL_wasapi_win32.c \
   $(SDL2_DIR)/src/core/windows/SDL_hid.c \
@@ -164,6 +165,12 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/hidapi/SDL_hidapi.c \
   $(SDL2_DIR)/src/joystick/dummy/SDL_sysjoystick.c \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapijoystick.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_wii.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_steamdeck.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_steam.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_shield.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_ps3.c \
+  $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_combined.c \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_gamecube.c \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_luna.c \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_ps4.c \
@@ -175,13 +182,13 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_xbox360w.c \
   $(SDL2_DIR)/src/joystick/hidapi/SDL_hidapi_xboxone.c \
   $(SDL2_DIR)/src/joystick/SDL_gamecontroller.c \
+  $(SDL2_DIR)/src/joystick/SDL_steam_virtual_gamepad.c \
   $(SDL2_DIR)/src/joystick/SDL_joystick.c \
   $(SDL2_DIR)/src/joystick/virtual/SDL_virtualjoystick.c \
   $(SDL2_DIR)/src/joystick/windows/SDL_dinputjoystick.c \
   $(SDL2_DIR)/src/joystick/windows/SDL_windowsjoystick.c \
   $(SDL2_DIR)/src/joystick/windows/SDL_xinputjoystick.c \
   $(SDL2_DIR)/src/joystick/windows/SDL_rawinputjoystick.c \
-  $(SDL2_DIR)/src/joystick/windows/sdl_wgi_stub.c \
   $(SDL2_DIR)/src/libm/e_atan2.c \
   $(SDL2_DIR)/src/libm/e_exp.c \
   $(SDL2_DIR)/src/libm/e_fmod.c \
@@ -217,6 +224,9 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/render/direct3d11/SDL_render_d3d11.c \
   $(SDL2_DIR)/src/render/direct3d11/SDL_shaders_d3d11.c \
   $(SDL2_DIR)/src/render/SDL_render.c \
+  $(SDL2_DIR)/src/joystick/controller_type.c \
+  $(SDL2_DIR)/src/SDL_guid.c \
+  $(SDL2_DIR)/src/stdlib/SDL_crc16.c \
   $(SDL2_DIR)/src/render/SDL_yuv_sw.c \
   $(SDL2_DIR)/src/render/software/SDL_blendfillrect.c \
   $(SDL2_DIR)/src/render/software/SDL_blendline.c \
@@ -274,6 +284,8 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/video/SDL_stretch.c \
   $(SDL2_DIR)/src/video/SDL_surface.c \
   $(SDL2_DIR)/src/video/SDL_video.c \
+  $(SDL2_DIR)/src/video/yuv2rgb/yuv_rgb_sse.c \
+  $(SDL2_DIR)/src/video/yuv2rgb/yuv_rgb_std.c \
   $(SDL2_DIR)/src/video/SDL_yuv.c \
   $(SDL2_DIR)/src/video/SDL_vulkan_utils.c \
   $(SDL2_DIR)/src/video/windows/SDL_windowsclipboard.c \
@@ -287,8 +299,9 @@ SDL2_SRCS   = \
   $(SDL2_DIR)/src/video/windows/SDL_windowsshape.c \
   $(SDL2_DIR)/src/video/windows/SDL_windowsvideo.c \
   $(SDL2_DIR)/src/video/windows/SDL_windowswindow.c \
-  $(SDL2_DIR)/src/video/yuv2rgb/yuv_rgb.c
-SDL2_DEFS  = -DSDL_VIDEO_OPENGL_EGL=0 -DSDL_VIDEO_OPENGL_ES2=0 -DSDL_VIDEO_RENDER_OGL_ES2=0 -DHAVE_LIBC -D_CRT_SECURE_NO_WARNINGS -DSDL_HIDAPI_DISABLED -DSDL_JOYSTICK_WGI=0
+  $(SDL2_DIR)/src/SDL_utils.c \
+  $(SDL2_DIR)/src/SDL_list.c
+SDL2_DEFS  = -DSDL_DYNAMIC_API=0 -DHAVE_LIBC -D_CRT_SECURE_NO_WARNINGS -DSDL_HIDAPI_DISABLED
 SDL2_OBJS  = $(patsubst $(SDL2_DIR)/src/%.c,$(BLD)/sdl2/%.o,$(SDL2_SRCS))
 
 # ---- SDL2 image ----
@@ -577,7 +590,7 @@ all: $(TARGET)
 
 $(TARGET): $(MAIN_OBJS) $(ALL_LIBS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) $(ALL_LIBS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(MAIN_OBJS) -Wl,--start-group $(ALL_LIBS) -Wl,--end-group $(LDFLAGS) $(LDLIBS)
 ifeq ($(CONFIG),Release)
 	$(W64DEVKIT)/bin/strip --strip-all $@
 endif

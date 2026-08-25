@@ -479,85 +479,131 @@ void bgmclear()
 	}
 }
 
+// Windows joystick backend selection
+// MinGW builds cannot reliably use Windows.Gaming.Input (WGI). Force SDL to
+// use the classic Windows joystick backends before joystick init. Unknown or
+// unsupported hints are ignored by SDL.
+static void applyJoystickBackendHints()
+{
+#ifdef SDL_HINT_JOYSTICK_WGI
+	SDL_SetHint(SDL_HINT_JOYSTICK_WGI, "0");
+#endif
+#ifdef SDL_HINT_JOYSTICK_DIRECTINPUT
+	SDL_SetHint(SDL_HINT_JOYSTICK_DIRECTINPUT, "0"); //prefer XInput: DInput hides the X360 d-pad
+#endif
+#ifdef SDL_HINT_XINPUT_ENABLED
+	SDL_SetHint(SDL_HINT_XINPUT_ENABLED, "1");
+#endif
+#ifdef SDL_HINT_JOYSTICK_HIDAPI
+	SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
+#endif
+}
+
 class Joystick
 {
-	std::basic_string<SDL_Joystick*> joys;
+	struct Device
+	{
+		SDL_Joystick* joystick;
+		SDL_GameController* controller;
+		Device() : joystick(nullptr), controller(nullptr) {}
+	};
+	std::vector<Device> devices;
 public:
 	void init()
 	{
-		intptr_t i;
-		joys.clear();
-		for(i = 0; i < SDL_NumJoysticks(); i++){
-			joys += SDL_JoystickOpen(i);
+		close();
+		applyJoystickBackendHints();
+		Uint32 inputFlags = SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER;
+		if((SDL_WasInit(inputFlags) & inputFlags) != inputFlags){
+			if(SDL_InitSubSystem(inputFlags) < 0){
+				LOG_DEBUG("SDL", "Joystick init failed: %s", SDL_GetError());
+				INIT_LOG("Joystick init failed: %s", SDL_GetError());
+				return;
+			}
+		}
+		SDL_JoystickEventState(SDL_ENABLE);
+		int count = SDL_NumJoysticks();
+		INIT_LOG("Enumerating %d joystick(s)", count);
+		for(int i = 0; i < count; i++){
+			Device dev;
+			if(SDL_IsGameController(i)){
+				dev.controller = SDL_GameControllerOpen(i);
+				if(dev.controller != nullptr){
+					dev.joystick = SDL_GameControllerGetJoystick(dev.controller);
+					INIT_LOG("Opened game controller %d: %s", i, SDL_GameControllerName(dev.controller));
+				}
+			}
+			if(dev.joystick == nullptr){
+				dev.joystick = SDL_JoystickOpen(i);
+				if(dev.joystick != nullptr){
+					INIT_LOG("Opened joystick %d: %s", i, SDL_JoystickName(dev.joystick));
+				}
+			}
+			if(dev.joystick == nullptr && dev.controller == nullptr){
+				INIT_LOG("Failed to open joystick %d: %s", i, SDL_GetError());
+			}
+			devices.push_back(dev);
 		}
 	}
 	void close()
 	{
-		intptr_t i;
-		for(i = 0; i < (intptr_t)joys.size(); i++){
-			if(joys[i] != nullptr){
-				SDL_JoystickClose(joys[i]);
+		for(size_t i = 0; i < devices.size(); i++){
+			if(devices[i].controller != nullptr){
+				SDL_GameControllerClose(devices[i].controller);
+				devices[i].controller = nullptr;
+				devices[i].joystick = nullptr;
+			}else if(devices[i].joystick != nullptr){
+				SDL_JoystickClose(devices[i].joystick);
+				devices[i].joystick = nullptr;
 			}
 		}
-		joys.clear();
+		devices.clear();
+	}
+	void reload()
+	{
+		init();
 	}
 	bool getState(int32_t joy, int32_t btn)
 	{
-		if(joy < 0) return SDL_GetKeyboardState(nullptr)[btn] == SDL_PRESSED;
-		if(joy >= (int32_t)joys.size() || joys[joy] == nullptr){
+		if(joy < 0){
+			int keyCount = 0;
+			const Uint8* keys = SDL_GetKeyboardState(&keyCount);
+			return btn >= 0 && btn < keyCount && keys[btn] == SDL_PRESSED;
+		}
+		if(joy >= (int32_t)devices.size() || devices[joy].joystick == nullptr){
 			return false;
 		}
-		if(btn < 0) switch((-btn-1) & 7){
-		case 0:
-			return
-				SDL_JoystickGetAxis(joys[joy],
-				((-btn-1) >> 3)*2) < -3200;
-		case 1:
-			return
-				SDL_JoystickGetAxis(joys[joy],
-				((-btn-1) >> 3)*2) > 3200;
-		case 2:
-			return
-				SDL_JoystickGetAxis(joys[joy],
-				((-btn-1) >> 3)*2 + 1) < -3200;
-		case 3:
-			return
-				SDL_JoystickGetAxis(joys[joy],
-				((-btn-1) >> 3)*2 + 1) > 3200;
-		case 4:
-			return
-				(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_LEFT)
-				&& !(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_RIGHT);
-		case 5:
-			return
-				!(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_LEFT)
-				&& (
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_RIGHT);
-		case 6:
-			return
-				(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_UP)
-				&& !(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_DOWN);
-		case 7:
-			return
-				!(
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_UP)
-				&& (
-					SDL_JoystickGetHat(joys[joy],
-					(-btn-1) >> 3) & SDL_HAT_DOWN);
+		if(btn < 0){
+		/* Direction bindings are dual-source: an axis ID also fires from the
+		   matching d-pad hat direction, and a hat ID also fires from the
+		   matching axis — so stick and d-pad both work with either binding.
+		   Encoding: -((slot << 3) | dir) - 1
+		     dir 0-3 = axis (slot*2 L/R, slot*2+1 U/D), dir 4-7 = hat L/R/U/D */
+			const int slot = (-btn-1) >> 3;
+			const int dir = (-btn-1) & 7;
+			SDL_Joystick* j = devices[joy].joystick;
+			if(dir < 4){
+				Sint16 v = SDL_JoystickGetAxis(j, slot*2 + (dir >> 1));
+				if((dir & 1) ? v > 3200 : v < -3200) return true;
+				int hatBit = (dir == 0) ? SDL_HAT_LEFT : (dir == 1) ? SDL_HAT_RIGHT :
+				             (dir == 2) ? SDL_HAT_UP   : SDL_HAT_DOWN;
+				return (SDL_JoystickGetHat(j, 0) & hatBit) != 0;
+			}else{
+				int hatBit = (dir == 4) ? SDL_HAT_LEFT : (dir == 5) ? SDL_HAT_RIGHT :
+				             (dir == 6) ? SDL_HAT_UP   : SDL_HAT_DOWN;
+				if(SDL_JoystickGetHat(j, 0) & hatBit) return true;
+				// axis fallback: dir 4/5 = left/right on slot*2, dir 6/7 = up/down on slot*2+1
+				Sint16 v = SDL_JoystickGetAxis(j, (dir == 4 || dir == 5) ? slot*2 : slot*2 + 1);
+				return (dir == 5 || dir == 7) ? v > 3200 : v < -3200;
+			}
 		}
-		return SDL_JoystickGetButton(joys[joy], btn) == SDL_PRESSED;
+		// SDL-recognized controllers use the normalized button API, so the
+		// mapping database loaded via LoadGamepadMappings applies to this path.
+		if(devices[joy].controller != nullptr && btn >= 0 && btn < SDL_CONTROLLER_BUTTON_MAX){
+			return SDL_GameControllerGetButton(devices[joy].controller,
+				(SDL_GameControllerButton)btn) == SDL_PRESSED;
+		}
+		return SDL_JoystickGetButton(devices[joy].joystick, btn) == SDL_PRESSED;
 	}
 };
 Joystick g_js;
@@ -2441,9 +2487,32 @@ bool SSZ_STDCALL KeyState(int32_t key)
 	return state[key] == SDL_PRESSED;
 }
 
-bool SSZ_STDCALL JoystickButtonState(int32_t joy, int32_t btn)
+// ABI NOTE: the JIT delivers plugin args reversed into this native —
+// SSZ JoystickButtonState(jn, btn) arrives here as (btn, joy).
+// Verified empirically: keyboard calls (-1, scancode) land as (scancode, -1).
+bool SSZ_STDCALL JoystickButtonState(int32_t btn, int32_t joy)
 {
 	return g_js.getState(joy, btn);
+}
+
+// Load an SDL2 GameController mapping database (gamecontrollerdb.txt format).
+// Returns the number of mappings added, or a negative SDL error code.
+// Re-opens devices afterwards so SDL_IsGameController() sees the new mappings.
+// (bridge.cpp wraps this for the SSZ plugin ABI.)
+int SSZ_STDCALL LoadGamepadMappingsDb(const char* mappingPath)
+{
+	applyJoystickBackendHints();
+	int added = SDL_GameControllerAddMappingsFromFile(mappingPath);
+	if(added < 0){
+		LOG_DEBUG("SDL", "LoadGamepadMappings failed for %s: %s", mappingPath, SDL_GetError());
+		INIT_LOG("Gamepad mapping database load failed: %s", SDL_GetError());
+		return added;
+	}
+	INIT_LOG("Loaded %d gamepad mapping(s) from %s", added, mappingPath);
+	if(SDL_WasInit(SDL_INIT_JOYSTICK)){
+		g_js.reload();
+	}
+	return added;
 }
 
 bool SSZ_STDCALL EnableJoystick(bool enable)

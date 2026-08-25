@@ -4,8 +4,8 @@
 --Paths Data
 licensesPath = "docs/Licenses" --Licenses Path (Please always distribute license files for use this program)
 replaysPath = "replays" --Replays Path
-screenshotPath = "screenshots"
---screenshotPath = getScreenshotsPath() --to use config.ssz ScreenshotFolder path
+screenshotPath = getScreenshotsPath() --from config.ssz ScreenshotFolder
+--screenshotPath = "screenshots" --hardcoded override
 musicPath = "sound" --Main Soundtrack Path
 luaModulesPath = { --Lua External Modules Folder Paths
 "script/mods",
