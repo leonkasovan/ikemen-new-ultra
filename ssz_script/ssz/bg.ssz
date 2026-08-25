@@ -472,6 +472,15 @@ public &BackGround
         * .com.HeightScale);
     rect.w = (int).m.ceil((float)rect.w * .com.WidthScale * wsclx);
     rect.h = (int).m.ceil((float)rect.h * .com.HeightScale * wscly);
+    // Clamp clipping rect to game viewport (640x480) — HD stages have large
+    // local coordinates that push the rect outside the visible area after
+    // transformation, causing all bg elements to be culled (black bg).
+    // Hardcoded 640/480 to avoid .com.GameWidth being stage-scaled.
+    if(rect.x >= 640 || rect.y >= 480
+       || rect.x + rect.w <= 0 || rect.y + rect.h <= 0){
+      rect.x = 0; rect.y = 0;
+      rect.w = 640; rect.h = 480;
+    }
     `anim.draw(
       rect=, x2, y2, sclx, scly, `xtscale*bgscl, xbs*bgscl, ys,
       xras * x2 / (#ys*lyscl*(float)`anim.spr~rct.h),

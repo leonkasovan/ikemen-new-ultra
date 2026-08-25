@@ -344,10 +344,11 @@ public &Sprite
       `rle = -12;
       `pxl.new(1);
       if(!`pxl~loadPngTexture(`rct.w=, `rct.h=, f=)) default;
-    /*true:
-      `rct.w = `rct.h = 0;
-    /*?*/
       ret "";
+    /*true:
+      `rle = -13;
+      px = .sdl.decodePNG32(`rct.w=, `rct.h=, f=);
+    /*?*/
     default:
       ret "unknown format";
     }
@@ -1372,6 +1373,14 @@ public &Anim<frame_t>
       y2 -= (float)(int)(y2 / tmp) * tmp;
     }
   /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
+    // Clamp rect to game viewport — HD stages push the clipping window
+    // outside 640x480 via bg.ssz coordinate transformation, causing the
+    // fullcolor shader to cull all truecolor sprites (black bg).
+    if(rect.x >= 640 || rect.y >= 480
+       || rect.x + rect.w <= 0 || rect.y + rect.h <= 0){
+      rect.x = 0; rect.y = 0;
+      rect.w = 640; rect.h = 480;
+    }
     `spr~glDraw(
       `palFoo(fx), `mask, -x2*.com.WidthScale, -y2*.com.HeightScale,
       `tile=, xs*.com.WidthScale, cscalex*bs*h*.com.WidthScale,

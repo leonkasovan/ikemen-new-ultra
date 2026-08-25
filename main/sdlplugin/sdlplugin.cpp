@@ -2723,6 +2723,59 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 }
 
 // ---------------------------------------------------------------------------
+// DecodePNG32 — decode any PNG to 4 bytes/pixel RGBA (for SW truecolor).
+// Same signature convention as DecodePNG8 but output is RGBA.
+// Forces all formats to RGBA via png_set_expand + png_set_add_alpha.
+// ---------------------------------------------------------------------------
+void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_t>& out)
+{
+	out.clear();
+	*w = *h = 0;
+	if(!fp) return;
+	uint8_t header[8] = {0};
+	fread(header, 1, 8, fp);
+	if(png_sig_cmp(header, 0, 8)) return;
+	auto png_ptr =
+		png_create_read_struct(
+			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+	if(!png_ptr) return;
+	auto info_ptr = png_create_info_struct(png_ptr);
+	if(!info_ptr){
+		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
+		return;
+	}
+	png_init_io(png_ptr, fp);
+	png_set_sig_bytes(png_ptr, 8);
+	png_read_info(png_ptr, info_ptr);
+	if(!setjmp(png_jmpbuf(png_ptr)))
+	{
+		png_uint_32 width, height;
+		int bit_depth, color_type;
+		if(
+			png_get_IHDR(
+				png_ptr, info_ptr, &width, &height, &bit_depth, &color_type,
+				nullptr, nullptr, nullptr))
+		{
+			// Force to 8-bit RGBA regardless of input format.
+			if(bit_depth > 8) png_set_strip_16(png_ptr);
+			png_set_expand(png_ptr);
+			if((color_type & PNG_COLOR_MASK_ALPHA) == 0){
+				png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
+			}
+			*w = width;
+			*h = height;
+			out.resize((size_t)width * height * 4);
+			auto p = out.data();
+			auto pp = new png_bytep[height];
+			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
+			png_read_image(png_ptr, pp);
+			delete [] pp;
+		}
+	}
+	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+}
+
+// ---------------------------------------------------------------------------
 // Blit texture cache — avoids per-frame SDL_CreateTextureFromSurface
 // ---------------------------------------------------------------------------
 static const size_t BLIT_CACHE_MAX = 64;
@@ -3262,6 +3315,74 @@ struct PalletColorImg
 	{
 		if(finished()) return;
 		data += (width-1)-currentx;
+		currentx = width-1;
+		nextPixel();
+	}
+};
+
+// Truecolor image reader: 4 bytes/pixel (RGBA), no palette lookup.
+// Used by the SW/DirectX renderer (Renderer 0/4) for SFFv2 fmt 11/12.
+struct TruecolorImg
+{
+	uint8_t* data;
+	uint8_t* end;
+	int currentx;
+	int currenty;
+	int width;
+	uint32_t color; // full RGBA pixel: 0xAARRGGBB
+	void setImg(Reference& r, int w)
+	{
+		data = (uint8_t*)r.atpos();
+		end = data + r.len();
+		width = w;
+		currentx = width-1;
+		currenty = -1;
+		nextPixel();
+	}
+	void nextPixel()
+	{
+		if((unsigned int)++currentx >= (unsigned int)width){
+			currenty++;
+			if(data + 4 > end){
+				end = nullptr;
+				currentx = -2;
+				return;
+			}
+			currentx = 0;
+		}
+		if(data + 4 > end){
+			end = nullptr;
+			currentx = -2;
+			return;
+		}
+		color = (uint32_t)data[0] | ((uint32_t)data[1] << 8)
+			| ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+		data += 4;
+	}
+	bool finished()
+	{
+		return end == nullptr;
+	}
+	void skip(int n)
+	{
+		while(n > 0 && !finished()){
+			if(width-currentx > n){
+				data += n * 4;
+				currentx += n;
+				color = (uint32_t)data[-4] | ((uint32_t)data[-3] << 8)
+					| ((uint32_t)data[-2] << 16) | ((uint32_t)data[-1] << 24);
+				return;
+			}
+			n -= width - currentx;
+			data += ((width-1)-currentx) * 4;
+			currentx = width-1;
+			nextPixel();
+		}
+	}
+	void nextLine()
+	{
+		if(finished()) return;
+		data += ((width-1)-currentx) * 4;
 		currentx = width-1;
 		nextPixel();
 	}
@@ -4294,6 +4415,336 @@ template<> void mzlLoop<PalletColorImg, mAdd1Trans>(
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Truecolor mzlLoop specializations — 4 bytes/pixel RGBA, no palette lookup.
+// Transparency: alpha channel != 0 (not a palette index).
+// Used by SW/DirectX renderer (Renderer 0/4) for SFFv2 fmt 11/12.
+// ---------------------------------------------------------------------------
+
+template<> void mzlLoop<TruecolorImg, mTrans>(
+	uint32_t* pdpx, TruecolorImg& pri, uint32_t* pspl, uint32_t colorkey,
+	int xsign, SDL_Rect tile, int ix, int dxend, int ifx, int ixcl, int sx)
+{
+	TruecolorImg tmppri = pri;
+	tmppri.skip(sx);
+	if(tile.w == 1){
+		if(sx != 0 && tmppri.currentx <= 0) return;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					pdpx[ix] = tmppri.color;
+				}
+				ix += n;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0) return;
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0) return;
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					pdpx[ix] = tmppri.color;
+				}
+				ix += xsign;
+			}
+		}
+	}else{
+		int bix = ix;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					pdpx[ix] = tmppri.color;
+				}
+				if((ix += n) == dxend) return;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0){
+					ifx += ixcl*tile.x;
+					ix = ifx>>16;
+					if(xsign*ix < xsign*bix) for(;;){
+						ix = (ifx+ixcl)>>16;
+						if(xsign*ix >= xsign*bix) break;
+						ifx += ixcl;
+					}
+					if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+					tmppri = pri;
+				}
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0){
+						ifx += ixcl*tile.x;
+						ix = ifx>>16;
+						if(xsign*ix < xsign*bix) for(;;){
+							ix = (ifx+ixcl)>>16;
+							if(xsign*ix >= xsign*bix) break;
+							ifx += ixcl;
+						}
+						if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+						tmppri = pri;
+					}
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					pdpx[ix] = tmppri.color;
+				}
+				if((ix += xsign) == dxend) return;
+			}
+		}
+	}
+}
+
+template<> void mzlLoop<TruecolorImg, mAddTrans>(
+	uint32_t* pdpx, TruecolorImg& pri, uint32_t* pspl, uint32_t colorkey,
+	int xsign, SDL_Rect tile, int ix, int dxend, int ifx, int ixcl, int sx)
+{
+	TruecolorImg tmppri = pri;
+	tmppri.skip(sx);
+	if(tile.w == 1){
+		if(sx != 0 && tmppri.currentx <= 0) return;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mAddTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += n;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0) return;
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0) return;
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mAddTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += xsign;
+			}
+		}
+	}else{
+		int bix = ix;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mAddTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += n) == dxend) return;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0){
+					ifx += ixcl*tile.x;
+					ix = ifx>>16;
+					if(xsign*ix < xsign*bix) for(;;){
+						ix = (ifx+ixcl)>>16;
+						if(xsign*ix >= xsign*bix) break;
+						ifx += ixcl;
+					}
+					if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+					tmppri = pri;
+				}
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0){
+						ifx += ixcl*tile.x;
+						ix = ifx>>16;
+						if(xsign*ix < xsign*bix) for(;;){
+							ix = (ifx+ixcl)>>16;
+							if(xsign*ix >= xsign*bix) break;
+							ifx += ixcl;
+						}
+						if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+						tmppri = pri;
+					}
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mAddTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += xsign) == dxend) return;
+			}
+		}
+	}
+}
+
+template<> void mzlLoop<TruecolorImg, mSubTrans>(
+	uint32_t* pdpx, TruecolorImg& pri, uint32_t* pspl, uint32_t colorkey,
+	int xsign, SDL_Rect tile, int ix, int dxend, int ifx, int ixcl, int sx)
+{
+	TruecolorImg tmppri = pri;
+	tmppri.skip(sx);
+	if(tile.w == 1){
+		if(sx != 0 && tmppri.currentx <= 0) return;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mSubTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += n;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0) return;
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0) return;
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mSubTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += xsign;
+			}
+		}
+	}else{
+		int bix = ix;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mSubTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += n) == dxend) return;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0){
+					ifx += ixcl*tile.x;
+					ix = ifx>>16;
+					if(xsign*ix < xsign*bix) for(;;){
+						ix = (ifx+ixcl)>>16;
+						if(xsign*ix >= xsign*bix) break;
+						ifx += ixcl;
+					}
+					if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+					tmppri = pri;
+				}
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0){
+						ifx += ixcl*tile.x;
+						ix = ifx>>16;
+						if(xsign*ix < xsign*bix) for(;;){
+							ix = (ifx+ixcl)>>16;
+							if(xsign*ix >= xsign*bix) break;
+							ifx += ixcl;
+						}
+						if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+						tmppri = pri;
+					}
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mSubTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += xsign) == dxend) return;
+			}
+		}
+	}
+}
+
+template<> void mzlLoop<TruecolorImg, mAlphaTrans>(
+	uint32_t* pdpx, TruecolorImg& pri, uint32_t* pspl, uint32_t colorkey,
+	int xsign, SDL_Rect tile, int ix, int dxend, int ifx, int ixcl, int sx)
+{
+	TruecolorImg tmppri = pri;
+	tmppri.skip(sx);
+	if(tile.w == 1){
+		if(sx != 0 && tmppri.currentx <= 0) return;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mAlphaTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += n;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0) return;
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0) return;
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mAlphaTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				ix += xsign;
+			}
+		}
+	}else{
+		int bix = ix;
+		if(-65536 <= ixcl && ixcl <= 65536){
+			for(;;){
+				int n = (int)(ix == ifx>>16) - 1 & xsign;
+				if(n != 0 && (tmppri.color & 0xff000000) != 0){
+					mAlphaTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += n) == dxend) return;
+				tmppri.nextPixel();
+				if(tmppri.currentx <= 0){
+					ifx += ixcl*tile.x;
+					ix = ifx>>16;
+					if(xsign*ix < xsign*bix) for(;;){
+						ix = (ifx+ixcl)>>16;
+						if(xsign*ix >= xsign*bix) break;
+						ifx += ixcl;
+					}
+					if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+					tmppri = pri;
+				}
+				ifx += ixcl;
+			}
+		}else{
+			for(;;){
+				if(ix == ifx>>16){
+					tmppri.nextPixel();
+					if(tmppri.currentx <= 0){
+						ifx += ixcl*tile.x;
+						ix = ifx>>16;
+						if(xsign*ix < xsign*bix) for(;;){
+							ix = (ifx+ixcl)>>16;
+							if(xsign*ix >= xsign*bix) break;
+							ifx += ixcl;
+						}
+						if(--tile.w == 0 || xsign*ix >= xsign*dxend) return;
+						tmppri = pri;
+					}
+					ifx += ixcl;
+				}
+				if((tmppri.color & 0xff000000) != 0){
+					mAlphaTrans(pdpx[ix], tmppri.color & 0x00ffffff, colorkey);
+				}
+				if((ix += xsign) == dxend) return;
+			}
+		}
+	}
+}
+
 template<typename Img> void mzLineBilt(
 	typename Funcs<Img>::mzllporc loop, uint32_t* pdpx, SDL_Rect& dr,
 	float dcx, Img& pri, uint32_t* pspl, float cx, SDL_Rect& til,
@@ -4944,7 +5395,28 @@ template<copycolorproc ccp> void mRender(
 	roto &= 0x3ff;
 	// LOG_DEBUG("RENDER", "mRender: dr=(%d,%d,%d,%d) src=(%d,%d) rle=%d img.len=%d", dr.x, dr.y, dr.w, dr.h, psrcr.w, psrcr.h, rle, img.len());
 	if(!g_pix) { LOG_DEBUG("RENDER", "mRender: g_pix is NULL!"); return; }
-	if(rle > 0){
+	if(rle == -13){
+		// Truecolor RGBA path (SFFv2 fmt 11/12 on SW/DirectX renderer).
+		// 4 bytes/pixel, no palette — alpha channel for transparency.
+		if(img.len() == 0 || psrcr.w <= 0 || psrcr.h <= 0) {
+			LOG_DEBUG("RENDER", "TruecolorImg: skipped (img.len=%zu, w=%d, h=%d)", img.len(), psrcr.w, psrcr.h);
+			return;
+		}
+		LOG_DEBUG("RENDER", "TruecolorImg: img.len=%zu, w=%d, h=%d, rle=%d", img.len(), psrcr.w, psrcr.h, rle);
+		TruecolorImg pri;
+		pri.setImg(const_cast<Reference&>(img), psrcr.w);
+		if(roto == 0){
+			mzScreenBilt(
+				mzlLoop<TruecolorImg, ccp>, dr, rcx, pri, ppal, psrcr,
+				cx, ty, tile, xtopscl, xbotscl, yscl, rasterxadd, colorkey);
+		}else{
+			// Rotation not yet supported for truecolor — fall back to
+			// axis-aligned blit (same as paletted path with roto=0).
+			mzScreenBilt(
+				mzlLoop<TruecolorImg, ccp>, dr, rcx, pri, ppal, psrcr,
+				cx, ty, tile, xtopscl, xbotscl, yscl, rasterxadd, colorkey);
+		}
+	}else if(rle > 0){
 		PcxRleImg pri;
 		pri.setImg(const_cast<Reference&>(img), psrcr.w, rle, pluginbuf);
 		if(roto == 0){
@@ -5004,6 +5476,10 @@ bool SSZ_STDCALL RenderMugenZoom(Reference* pluginbuf, int32_t rle,
 	QueryPerformanceCounter(&t0);
 	g_perfCounters.spriteCount++;
 	g_perfCounters.drawCalls++;
+	if(!tile || !pdstr || !psrcr) {
+		LOG_DEBUG("RENDER", "RenderMugenZoom: null ptr tile=%p pdstr=%p psrcr=%p", (void*)tile, (void*)pdstr, (void*)psrcr);
+		return false;
+	}
 	SDL_Rect tl = *tile;
 	if(tl.x > 0) tl.x -= psrcr->w;
 	if(tl.y > 0) tl.y -= psrcr->h;
@@ -5926,6 +6402,9 @@ void mShadowRender(
 				mzrlShadowLoop<PcxRleImg>, rcx, rcy, pri, color,
 				srcr, cx, ty, xscl, yscl, vscl, roto, alpha);
 		}
+	}else if(rle == -13){
+		// Truecolor shadow — skip for now (no palette-based shadow).
+		return;
 	}else{
 		PalletColorImg pri;
 		pri.setImg(img, srcr.w);
@@ -6004,7 +6483,10 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 	if(!fp) return 0;
 	uint8_t header[8] = {0};
 	fread(header, 1, 8, fp);
-	if(png_sig_cmp(header, 0, 8)) return 0;
+	if(png_sig_cmp(header, 0, 8)) {
+		INIT_LOG("LoadPngTexture: not a PNG (sig mismatch)");
+		return 0;
+	}
 	auto png_ptr =
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -6079,6 +6561,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		} // if (!texid)
 	}
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+	INIT_LOG("LoadPngTexture: %dx%d -> texid=%u", (int)width, (int)height, texid);
 	return texid;
 }
 
@@ -6770,6 +7253,12 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	// Guard: non-GL renderer should never reach here (SSZ conditionals prevent it)
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
+	// Clamp clipping rect to game viewport (same as GlFc fix)
+	if(rect->x >= g_w || rect->y >= g_h
+	   || rect->x + rect->w <= 0 || rect->y + rect->h <= 0){
+		rect->x = 0; rect->y = 0;
+		rect->w = g_w; rect->h = g_h;
+	}
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
 			tile, rect, r, tl, texid, dstr, alpha))
@@ -6850,6 +7339,13 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 {
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
+	// Clamp clipping rect to game viewport — HD stages push the rect outside
+	// 640x480 via bg.ssz coordinate transformation, culling all truecolor draws
+	if(rect->x >= g_w || rect->y >= g_h
+	   || rect->x + rect->w <= 0 || rect->y + rect->h <= 0){
+		rect->x = 0; rect->y = 0;
+		rect->w = g_w; rect->h = g_h;
+	}
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
 			tile, rect, r, tl, texid, dstr, -999))
