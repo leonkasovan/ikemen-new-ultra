@@ -229,13 +229,47 @@ public &Sprite
     uint lenghtOfSubheader = loh;
     if(nsh > (uint)offset) lenghtOfSubheader = nsh - (uint)offset;//ignore
     byte ps;
+    long pcxDataStart, rleSize, paletteOffset, blockEnd, scanPos, scanLimit;
+    ubyte marker;
     if(!f.read!byte?(ps=)) ret .com.FileReadError;
     bool palletSame = ps != 0;
     if(#prev == 0) palletSame = false;
     if(#`readPcxHeader(f=, offset)=>error > 0) ret error;
     f.seek(offset + 128, .file.Seek::SET);
-    ^ubyte px.new((index)lenghtOfSubheader - (128+(c00||palletSame?0:768)));
-    f.readAry!ubyte?(px);
+    pcxDataStart = offset + 128;
+    ^ubyte px;
+    branch{
+    cond palletSame:
+      rleSize = (long)lenghtOfSubheader - 128;
+      px.new((index)rleSize);
+      f.readAry!ubyte?(px);
+    else:
+    //Scan backwards from blockEnd-769 for the PCX 0x0C palette marker so
+    //padding between RLE data and the palette doesn't corrupt the palette read.
+      blockEnd = offset + (long)lenghtOfSubheader;
+      scanPos = blockEnd - 769;
+      scanLimit = pcxDataStart;
+      loop{
+        branch{
+        cond scanPos < scanLimit:
+          break;
+        }
+        f.seek(scanPos, .file.Seek::SET);
+        if(!f.read!ubyte?(marker=)) ret .com.FileReadError;
+        branch{
+        cond marker == 0x0C:
+          paletteOffset = scanPos;
+          break;
+        }
+        scanPos--;
+      }
+      if(paletteOffset < 0) paletteOffset = blockEnd - 769;
+      rleSize = paletteOffset - pcxDataStart;
+      if(rleSize < 0) rleSize = 0;
+      px.new((index)rleSize);
+      f.seek(pcxDataStart, .file.Seek::SET);
+      f.readAry!ubyte?(px);
+    }
     loop{
       index i = 0;
       ubyte r, g, b;
@@ -245,7 +279,8 @@ public &Sprite
         break, break;
       }
       ^uint pal = pl.newPal(`palidx=);
-      if(c00) f.seek(offset + (long)lenghtOfSubheader - 768, .file.Seek::SET);
+      if(c00) paletteOffset = offset + (long)lenghtOfSubheader - 769;
+      f.seek(paletteOffset + 1, .file.Seek::SET);
     do:
       if(!f.read!ubyte?(r=)) ret .com.FileReadError;
       if(!f.read!ubyte?(g=)) ret .com.FileReadError;
@@ -273,6 +308,19 @@ public &Sprite
     plugin void SffV2CachePut(:^/char, int, int, ^ubyte:) = <dll/ssz.dll>;
     f.seek(ofs+4, .file.Seek::SET);
     ^ubyte px;
+    if(`rle == 0){
+    //fmt 0: uncompressed. coldepth 8 = raw palette indexes (24/32 truecolor
+    //needs a software blitter the current renderers don't have).
+      f.seek(ofs, .file.Seek::SET);
+      ubyte fmt, coldepth;
+      if(!f.read!ubyte?(fmt=)) ret .com.FileReadError;
+      if(!f.read!ubyte?(coldepth=)) ret .com.FileReadError;
+      if(coldepth != 0d8) ret "unsupported uncompressed color depth";
+      px.new((index)dsz);
+      f.readAry!ubyte?(px);
+      `setPxl(px);
+      ret "";
+    }
     if(useCache && SffV2CacheGet(:cacheKey, `imageGroup, `imageNumber, px=:)){
       `setPxl(px);
       ret "";
@@ -728,6 +776,7 @@ public &Sff
         while i < l:}
         idx<> = i;
       }
+      //uniquePals.set(palKey, idx<>);
       `palList.setSource(i, pal);
       `palList.palTable.set((uint)group<<0d16 | item, idx);
       i++;
@@ -783,7 +832,12 @@ public &Sff
         }
         prev = i;
       else:
-        spriteList[i].shareCopy(spriteList[(index)indexOfPrevious]=);
+        branch{
+        cond indexOfPrevious < (ushort)i:
+          spriteList[i].shareCopy(spriteList[(index)indexOfPrevious]=);
+        else:
+          spriteList[i].palidx = 0; //forward link: fall back to palette 0
+        }
       }
       `spriteTable.operate(
         (uint)spriteList[i].imageGroup<<0d16

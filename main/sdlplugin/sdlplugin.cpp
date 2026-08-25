@@ -629,14 +629,15 @@ static bool g_paltexInitialized = false; // [OPT] Track palette texture allocati
 // Avoids redundant glPushMatrix/glOrtho/glPopMatrix per sprite (~50-200+ sprites/frame)
 static bool g_orthoProjectionSet = false;
 
-void sndjoyinit()
+void sndinit()
 {
 	INIT_LOG("Initializing audio subsystem...");
 	SDL_InitSubSystem(SDL_INIT_AUDIO);
 	INIT_LOG("Audio subsystem initialized");
 	
-	// Skip joystick initialization - can hang on some Windows systems
-	INIT_LOG("Skipping joystick initialization (can hang on Windows)");
+	// Joystick init deferred to EnableJoystick() via UseJoystick config
+	// (applyJoystickBackendHints + SDL_INIT_JOYSTICK handled there).
+	INIT_LOG("Joystick init deferred to EnableJoystick (UseJoystick config)");
 	
 	// SFX callback device (raw int16 stereo pushed by SetSndBuf)
 	g_desired.freq = g_sndfreq;
@@ -657,21 +658,20 @@ void sndjoyinit()
 	INIT_LOG("Initializing SDL_mixer...");
 	int mixFlags = MIX_INIT_MP3 | MIX_INIT_OGG | MIX_INIT_FLAC | MIX_INIT_MOD;
 	int mixInited = Mix_Init(mixFlags);
-	LOG_DEBUG("SDL", "sndjoyinit: Mix_Init requested=0x%X got=0x%X", mixFlags, mixInited);
+	LOG_DEBUG("SDL", "sndinit: Mix_Init requested=0x%X got=0x%X", mixFlags, mixInited);
 	INIT_LOG("SDL_mixer initialized");
 	
 	INIT_LOG("Opening BGM audio device...");
 	if(Mix_OpenAudio(g_sndfreq, AUDIO_S16SYS, 2, g_samples) < 0){
-		LOG_DEBUG("SDL", "sndjoyinit: Mix_OpenAudio failed: %s", Mix_GetError());
+		LOG_DEBUG("SDL", "sndinit: Mix_OpenAudio failed: %s", Mix_GetError());
 		INIT_LOG("BGM audio device FAILED: %s", Mix_GetError());
 	}else{
-		LOG_DEBUG("SDL", "sndjoyinit: Mix_OpenAudio OK (freq=%d, ch=2, samples=%d)", g_sndfreq, g_samples);
+		LOG_DEBUG("SDL", "sndinit: Mix_OpenAudio OK (freq=%d, ch=2, samples=%d)", g_sndfreq, g_samples);
 		INIT_LOG("BGM audio device opened");
 	}
 
-	INIT_LOG("Skipping joystick enumeration (SDL_INIT_JOYSTICK not enabled)");
-	// g_js.init();  // Disabled - requires SDL_INIT_JOYSTICK which can hang on Windows
-	INIT_LOG("Joystick skipped");
+	INIT_LOG("Skipping joystick enumeration (deferred to EnableJoystick)");
+	INIT_LOG("Audio and joystick subsystems ready (joystick deferred)");
 }
 
 void TestIMG()
@@ -911,7 +911,7 @@ bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 		}
 		winProcInit();
 		g_mainTreadId = GetCurrentThreadId();
-		sndjoyinit();
+		sndinit();
 	}
 	g_w = w;
 	g_h = h;
@@ -961,7 +961,7 @@ bool SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap)
 		g_hglrc2 = wglCreateContext(g_hdc);
 		wglShareLists(g_hglrc, g_hglrc2);
 		g_mainTreadId = GetCurrentThreadId();
-		sndjoyinit();
+		sndinit();
 	}
 	g_w = w;
 	g_h = h;
@@ -1704,7 +1704,7 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 		winProcInit();
 		INIT_LOG("Window procedure hook installed");
 		g_mainTreadId = GetCurrentThreadId();
-		sndjoyinit();
+		sndinit();
 		INIT_LOG("Audio and joystick initialized");
 
 		g_w = w;
@@ -1811,7 +1811,7 @@ init_opengl:
 		INIT_LOG("Secondary GL context created for threading");
 
 		g_mainTreadId = GetCurrentThreadId();
-		sndjoyinit();
+		sndinit();
 		INIT_LOG("Audio and joystick initialized");
 
 		g_w = w;
@@ -1862,9 +1862,9 @@ init_opengl:
 	g_mainTreadId = GetCurrentThreadId();
 	INIT_LOG("Main thread ID: %lu", g_mainTreadId);
 	
-	INIT_LOG("About to call sndjoyinit()...");
-	sndjoyinit();
-	INIT_LOG("Audio and joystick initialized");
+	INIT_LOG("About to call sndinit()...");
+	sndinit();
+	INIT_LOG("Audio initialized (joystick deferred)");
 
 	g_w = w;
 	g_h = h;
@@ -2509,7 +2509,7 @@ int SSZ_STDCALL LoadGamepadMappingsDb(const char* mappingPath)
 		return added;
 	}
 	INIT_LOG("Loaded %d gamepad mapping(s) from %s", added, mappingPath);
-	if(SDL_WasInit(SDL_INIT_JOYSTICK)){
+	if(added > 0 && SDL_WasInit(SDL_INIT_JOYSTICK)){
 		g_js.reload();
 	}
 	return added;
