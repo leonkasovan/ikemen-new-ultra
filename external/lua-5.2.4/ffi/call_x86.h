@@ -486,6 +486,13 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
     int ref;
     int hidden_arg_off = 0;
 
+    /* Lazy JIT init: compile_globals on first FFI code generation.
+     * Deferred from luaopen_ffi to avoid racing with SSZ's JIT. */
+    if (!Dst->jit_initialized) {
+        compile_globals(Dst, L);
+        Dst->jit_initialized = 1;
+    }
+
     ct_usr = lua_absindex(L, ct_usr);
     fidx = lua_absindex(L, fidx);
 
@@ -781,6 +788,13 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
     void* p;
     int top = lua_gettop(L);
     int* perr = &Dst->last_errno;
+
+    /* Lazy JIT init: compile_globals on first FFI code generation.
+     * Deferred from luaopen_ffi to avoid racing with SSZ's JIT. */
+    if (!Dst->jit_initialized) {
+        compile_globals(Dst, L);
+        Dst->jit_initialized = 1;
+    }
 
     ct_usr = lua_absindex(L, ct_usr);
 

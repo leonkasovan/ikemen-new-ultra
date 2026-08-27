@@ -597,7 +597,7 @@ endif
 	@echo "=== Built: $@ ($(CONFIG), $(ARCH)) ==="
 
 # ---- Main application (C++) ----
-$(BLD)/main/%.o: $(MAIN)/%.cpp
+$(BLD)/main/%.o: $(MAIN)/%.cpp $(PNG_DIR)/pnglibconf.h
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 

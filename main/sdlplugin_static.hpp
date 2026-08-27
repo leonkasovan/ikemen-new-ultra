@@ -95,6 +95,7 @@ extern "C"
 	void      SSZ_STDCALL Fill               (PluginUtil*, uint32_t, SDL_Rect*);
 	intptr_t  SSZ_STDCALL IMGLoad            (PluginUtil*, Reference);
 	void      SSZ_STDCALL DecodePNG8         (PluginUtil*, FILE*, int32_t*, int32_t*, Reference*);
+	void      SSZ_STDCALL DecodePNG32        (PluginUtil*, FILE*, int32_t*, int32_t*, Reference*);
 	void      SSZ_STDCALL BlitSurface        (PluginUtil*, SDL_Rect*, SDL_Surface*);
 	intptr_t  SSZ_STDCALL CreatePaletteSurface(PluginUtil*, int32_t, int32_t, SDL_Color*, uint8_t*);
 	void      SSZ_STDCALL SetColorKey        (PluginUtil*, uint32_t, SDL_Surface*);
@@ -197,6 +198,7 @@ inline bool sdlplugin_static_register()
 		{ "Fill",                (void*)Fill                },
 		{ "IMGLoad",             (void*)IMGLoad             },
 		{ "DecodePNG8",          (void*)DecodePNG8          },
+		{ "DecodePNG32",         (void*)DecodePNG32         },
 		{ "BlitSurface",         (void*)BlitSurface         },
 		{ "CreatePaletteSurface",(void*)CreatePaletteSurface},
 		{ "SetColorKey",         (void*)SetColorKey         },

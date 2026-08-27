@@ -946,6 +946,7 @@ void       SSZ_STDCALL SoftFill(uint32_t color, SDL_Rect* prect);
 void       SSZ_STDCALL Fill(uint32_t color, SDL_Rect* prect);
 intptr_t   SSZ_STDCALL IMGLoad(const std::wstring& fn);
 void       SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_t>& out);
+void       SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_t>& out);
 void       SSZ_STDCALL BlitSurface(SDL_Rect* prect, SDL_Surface* psrcs);
 intptr_t   SSZ_STDCALL CreatePaletteSurface(int32_t h, int32_t w, SDL_Color* ppl, uint8_t* ppx);
 void       SSZ_STDCALL SetColorKey(uint32_t key, SDL_Surface* psur);
@@ -1169,6 +1170,13 @@ extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int
 {
     std::vector<uint8_t> decoded;
     DecodePNG8(fp, h, w, decoded);
+    ikemen::ssz_bridge::vectorToRefBytes(decoded, out);
+}
+
+extern "C" void SSZ_STDCALL DecodePNG32(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w, Reference* out)
+{
+    std::vector<uint8_t> decoded;
+    DecodePNG32(fp, h, w, decoded);
     ikemen::ssz_bridge::vectorToRefBytes(decoded, out);
 }
 

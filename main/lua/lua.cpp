@@ -81,7 +81,14 @@ lua_State* SSZ_STDCALL NewState()
 	luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_LFSNAME, luaopen_lfs, 1); lua_pop(L, 1);
-	luaL_requiref(L, LUA_FFINAME, luaopen_ffi, 1); lua_pop(L, 1);
+	// FFI: register as preloaded loader so require('ffi') works but luaopen_ffi
+	// is NOT called during NewState(). This defers JIT init until a script
+	// actually requires ffi, avoiding the race with SSZ's JIT compiler.
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "preload");
+	lua_pushcfunction(L, luaopen_ffi);
+	lua_setfield(L, -2, "ffi");
+	lua_pop(L, 2);  /* package, preload */
 	luaL_requiref(L, LUA_LPEGNAME, luaopen_lpeg, 1); lua_pop(L, 1);
 	
 	luaL_newmetatable(L, SszRefMetaName);
