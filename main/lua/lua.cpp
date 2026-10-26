@@ -96,6 +96,9 @@ lua_State* SSZ_STDCALL NewState()
 	// opened individually here), so the linit.c entry is inert. Do not
 	// re-add require('ffi') to scripts without revisiting this.
 	luaL_requiref(L, LUA_LFSNAME, luaopen_lfs, 1); lua_pop(L, 1);
+	// (FFI is not loaded at all — see the decision note above. c6cd1e9's
+	// package.preload registration was resolved away here in favour of
+	// dropping FFI entirely, which is the superseding decision.)
 	luaL_requiref(L, LUA_LPEGNAME, luaopen_lpeg, 1); lua_pop(L, 1);
 	
 	luaL_newmetatable(L, SszRefMetaName);
