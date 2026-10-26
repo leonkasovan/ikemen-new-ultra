@@ -54,6 +54,14 @@ public ^ubyte decodePNG8(int w=, int h=, &.f.File file=)
   ret img;
 }
 
+public ^ubyte decodePNG32(int w=, int h=, &.f.File file=)
+{
+  plugin void DecodePNG32(:^ubyte=, int=, int=, &.f.File:) = "dll/sdlplugin.dll";
+  ^ubyte img;
+  DecodePNG32(:img=, w=, h=, file:);
+  ret img;
+}
+
 plugin bool KeyState(:|SDLKey:)             = "dll/sdlplugin.dll";
 plugin bool JoystickButtonState(:int, int:) = "dll/sdlplugin.dll";
 plugin int LoadGamepadMappings(:^/char:)    = "dll/sdlplugin.dll";

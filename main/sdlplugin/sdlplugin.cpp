@@ -2897,7 +2897,6 @@ static void CapturePendingShotSDL()
 void SSZ_STDCALL Flip()
 {
 	LARGE_INTEGER flipT0, flipT1;
-
 	QueryPerformanceCounter(&flipT0);
 	if(g_target)
 	{

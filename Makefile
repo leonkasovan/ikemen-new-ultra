@@ -597,7 +597,10 @@ endif
 	@echo "=== Built: $@ ($(CONFIG), $(ARCH)) ==="
 
 # ---- Main application (C++) ----
-$(BLD)/main/%.o: $(MAIN)/%.cpp
+# pnglibconf.h is a generated header included transitively via png.h; without it
+# here, parallel builds (-j8) race: sdlplugin.cpp may compile before the header
+# has been generated.
+$(BLD)/main/%.o: $(MAIN)/%.cpp $(PNG_DIR)/pnglibconf.h
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
