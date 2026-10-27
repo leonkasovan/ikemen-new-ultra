@@ -597,12 +597,17 @@ endif
 	@echo "=== Built: $@ ($(CONFIG), $(ARCH)) ==="
 
 # ---- Main application (C++) ----
+# -MMD -MP emits a .d next to each object listing the headers it included, so
+# a header-only edit (e.g. one of the *_static.hpp registration tables) rebuilds
+# the translation units that depend on it instead of silently linking stale
+# objects.  Included at the bottom of this file.
+APP_DEP_FLAGS = -MMD -MP
 # pnglibconf.h is a generated header included transitively via png.h; without it
 # here, parallel builds (-j8) race: sdlplugin.cpp may compile before the header
 # has been generated.
 $(BLD)/main/%.o: $(MAIN)/%.cpp $(PNG_DIR)/pnglibconf.h
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(APP_DEP_FLAGS) -c -o $@ $<
 
 
 # ---- SDL2 (C) ----
@@ -706,13 +711,17 @@ TEST_FILE_BIN  = $(BLD)/test_file.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(APP_DEP_FLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
 
 $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 test: $(TEST_FILE_BIN)
 	$(TEST_FILE_BIN)
+
+# Generated header dependencies for the application objects (see APP_DEP_FLAGS).
+# The wildcard keeps this a no-op on a clean tree, where no .d files exist yet.
+-include $(wildcard $(BLD)/main/*.d $(BLD)/main/*/*.d $(BLD)/test/*.d)
 
 clean:
 	rm -rf $(BLD)

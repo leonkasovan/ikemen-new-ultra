@@ -9,6 +9,7 @@
 bool SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct, const std::wstring& param, const std::wstring& file)
 {
 	SHELLEXECUTEINFO sei;
+	ZeroMemory(&sei, sizeof(sei));
 	sei.cbSize		 = sizeof(sei);
 	sei.fMask		 = wait ? SEE_MASK_NOCLOSEPROCESS : 0;
 	sei.hwnd		 = 0;
@@ -18,7 +19,12 @@ bool SSZ_STDCALL ShellOpen(bool act, bool wait, const std::wstring& direct, cons
 	sei.lpDirectory  = direct.c_str();
 	sei.nShow		 = (act ? SW_NORMAL : SW_SHOWMINNOACTIVE);
 	if(ShellExecuteEx(&sei)){
-		if(wait) WaitForSingleObject(sei.hProcess, INFINITE);
+		if(wait && sei.hProcess != NULL){
+			WaitForSingleObject(sei.hProcess, INFINITE);
+			// SEE_MASK_NOCLOSEPROCESS hands us an open handle; it is ours to
+			// close (this leaked one handle per ShellOpen(wait=true) call).
+			CloseHandle(sei.hProcess);
+		}
 	}else{
 		return false;
 	}
