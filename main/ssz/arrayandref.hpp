@@ -2,6 +2,41 @@
 
 #include "typeid.h"
 
+// Bounds clamp shared by HeapObj::at() and Reference::refat().
+//
+// C5 (PROJECT_REVIEW.md): the original branchless expression clamped with
+// `le-1`, so an empty range (le == 0) resolved to element **-1** — one element
+// before the buffer, i.e. inside HeapObjHead or before today's allocation.
+//
+// It also happens to be load-bearing: an empty range keeps the historical
+// "one element back" result when a positive `position` makes that address part
+// of the reference's own buffer (the script layer relies on that behaviour when
+// it peeks at the last character, e.g. `deffile[#deffile]`), and only the
+// genuinely-out-of-bounds case (position == 0) is redirected to a zero byte
+// instead of heap metadata. Reads of an empty range therefore still see 0/NUL,
+// which is what the generated code expects, without touching foreign memory.
+static inline int8_t* sszEmptyRangeByte()
+{
+	// Never written by well-formed code; kept writable so a stray store through
+	// an empty-range pointer cannot fault.
+	static int8_t zero[16] = {0};
+	return zero;
+}
+
+// Clamp `i` to [0, le-1] with the engine's historical index rules:
+//   - negative index means "from the end" and resolves to the LAST element
+//     (the script layer uses `str[-1]`-style peeks),
+//   - an index past the end clamps to the last element,
+//   - an empty range returns -1, which callers translate into either the byte
+//     before their own data or a zero byte (see refat()/at()).
+static inline intptr_t sszClampIndex(intptr_t i, intptr_t le)
+{
+	if(le <= 0) return -1;
+	const intptr_t last = le - 1;
+	if(i < 0) return last;
+	return (i > last) ? last : i;
+}
+
 struct HeapObjHead
 {
 	int8_t *data;
@@ -42,18 +77,16 @@ struct HeapObj
 	}
 	MEMBER int8_t* at(intptr_t i, const intptr_t tsize) const
 	{
-		intptr_t le, tmp;
-		le = (uintptr_t)head.datasize / (uintptr_t)tsize;
-		tmp = (i>>31) | (((le-1)-i)>>31);
-		i = (~tmp & i) | (tmp & (le-1));
+		const intptr_t le = (intptr_t)((uintptr_t)head.datasize / (uintptr_t)tsize);
+		i = sszClampIndex(i, le);
+		if(i < 0) return sszEmptyRangeByte(); // empty object: no buffer to step back into
 		return head.data + i*tsize;
 	}
 	template<intptr_t tsize> MEMBER int8_t* at(intptr_t i) const
 	{
-		intptr_t le, tmp;
-		le = (uintptr_t)head.datasize / (uintptr_t)tsize;
-		tmp = (i>>31) | (((le-1)-i)>>31);
-		i = (~tmp & i) | (tmp & (le-1));
+		const intptr_t le = (intptr_t)((uintptr_t)head.datasize / (uintptr_t)tsize);
+		i = sszClampIndex(i, le);
+		if(i < 0) return sszEmptyRangeByte();
 		return head.data + i*tsize;
 	}
 	MEMBER void delLock()
@@ -171,20 +204,26 @@ struct Reference
 	}
 	MEMBER int8_t* refat(intptr_t i, const intptr_t tsize) const
 	{
-		intptr_t le, tmp;
 		if(length < 0) return listat(i, tsize);
-		le = (uintptr_t)length / (uintptr_t)tsize;
-		tmp = (i>>31) | (((le-1)-i)>>31);
-		i = (~tmp & i) | (tmp & (le-1));
+		const intptr_t le = (intptr_t)((uintptr_t)length / (uintptr_t)tsize);
+		i = sszClampIndex(i, le);
+		if(i < 0){
+			// Empty range: keep the historical "one element back" result only
+			// when it lands inside this reference's own buffer (position > 0).
+			if(position >= tsize) return obj()->head.data + position - tsize;
+			return sszEmptyRangeByte();
+		}
 		return obj()->head.data+position+i*tsize;
 	}
 	template<intptr_t tsize> MEMBER int8_t* refat(intptr_t i) const
 	{
-		intptr_t le, tmp;
 		if(length < 0) return listat<tsize>(i);
-		le = (uintptr_t)length / (uintptr_t)tsize;
-		tmp = (i>>31) | (((le-1)-i)>>31);
-		i = (~tmp & i) | (tmp & (le-1));
+		const intptr_t le = (intptr_t)((uintptr_t)length / (uintptr_t)tsize);
+		i = sszClampIndex(i, le);
+		if(i < 0){
+			if(position >= tsize) return obj()->head.data + position - tsize;
+			return sszEmptyRangeByte();
+		}
 		return obj()->head.data+position+i*tsize;
 	}
 	MEMBER int8_t* listat(const intptr_t i, const intptr_t tsize) const

@@ -56,6 +56,7 @@ extern "C"
 
 	// Renderer info / performance
 	void      SSZ_STDCALL GetRendererInfo    (PluginUtil*, Reference*);
+	void      SSZ_STDCALL GetRendererInfoStr (PluginUtil*, Reference*);
 	void      SSZ_STDCALL EnablePerfMonitor  (PluginUtil*, bool);
 
 	// Window / display
@@ -174,6 +175,7 @@ inline bool sdlplugin_static_register()
 		{ "RendererInit",        (void*)RendererInit        },
 		{ "End",                 (void*)End                 },
 		{ "GetRendererInfo",     (void*)GetRendererInfo     },
+		{ "GetRendererInfoStr",  (void*)GetRendererInfoStr  },
 		{ "EnablePerfMonitor",   (void*)EnablePerfMonitor   },
 		{ "FullScreenExclusive", (void*)FullScreenExclusive },
 		{ "FullScreen",          (void*)FullScreen          },

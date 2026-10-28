@@ -15,6 +15,7 @@ typedef struct sockaddr SOCKADDR;
 typedef struct addrinfo ADDRINFO;
 #endif
 
+#include <stdlib.h>
 #include <string>
 
 #include "sszdef.h"
@@ -112,24 +113,37 @@ intptr_t socrecv(SOCKET &soc, char *buf, intptr_t len)
 
 
 #ifdef _WIN32
-WSAData g_wdata;
+static WSAData g_wdata;
+static bool g_wsaReady = false;
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
+static void SocketWsaCleanup()
 {
-	switch(fdwReason)
-	{
-	case DLL_PROCESS_ATTACH:
-		WSAStartup(MAKEWORD(2,2), &g_wdata);
-		break;
-	case DLL_PROCESS_DETACH:
+	if(g_wsaReady){
 		WSACleanup();
-		break;
-	case DLL_THREAD_ATTACH:
-		break;
-	case DLL_THREAD_DETACH:
-		break;
+		g_wsaReady = false;
 	}
-	return TRUE;
+}
+
+// Winsock must be initialised explicitly.  This code is linked into a static
+// executable, and the loader only calls DllMain for DLLs — the old
+// DllMain-based WSAStartup never ran, so every socket call failed with
+// WSANOTINITIALISED while the plugin still registered successfully.
+// socket_static_register() calls this before any script can reach the plugin.
+// Thread-safe: the function-local static is initialised exactly once (C++11).
+bool SSZ_STDCALL SocketInit()
+{
+	static const bool ready = []{
+		if(WSAStartup(MAKEWORD(2,2), &g_wdata) != 0) return false;
+		g_wsaReady = true;
+		atexit(SocketWsaCleanup);
+		return true;
+	}();
+	return ready;
+}
+#else
+bool SSZ_STDCALL SocketInit()
+{
+	return true;
 }
 #endif
 

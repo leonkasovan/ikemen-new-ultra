@@ -146,14 +146,18 @@ bool SSZ_STDCALL SaveAsciiText(const std::wstring& txt, const std::wstring& path
 {
 	std::string tmp;
 	tmp.resize(txt.size());
-	if(tmp.size() == 0) return true;
 	for(intptr_t i = 0; i < (intptr_t)tmp.size(); i++){
 		tmp[i] = (unsigned char)txt[i];
 	}
+	// The file must be created/truncated even for an empty string: returning
+	// early here used to report success while leaving the previous content
+	// (or the absence of the file) untouched.
 	FILE *pFile = NULL;
 	if(_wfopen_s(&pFile, path.c_str(), L("wb")) != 0) return false;
-	bool ret =
-		fwrite(tmp.data(), sizeof(char), tmp.size(), pFile) == tmp.size();
+	bool ret = true;
+	if(!tmp.empty()){
+		ret = fwrite(tmp.data(), sizeof(char), tmp.size(), pFile) == tmp.size();
+	}
 	fclose(pFile);
 	return ret;
 }

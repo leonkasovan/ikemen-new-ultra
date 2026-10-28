@@ -78,7 +78,10 @@ void MemPrintHistogram()
 // =========================================================================
 static void* SSZ_STDCALL MemoryKakuho(intptr_t size)
 {
-	intptr_t* p = (intptr_t*)new int8_t[size + sizeof(intptr_t)];
+	// Reject negative sizes and intptr_t overflow before adding the header.
+	if(size < 0) return nullptr;
+	if((uint64_t)size > (uint64_t)(INTPTR_MAX - sizeof(intptr_t))) return nullptr;
+	intptr_t* p = (intptr_t*)new int8_t[(size_t)size + sizeof(intptr_t)];
 	p[0] = size;
 	g_allocBytes += size;
 	if (g_allocBytes - g_freeBytes > g_peakLiveBytes)
@@ -123,12 +126,20 @@ void (SSZ_STDCALL* sszrefdeletefunc)(void*) = MemoryKaihou;
 
 #include "mem_profiler.hpp"
 #include "time_profiler.hpp"
+#include "crash_log.hpp"
 
 // Master switch for [Memory]/[Time] profiler output (declared in sszdef.h).
+// H4: this now gates *recording*, not just printing. The old behaviour made the
+// release build pay for ~25 heap-allocating script marks per frame even though
+// nothing was ever printed. main.cpp enables it from IKEMEN_PROFILE=1.
 bool g_profilerLog = false;
 
 // Memory profiling event log — single definition for the extern in mem_profiler.hpp
 std::vector<MemorySnapshot> g_memEvents;
+
+// Time profiling name -> index map (O(1) accumulate instead of a linear scan
+// over std::string comparisons per mark).
+std::unordered_map<std::string, size_t> g_timeIndex;
 
 // Process-wide memory timeline / milestones — single definitions for the
 // externs in mem_profiler.hpp
@@ -137,6 +148,137 @@ std::vector<ProcessMemMilestone> g_memMilestones;
 
 // Time profiling accumulators — single definition for the extern in time_profiler.hpp
 std::vector<TimeSample> g_timeSamples;
+
+// =========================================================================
+//  Crash reporting (C4)
+//
+//  POD only: no allocation, no locks, no STL, so these are safe to touch from
+//  the unhandled-exception filter even when the heap is the thing that broke.
+// =========================================================================
+CrashRecord   g_crashRecords[CRASH_RECORD_MAX];
+volatile long g_crashRecordCount = 0;
+
+void CrashRecordTime(const char* name, double ms)
+{
+	if(!name) return;
+	const long n = g_crashRecordCount;
+	for(long i = 0; i < n; i++)
+	{
+		// Bounded strcmp — records are fixed-size and NUL-terminated.
+		const char* a = g_crashRecords[i].name;
+		const char* b = name;
+		while(*a && *b && *a == *b){ a++; b++; }
+		if(*a == '\0' && *b == '\0')
+		{
+			g_crashRecords[i].ms += ms;
+			g_crashRecords[i].calls++;
+			return;
+		}
+	}
+	if(n >= CRASH_RECORD_MAX) return; // table full: drop, never grow
+	CrashRecord& r = g_crashRecords[n];
+	int i = 0;
+	for(; name[i] != '\0' && i < (int)sizeof(r.name) - 1; i++) r.name[i] = name[i];
+	r.name[i] = '\0';
+	r.ms    = ms;
+	r.calls = 1;
+	g_crashRecordCount = n + 1; // publish only after the record is complete
+}
+
+// Append helpers for CrashDumpReport — stack buffers only.
+static int crashAppend(char* dst, int cap, int at, const char* src)
+{
+	if(!src) return at;
+	while(*src != '\0' && at + 1 < cap) dst[at++] = *src++;
+	dst[at] = '\0';
+	return at;
+}
+
+static int crashAppendU64(char* dst, int cap, int at, uint64_t v)
+{
+	char tmp[24];
+	int d = 0;
+	do { tmp[d++] = (char)('0' + (v % 10)); v /= 10; } while(v && d < 23);
+	while(d > 0 && at + 1 < cap) dst[at++] = tmp[--d];
+	dst[at] = '\0';
+	return at;
+}
+
+static int crashAppendMs(char* dst, int cap, int at, double ms)
+{
+	// One decimal place, no libc float formatting (which can allocate).
+	uint64_t whole = (ms > 0.0) ? (uint64_t)ms : 0;
+	uint64_t frac  = (ms > 0.0) ? (uint64_t)((ms - (double)whole) * 10.0 + 0.5) : 0;
+	if(frac > 9) { whole++; frac = 0; }
+	at = crashAppendU64(dst, cap, at, whole);
+	if(at + 1 < cap) dst[at++] = '.';
+	if(at + 1 < cap) dst[at++] = (char)('0' + (int)frac);
+	dst[at] = '\0';
+	return at;
+}
+
+void CrashDumpReport(const char* reason, void* faultAddress)
+{
+	char buf[2048];
+	int at = 0;
+	at = crashAppend(buf, sizeof(buf), at, "\n==== CRASH REPORT ====\nreason: ");
+	at = crashAppend(buf, sizeof(buf), at, reason ? reason : "unknown");
+	at = crashAppend(buf, sizeof(buf), at, "\nfault address: 0x");
+	at = crashAppendU64(buf, sizeof(buf), at, (uint64_t)(uintptr_t)faultAddress);
+
+	// C6: without MSVC SEH there is no per-call handler, so map the fault
+	// address through the JIT address table instead.
+	WCHR loc[256];
+	if(SSZLookupScriptLocation(faultAddress, loc, sizeof(loc)/sizeof(loc[0])))
+	{
+		at = crashAppend(buf, sizeof(buf), at, "\nSSZ script location: ");
+		for(int i = 0; loc[i] != 0 && at + 1 < (int)sizeof(buf); i++)
+			buf[at++] = (loc[i] < 128) ? (char)loc[i] : '?';
+		buf[at] = '\0';
+	}
+	else
+	{
+		at = crashAppend(buf, sizeof(buf), at,
+			"\nSSZ script location: (not inside JIT code)");
+	}
+
+	// Top regions by cumulative time, selected without sorting (n is tiny).
+	const long n = g_crashRecordCount;
+	at = crashAppend(buf, sizeof(buf), at, "\ntime regions (ms, calls):\n");
+	bool used[CRASH_RECORD_MAX] = {false};
+	for(int k = 0; k < 8; k++)
+	{
+		long best = -1;
+		for(long i = 0; i < n && i < CRASH_RECORD_MAX; i++)
+			if(!used[i] && (best < 0 || g_crashRecords[i].ms > g_crashRecords[best].ms))
+				best = i;
+		if(best < 0 || g_crashRecords[best].ms <= 0.0) break;
+		used[best] = true;
+		at = crashAppend(buf, sizeof(buf), at, "  ");
+		at = crashAppend(buf, sizeof(buf), at, g_crashRecords[best].name);
+		at = crashAppend(buf, sizeof(buf), at, " = ");
+		at = crashAppendMs(buf, sizeof(buf), at, g_crashRecords[best].ms);
+		at = crashAppend(buf, sizeof(buf), at, "  x");
+		at = crashAppendU64(buf, sizeof(buf), at, g_crashRecords[best].calls);
+		at = crashAppend(buf, sizeof(buf), at, "\n");
+		if(at > (int)sizeof(buf) - 128) break;
+	}
+	at = crashAppend(buf, sizeof(buf), at, "======================\n");
+
+	// WriteFile is a kernel call: no CRT heap, no stdio locks.
+#ifdef _WIN32
+	HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
+	if(!h || h == INVALID_HANDLE_VALUE) h = GetStdHandle(STD_OUTPUT_HANDLE);
+	if(h && h != INVALID_HANDLE_VALUE)
+	{
+		DWORD written = 0;
+		WriteFile(h, buf, (DWORD)at, &written, nullptr);
+	}
+#else
+	fwrite(buf, 1, (size_t)at, stderr);
+	fflush(stderr);
+#endif
+}
 
 #include "typeid.h"
 
@@ -155,23 +297,9 @@ std::vector<TimeSample> g_timeSamples;
 #include <stdarg.h>
 #include <sys/mman.h>
 
-static HMODULE LoadLibrary(const WCHR *lpFileName)
-{
-	auto ret = dlopen(PluginUtil::wToA(lpFileName).c_str(), RTLD_NOW);
-	if(!ret) fprintf(stderr, "%s\n", dlerror());
-	return ret;
-}
-static FARPROC GetProcAddress(HMODULE hModule, const char *lpProcName)
-{
-	auto ret = dlsym(hModule, lpProcName);
-	if(!ret) fprintf(stderr, "%s\n", dlerror());
-	return ret;
-}
-static BOOL FreeLibrary(HMODULE hModule)
-{
-	if(!hModule) return false;
-	return dlclose(hModule) == 0;
-}
+// L4: the LoadLibrary/GetProcAddress/FreeLibrary shims that used to sit here
+// were dead once plugins became statically registered (see
+// static_plugin_registry.hpp) — nothing called them.
 
 static WCHR* _wfullpath(WCHR*, const WCHR *relPath, size_t)
 {
@@ -358,16 +486,69 @@ public:
 		}
 		return nullptr;
 	}
+	// Lock-free variant for crash handlers: taking a CRITICAL_SECTION while the
+	// process is dying can deadlock if the fault happened while the lock was
+	// held (e.g. inside add()/remove()). A torn read is the worst case here, and
+	// that is strictly better than hanging.
+	MEMBER const LineAddress* getNoLock(uint8_t* adr)
+	{
+		for(Node<Range>* tmp = top; tmp != nullptr; tmp = tmp->next){
+			if(tmp->item.start <= adr && adr < tmp->item.end){
+				return tmp->item.get(adr);
+			}
+		}
+		return nullptr;
+	}
 };
 static CodeAddressLines g_cal;
 
+// =========================================================================
+// SSZLookupScriptLocation  –  allocation-free address -> "file(line)" lookup
+//
+// C6: the compiler records an address range per JIT block (g_cal) and, on
+// MSVC, uses it from the SEH handler. Under MinGW there is no __try/__except,
+// so that handler never existed — which left JIT faults with no script
+// location at all. This entry point lets the process-wide crash handler in
+// main.cpp produce the location instead, without any allocation, locks, or STL.
+// =========================================================================
+bool SSZLookupScriptLocation(void* address, WCHR* outBuf, size_t outChars)
+{
+	if(!outBuf || outChars < 8) return false;
+	outBuf[0] = L('\0');
+	if(!address) return false;
+	const LineAddress* la = g_cal.getNoLock((uint8_t*)address);
+	if(!la || !la->filename) return false;
+
+	size_t i = 0;
+	const WCHR* fn = la->filename->data();
+	while(fn && *fn != L('\0') && i + 32 < outChars) outBuf[i++] = *fn++;
+	if(i + 32 >= outChars && i > 0) outBuf[i++] = L('~'); // truncated marker
+	outBuf[i++] = L('(');
+
+	// Decimal line number, written backwards into a small stack buffer.
+	WCHR digits[24];
+	int d = 0;
+	uint64_t line = (la->line > 0) ? (uint64_t)la->line : 0;
+	do { digits[d++] = (WCHR)(L('0') + (line % 10)); line /= 10; } while(line && d < 23);
+	while(d > 0 && i + 2 < outChars) outBuf[i++] = digits[--d];
+
+	outBuf[i++] = L(')');
+	outBuf[i] = L('\0');
+	return true;
+}
+
+// Crash-report text buffer size (see SSZException / CrashDumpReport).
+static const int kMesCap = 1024;
+
 static void appendText(wchar_t* str, int& idx, const wchar_t* txt)
 {
-	while(*txt != L('\0')) str[idx++] = *txt++;
+	while(*txt != L('\0') && idx + 1 < kMesCap) str[idx++] = *txt++;
+	str[idx] = L('\0');
 }
 template<typename T> static void appendHex(wchar_t* str, int& idx, T n)
 {
 	for(int i = (sizeof(T)*2-1)*4; i >= 0; i -= 4){
+		if(idx + 1 >= kMesCap) break;
 		switch(n >> i & 0xf){
     case   0: str[idx++]=L('0');break;case   1: str[idx++]=L('1');break;
 		case   2: str[idx++]=L('2');break;case   3: str[idx++]=L('3');break;
@@ -875,11 +1056,14 @@ static std::unordered_map<std::wstring, std::chrono::steady_clock::time_point> g
 
 extern "C" void SSZ_STDCALL ProfBegin(PluginUtil* pu, Reference tag)
 {
+	// H4: no allocation, no map insert, no clock read when profiling is off.
+	if(!g_profilerLog) return;
 	g_profStartMap[pu->refToWstr(tag)] = std::chrono::steady_clock::now();
 }
 
 extern "C" void SSZ_STDCALL ProfEnd(PluginUtil* pu, Reference tag)
 {
+	if(!g_profilerLog) return;
 	std::wstring wtag = pu->refToWstr(tag);
 	auto it = g_profStartMap.find(wtag);
 	if (it == g_profStartMap.end()) return;

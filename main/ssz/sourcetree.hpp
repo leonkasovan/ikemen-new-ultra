@@ -6997,14 +6997,24 @@ TOTEMOPASTA:
 				std::WSTR path;
 				if(!LibPath(*srce, path)) return false;
 				if(!necessaryToken(*srce, *this, SEMICOLON_TOKEN)) return false;
+				bool libLoaded = true;
 				if(stat->dlllist.find(path) == stat->dlllist.end()){
 					stat->dlllist.insert(
 						std::pair<std::WSTR, SDLLItem>(path, SDLLItem()));
-					stat->dlllist[path].loadDll(path);
+					libLoaded = stat->dlllist[path].loadDll(path);
 				}
 				type += (intptr_t)stat->dlllist[path].getfunc(name);
 				if(type.back() == (intptr_t)nullptr){
-					srce->addErrMes(L("Failed to load plugin."));
+					// H9: the old message named neither the library nor the
+					// function, so a missing export printed the same line as a
+					// missing plugin entirely. Say which, and which of the two.
+					std::WSTR mes = libLoaded
+						? L("Plugin function not found: ")
+						: L("Plugin library not registered: ");
+					mes += path;
+					mes += L(" : ");
+					mes += name;
+					srce->addErrMes(mes);
 					return false;
 				}
 				if(!AddHensuu(type, name, 0, *srce)) return false;

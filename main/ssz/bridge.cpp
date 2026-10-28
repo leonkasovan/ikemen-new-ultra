@@ -922,8 +922,7 @@ bool       SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring
 bool       SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap);
 bool       SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32_t w, const std::wstring& cap);
 void       SSZ_STDCALL GetRendererInfo();
-void       SSZ_STDCALL EnablePerfMonitor(bool enable);
-void       SSZ_STDCALL End();
+void       SSZ_STDCALL EnablePerfMonitor(bool enable);void       SSZ_STDCALL End();
 void       SSZ_STDCALL FullScreenExclusive(bool fsr);
 bool       SSZ_STDCALL FullScreen(bool fs);
 void       SSZ_STDCALL WindowType(int state);
@@ -1012,6 +1011,23 @@ extern "C" void SSZ_STDCALL GetRendererInfo(PluginUtil* pu, Reference* outInfo)
     (void)pu;
     (void)outInfo;
     GetRendererInfo();
+}
+
+// Native helper defined in main/sdlplugin/sdlplugin.cpp (the renderer owns the
+// RendererInfo struct). Declared here rather than in a shared header because
+// bridge.cpp already forward-declares every sdlplugin entry point.
+std::wstring RendererInfoString();
+
+// L1: same data as GetRendererInfo(), but returned to the script instead of
+// being logged. GetRendererInfo() keeps its console-only behaviour so existing
+// scripts are unaffected.
+extern "C" void SSZ_STDCALL GetRendererInfoStr(PluginUtil* pu, Reference* outInfo)
+{
+    if (!outInfo) return;
+    std::wstring info = RendererInfoString();
+    outInfo->releaseanddelete();
+    if (info.empty()) return;
+    pu->wstrToRef(*outInfo, info);
 }
 
 extern "C" void SSZ_STDCALL EnablePerfMonitor(PluginUtil* pu, bool enable)
@@ -1175,6 +1191,7 @@ extern "C" void SSZ_STDCALL DecodePNG8(PluginUtil* pu, FILE* fp, int32_t* h, int
 
 extern "C" void SSZ_STDCALL DecodePNG32(PluginUtil* pu, FILE* fp, int32_t* h, int32_t* w, Reference* out)
 {
+    (void)pu;
     std::vector<uint8_t> decoded;
     DecodePNG32(fp, h, w, decoded);
     ikemen::ssz_bridge::vectorToRefBytes(decoded, out);

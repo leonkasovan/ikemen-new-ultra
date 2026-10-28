@@ -45,8 +45,10 @@ CFLAGS     = -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable \
              -fno-strict-aliasing $(ARCH_F)
 
 ifeq ($(CONFIG),Debug)
-  CXXFLAGS += -O1 -g -DDEBUG -Wuninitialized
-  CFLAGS   += -O1 -g -DDEBUG -Wuninitialized
+  # -Og keeps the code debuggable without the -O1 surprises (variables optimised
+  # out, line numbers hopping). Debug builds are for diagnosis, not throughput.
+  CXXFLAGS += -Og -g3 -DDEBUG -Wuninitialized
+  CFLAGS   += -Og -g3 -DDEBUG -Wuninitialized
   TARGET     = $(BLD)/ikemen-debug.exe
 else
   CXXFLAGS += -O3 -DNDEBUG
@@ -584,7 +586,7 @@ $(LIB_FLAC):    $(FLAC_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $@ $^
 
-.PHONY: all clean install test
+.PHONY: all clean install test test_helpers check
 all: $(TARGET)
 	@echo "=== Built: $(TARGET) ($(CONFIG), $(ARCH)) ==="
 
@@ -597,9 +599,17 @@ endif
 	@echo "=== Built: $@ ($(CONFIG), $(ARCH)) ==="
 
 # ---- Main application (C++) ----
+# -MMD -MP emits a .d next to each object listing the headers it included, so
+# a header-only edit (e.g. one of the *_static.hpp registration tables) rebuilds
+# the translation units that depend on it instead of silently linking stale
+# objects.  Included at the bottom of this file.
+APP_DEP_FLAGS = -MMD -MP
+# pnglibconf.h is a generated header included transitively via png.h; without it
+# here, parallel builds (-j8) race: sdlplugin.cpp may compile before the header
+# has been generated.
 $(BLD)/main/%.o: $(MAIN)/%.cpp $(PNG_DIR)/pnglibconf.h
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(APP_DEP_FLAGS) -c -o $@ $<
 
 
 # ---- SDL2 (C) ----
@@ -696,20 +706,45 @@ $(BLD)/flac/%.o: $(FLAC_DIR)/src/libFLAC/%.c
 	$(CC) $(CFLAGS) $(FLAC_DEFS) -c -o $@ $<
 
 # ---- Regression smoke tests ----
-# Compile and run file-operation tests against the native implementations.
-# Depends on the main build having compiled file.o first.
+# test_helpers : header-only safety helpers (no engine objects needed)
+# test_file    : native file operations (links main/file/file.o)
+#
+# `make check` runs both. CI (.github/workflows/build.yml) uses it.
 TEST_FILE_OBJS = $(BLD)/test/test_file.o $(BLD)/main/file/file.o
 TEST_FILE_BIN  = $(BLD)/test_file.exe
+TEST_HELPERS_BIN = $(BLD)/test_helpers.exe
 
 $(BLD)/test/test_file.o: $(TEST)/test_file.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(APP_DEP_FLAGS) -I $(MAIN) -I $(SSZ) -c -o $@ $<
 
 $(TEST_FILE_BIN): $(TEST_FILE_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
+# header-only: depends on the two headers it exercises
+$(TEST_HELPERS_BIN): $(TEST)/test_helpers.cpp \
+                      $(MAIN)/sdlplugin/pngutil.h \
+                      $(MAIN)/ssz/arrayandref.hpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I $(MAIN) -I $(SSZ) -o $@ $<
+
+test_helpers: $(TEST_HELPERS_BIN)
+	$(TEST_HELPERS_BIN)
+
 test: $(TEST_FILE_BIN)
 	$(TEST_FILE_BIN)
+
+# Aggregate target: everything that can run without a display.
+check: $(TEST_HELPERS_BIN) $(TEST_FILE_BIN)
+	@echo "=== check: helpers ==="
+	$(TEST_HELPERS_BIN)
+	@echo "=== check: file I/O ==="
+	$(TEST_FILE_BIN)
+	@echo "=== check: all passed ==="
+
+# Generated header dependencies for the application objects (see APP_DEP_FLAGS).
+# The wildcard keeps this a no-op on a clean tree, where no .d files exist yet.
+-include $(wildcard $(BLD)/main/*.d $(BLD)/main/*/*.d $(BLD)/test/*.d)
 
 clean:
 	rm -rf $(BLD)
@@ -723,11 +758,17 @@ install: $(TARGET)
 		rm -f install.zip; \
 	fi
 	cp $(TARGET) "install/"
+	# Code/assets always refreshed.
 	cp -rf ssz_script/lib/ install/
 	cp -rf ssz_script/ssz/ install/
-	cp -rf ssz_script/save/ install/
 	cp -rf lua_script/lib/ install/
 	cp -rf lua_script/script/ install/
-	cp -rf lua_script/save/ install/
+	# H13: save/ holds the *templates* (config.ssz, *_sav.lua). Copying them with
+	# plain `cp -rf` overwrote the live save data on every install, silently
+	# reverting in-game settings and the config tweaks AGENTS.md recommends.
+	# -n keeps whatever the runtime has already written; delete the file first if
+	# you actually want the template restored.
+	cp -rf -n ssz_script/save/ install/
+	cp -rf -n lua_script/save/ install/
 	@echo "=== Installed to install/ ==="
   

@@ -80,15 +80,25 @@ lua_State* SSZ_STDCALL NewState()
 	luaL_requiref(L, LUA_BITLIBNAME, luaopen_bit32, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L, 1);
 	luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
+	// NOTE: luaopen_ffi is intentionally NOT loaded. Nothing in the game
+	// scripts uses FFI (the only reference in common.lua is commented out),
+	// and the ffi library's DynASM-based init (compile_globals) emits raw
+	// machine code that faults under ASLR-relocated module layouts
+	// (0xc0000005 in "unknown" module — see Event Log, e.g. 2026-08-21).
+	// Skipping it removes both that startup segfault and the lua_close()
+	// cdata-finalizer crash noted below.
+	//
+	// DECISION (supersedes the lazy-init approach on branch `optimized`):
+	// commit c6cd1e9 deferred compile_globals to the first FFI code-gen call.
+	// That still left the cdata finalizer crash reachable on lua_close(), so
+	// FFI is dropped entirely instead. external/lua-5.2.4/ffi/ is left at
+	// upstream eager-init state; luaL_openlibs() is never called (libs are
+	// opened individually here), so the linit.c entry is inert. Do not
+	// re-add require('ffi') to scripts without revisiting this.
 	luaL_requiref(L, LUA_LFSNAME, luaopen_lfs, 1); lua_pop(L, 1);
-	// FFI: register as preloaded loader so require('ffi') works but luaopen_ffi
-	// is NOT called during NewState(). This defers JIT init until a script
-	// actually requires ffi, avoiding the race with SSZ's JIT compiler.
-	lua_getglobal(L, "package");
-	lua_getfield(L, -1, "preload");
-	lua_pushcfunction(L, luaopen_ffi);
-	lua_setfield(L, -2, "ffi");
-	lua_pop(L, 2);  /* package, preload */
+	// (FFI is not loaded at all — see the decision note above. c6cd1e9's
+	// package.preload registration was resolved away here in favour of
+	// dropping FFI entirely, which is the superseding decision.)
 	luaL_requiref(L, LUA_LPEGNAME, luaopen_lpeg, 1); lua_pop(L, 1);
 	
 	luaL_newmetatable(L, SszRefMetaName);
@@ -103,13 +113,15 @@ lua_State* SSZ_STDCALL NewState()
 // Safe/deferred Lua teardown
 // -----------------------------------------------------------------------------
 // Do not call lua_close() while returning through SSZ callback/JIT frames.
-// The observed crash is in Lua FFI cdata finalization during lua_close():
+// The original crash was in Lua FFI cdata finalization during lua_close():
 //   lua_close -> callallpendingfinalizers -> cdata_gc -> to_cdata
-// where the cdata pointer matched an SSZ callback argument buffer. Skipping the
-// faulting instruction with VEH is unsafe (variable-length x86 instructions) and
-// MinGW GCC cannot use MSVC __try/__except. For now we quarantine states by
-// clearing their stack and intentionally avoid lua_close(); this trades a bounded
-// leak for a stable demo while the FFI/SSZ ownership bug is fixed.
+// where the cdata pointer matched an SSZ callback argument buffer. FFI is no
+// longer loaded (see NewState above), which removes the cdata-finalizer path,
+// but the deferred-close machinery is kept as a defensive guard for SSZ Ref
+// userdata teardown. Skipping the faulting instruction with VEH is unsafe
+// (variable-length x86 instructions) and MinGW GCC cannot use MSVC
+// __try/__except. For now we quarantine states by clearing their stack and
+// intentionally avoid lua_close(); this trades a bounded leak for a stable demo.
 static std::vector<lua_State*> g_deferredLuaClose;
 
 static bool LuaCloseAlreadyDeferred(lua_State* L)
@@ -125,21 +137,12 @@ static void LuaSafeQuarantine(lua_State* L)
 {
 	if (!L) return;
 
-	// Call ffi.cleanup() to invalidate all cdata objects before closing (Option C)
-	// This prevents access to freed SSZ memory during finalization
-	lua_getglobal(L, "ffi");
-	if (lua_istable(L, -1)) {
-		lua_getfield(L, -1, "cleanup");
-		if (lua_isfunction(L, -1)) {
-			lua_pcall(L, 0, 0, 0);  /* Call ffi.cleanup() safely */
-		} else {
-			lua_pop(L, 1);  /* Not a function, pop it */
-		}
-	}
-	lua_pop(L, 1);  /* Pop ffi table */
+	// NOTE: there used to be an ffi.cleanup() call here to invalidate cdata
+	// objects before closing. FFI is no longer loaded (see NewState), so the
+	// global `ffi` is always nil and the call was a no-op; removed.
 
 	// Remove ordinary Lua stack references. Do NOT force a full GC here: a full
-	// GC can run the same corrupted FFI cdata finalizers that crash lua_close().
+	// GC can run corrupted finalizers that crash lua_close().
 	lua_settop(L, 0);
 }
 

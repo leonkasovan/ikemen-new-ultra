@@ -220,7 +220,6 @@ struct jit {
     int function_extern;
     void* lua_dll;
     void* kernel32_dll;
-    int jit_initialized;  /* lazy: 1 after compile_globals runs */
 };
 
 #define ALIGN_DOWN(PTR, MASK) \

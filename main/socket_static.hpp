@@ -21,6 +21,13 @@ typedef int SOCKET;
 struct PluginUtil;
 struct Reference;
 
+// Initialises Winsock (idempotent).  Declared with C++ linkage to match its
+// definition in socket.cpp — the extern "C" block below declares the bridge
+// ABI, not this entry point.  It must be called from the executable: linked
+// statically, the loader never calls DllMain, so the old DllMain-based
+// WSAStartup never ran and every socket call failed with WSANOTINITIALISED.
+bool SSZ_STDCALL SocketInit();
+
 extern "C"
 {
 	void     SSZ_STDCALL SocketClose(PluginUtil*, SOCKET*);
@@ -35,6 +42,14 @@ extern "C"
 
 inline bool socket_static_register()
 {
+	// Winsock has to come up before the scripts can use the plugin.  A failure
+	// here is reported but not fatal: the other 13 subsystems still work, and
+	// skipping registration would turn a runtime socket failure into a
+	// compile-time "not defined" error for scripts that reference it.
+	if(!SocketInit()){
+		LOG_INFO("Socket", "WSAStartup failed; socket plugin calls will not work");
+	}
+
 	static const SSZ_FunctionEntry socket_mapping[] =
 	{
 		{ "SocketClose",   (void*)SocketClose   },

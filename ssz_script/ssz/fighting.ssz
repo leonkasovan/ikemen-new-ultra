@@ -662,8 +662,10 @@ void game()
     .ssz.profEnd(:"script:draw":);
 //LOOP FUNCTION
 	.ssz.profBegin(:"script:luaLoop":);
+	// nresults must be 0 — 1 left the return value on the Lua stack every frame,
+	// growing it by one slot per frame for the whole match.
 	.dscri.L.getGlobal("loop");
-	if(!.dscri.L.pcall(0, 1)) ret;
+	if(!.dscri.L.pcall(0, 0)) ret;
 	.ssz.profEnd(:"script:luaLoop":);
 //
 	//if(!.s.equ(.com.gameMode,"demo")) {
@@ -689,7 +691,7 @@ void game()
   }
   if(!.se.end && .s.equ(.com.gameMode, "practice") && #.chr.chars > 1 && .s.equ(.chr.chars[1]<>~name, "Training") && #.com.debugScript > 0){
     .dscri.L.getGlobal("trnMacroCheck");
-    if(!.dscri.L.pcall(0, 1)) ret;
+    if(!.dscri.L.pcall(0, 0)) ret;
   }
 }
 

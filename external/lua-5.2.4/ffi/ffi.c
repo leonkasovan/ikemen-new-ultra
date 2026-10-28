@@ -3007,8 +3007,7 @@ static int setup_upvals(lua_State* L)
 {
     struct jit* jit = get_jit(L);
 
-    /* jit setup — compile_globals deferred to first FFI call to avoid
-     * conflicting with SSZ's JIT compiler during startup. */
+    /* jit setup */
     {
         dasm_init(jit, 64);
 #ifdef _WIN32
@@ -3022,7 +3021,7 @@ static int setup_upvals(lua_State* L)
 #endif
         jit->globals = (void**) malloc(64 * sizeof(void*));
         dasm_setupglobal(jit, jit->globals, 64);
-        jit->jit_initialized = 0;  /* compile_globals deferred */
+        compile_globals(jit, L);
     }
 
     /* ffi.C */

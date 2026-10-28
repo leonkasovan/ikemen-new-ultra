@@ -2,6 +2,7 @@
 // device per Client). SDL_mixer / SDL_OpenAudio are NOT used here to avoid
 // conflicts with the BGM and SFX devices opened in sdlplugin.cpp.
 #include <SDL.h>
+#include <atomic>
 #include "sszdef.h"
 
 
@@ -16,15 +17,18 @@ static float g_zeroBuf[g_bufferSamples * 2] = { 0 };
 class Buffer
 {
 	float  workBuf[2][g_bufferSamples * 2];
-	float* curBuf;
-	float* nextBuf;
-	double curOffset;
-	int    nextWorkBuf;
+	float* curBuf;                  // audio thread only
+	std::atomic<float*> nextBuf;    // published by the script thread
+	double curOffset;               // audio thread only
+	int    nextWorkBuf;             // script thread only
 
+	// Audio callback: take the buffer the script published and mark the slot
+	// empty again as one atomic step, so a concurrent setNextBuffer() cannot
+	// have its frame swallowed (and cannot be half-observed) between the two
+	// separate assignments this used to be.
 	MEMBER void updateCurBuf()
 	{
-		curBuf  = nextBuf;
-		nextBuf = g_zeroBuf;
+		curBuf = nextBuf.exchange(g_zeroBuf, std::memory_order_acq_rel);
 	}
 public:
 	MEMBER Buffer() : nextBuf(g_zeroBuf), nextWorkBuf(0)
@@ -50,15 +54,16 @@ public:
 	// True when the next-buffer slot is free for a new write.
 	MEMBER bool ready() const
 	{
-		return nextBuf == g_zeroBuf;
+		return nextBuf.load(std::memory_order_acquire) == g_zeroBuf;
 	}
 
-	// Called from the script thread – copies one full frame of PCM.
+	// Called from the script thread – copies one full frame of PCM.  The
+	// release store publishes the memcpy'd samples to the audio callback.
 	MEMBER bool setNextBuffer(const float* buffer)
 	{
 		if (!ready()) return false;
 		memcpy(workBuf[nextWorkBuf], buffer, sizeof(workBuf[nextWorkBuf]));
-		nextBuf      = workBuf[nextWorkBuf];
+		nextBuf.store(workBuf[nextWorkBuf], std::memory_order_release);
 		nextWorkBuf  = !nextWorkBuf;
 		return true;
 	}

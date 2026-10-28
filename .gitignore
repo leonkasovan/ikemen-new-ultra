@@ -18,3 +18,4 @@ install/*
 build/*
 tools/__pycache__/
 test/work/
+.commandcode/

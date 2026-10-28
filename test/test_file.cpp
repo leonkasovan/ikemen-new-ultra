@@ -195,6 +195,27 @@ static void test_save_load_ascii_text()
     TEST_EQ(L"LoadAsciiText content", loaded, text);
 }
 
+static void test_save_empty_text_truncates()
+{
+    std::wcout << L"\n--- SaveAsciiText with empty string ---" << std::endl;
+
+    // Regression: an empty save used to return true without opening the file
+    // at all, so stale content survived and a missing file was never created.
+    SaveAsciiText(L"stale content", TMPFILE);
+    bool ok = SaveAsciiText(L"", TMPFILE);
+    TEST(L"empty save over existing file reports success", ok);
+    TEST(L"empty save truncated the existing file", LoadAsciiText(TMPFILE).empty());
+
+    Delete(TMPFILE);
+    ok = SaveAsciiText(L"", TMPFILE);
+    TEST(L"empty save to new path reports success", ok);
+    FILE* f = (FILE*)Open(L"rb", TMPFILE);
+    TEST(L"empty save created the file", f != nullptr);
+    if (f) FileClose(f);
+
+    Delete(TMPFILE);
+}
+
 static void test_delete()
 {
     std::wcout << L"\n--- Delete ---" << std::endl;
@@ -328,6 +349,7 @@ int main()
     test_seek();
     test_write_read_ary();
     test_save_load_ascii_text();
+    test_save_empty_text_truncates();
     test_delete();
     test_move();
     test_copy();

@@ -35,6 +35,7 @@
 #include "mem_profiler.hpp"
 #include "arrayandref.hpp"
 #include "renderer.h"
+#include "pngutil.h"   // pngCheckImageSize / PNG_MAX_DIM (see C1 in PROJECT_REVIEW.md)
 
 // ---------------------------------------------------------------------------
 // Renderer global state
@@ -386,7 +387,17 @@ static void updateWindowTitle(); // forward declaration
 
 void lockTarget()
 {
-	if(g_target) SDL_LockTexture(g_target, nullptr, (void**)&g_pix, &g_pitch);
+	if(!g_target) return;
+	// H2 fix: an unchecked SDL_LockTexture left g_pix stale/NULL, which every
+	// software blitter then writes through.
+	void* pixels = nullptr;
+	if(SDL_LockTexture(g_target, nullptr, &pixels, &g_pitch) != 0){
+		LOG_INFO("SDL", "lockTarget: SDL_LockTexture failed: %s", SDL_GetError());
+		g_pix = nullptr;
+		return;
+	}
+	g_pix = (uint32_t*)pixels;
+	if(!g_pix) LOG_INFO("SDL", "lockTarget: SDL returned a NULL pixel buffer");
 }
 
 void unlockTarget()
@@ -625,6 +636,24 @@ static GLint g_uniformAlphaFc = 0;  // for g_mugenshaderFc (full-color)
 static GLint g_uniformAlphaFcS = 0; // for g_mugenshaderFcS (solid-color shadow)
 static GLuint g_paltex = 0;
 static bool g_paltexInitialized = false; // [OPT] Track palette texture allocation state
+// GL scissor (clip rect) tracking. Declared here, above cleanupGL33Shaders(),
+// so teardown can reset it; the sprite path keeps it enabled while batch
+// vertices are pending (see C3 in PROJECT_REVIEW.md).
+static bool     g_glScissorOn = false;
+static SDL_Rect g_glScissorRect = {0,0,0,0};
+// Previous sprite batch state (was function-local static in glSpriteBegin(),
+// which made it impossible to reset on context teardown).
+static uint32_t g_glPrevTexid = 0;
+static int      g_glPrevAlpha = 0;
+
+// Scissor (clip-rect) helpers.
+//
+// The batch is only rasterised inside gl33BatchFlush(), so the scissor must be
+// enabled at *flush* time, not merely while building vertices. Previously
+// glSpriteEnd() disabled it right after every sprite, so every flush ran
+// unclipped and the drawing bound was silently ignored on GL 3.3/4.6.
+static void glScissorApply(const SDL_Rect* r);
+static void glScissorOff();
 // [OPT] Track whether ortho projection is already set for this frame
 // Avoids redundant glPushMatrix/glOrtho/glPopMatrix per sprite (~50-200+ sprites/frame)
 static bool g_orthoProjectionSet = false;
@@ -903,9 +932,17 @@ bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer){
+			INIT_LOG("Failed to create SDL renderer: %s", SDL_GetError());
+			return false;
+		}
 		if(mugen)
 		{
 			g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+			if(!g_target){
+				INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+				return false;
+			}
 			SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
 			lockTarget();
 		}
@@ -938,7 +975,18 @@ bool SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap)
 		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer)
+		{
+			// Not fatal on GL: g_renderer is only used for the SDL-side text/
+			// fill helpers. Log it instead of passing NULL to SDL later.
+			INIT_LOG("SDL renderer unavailable on the GL path: %s", SDL_GetError());
+		}
 		g_gl = SDL_GL_CreateContext(g_window);
+		if(!g_gl)
+		{
+			INIT_LOG("Failed to create GL 2.1 context: %s", SDL_GetError());
+			return false;
+		}
 		if(glewInit() != GLEW_OK) return false;
 		winProcInit();
 		if(h == 0) h = 1; 
@@ -1303,6 +1351,23 @@ static void cleanupGL33Shaders()
 	if (g_gl33_palatlas)      { glDeleteTextures(1, &g_gl33_palatlas); g_gl33_palatlas = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
+	// H12 fix: the legacy ARB programs and the 1D palette texture were never
+	// released, and the state caches kept GL names that die with the context —
+	// so an End()→Init() cycle bound dead objects and glTexSubImage1D failed
+	// silently.
+	if (GLEW_ARB_shader_objects)
+	{
+		if (g_mugenshader)      { glDeleteObjectARB(g_mugenshader);      g_mugenshader = 0; }
+		if (g_mugenshaderFc)   { glDeleteObjectARB(g_mugenshaderFc);   g_mugenshaderFc = 0; }
+		if (g_mugenshaderFcS)  { glDeleteObjectARB(g_mugenshaderFcS);  g_mugenshaderFcS = 0; }
+	}
+	if (g_paltex) { glDeleteTextures(1, &g_paltex); g_paltex = 0; }
+	g_paltexInitialized = false;
+	g_glPrevTexid = 0;
+	g_glPrevAlpha = 0;
+	g_glScissorOn = false;
+	g_glScissorRect = SDL_Rect{0,0,0,0};
+	g_orthoProjectionSet = false;
 	// P5: drain texture pool + atlas
 	texPoolDrain();
 	atlasDrain();
@@ -1467,9 +1532,9 @@ static void fillRendererInfo()
 
 	if (g_rendererType == RENDERER_SDL2)
 	{
-		sprintf(g_rendererInfo.backendName, "SDL2 Software");
-		sprintf(g_rendererInfo.deviceName, "CPU");
-		sprintf(g_rendererInfo.driverInfo, "SDL %d.%d.%d",
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName), "SDL2 Software");
+		snprintf(g_rendererInfo.deviceName, sizeof(g_rendererInfo.deviceName), "CPU");
+		snprintf(g_rendererInfo.driverInfo, sizeof(g_rendererInfo.driverInfo), "SDL %d.%d.%d",
 			SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 	}
 	else if (isOpenGLRenderer(g_rendererType))
@@ -1477,7 +1542,8 @@ static void fillRendererInfo()
 		const char* ver = (const char*)glGetString(GL_VERSION);
 		const char* ren = (const char*)glGetString(GL_RENDERER);
 		const char* ven = (const char*)glGetString(GL_VENDOR);
-		sprintf(g_rendererInfo.backendName, "OpenGL %s", glVersionName(g_glVersion));
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName),
+			"OpenGL %s", glVersionName(g_glVersion));
 		if (ren) strncpy(g_rendererInfo.deviceName, ren, sizeof(g_rendererInfo.deviceName)-1);
 		if (ver) strncpy(g_rendererInfo.driverInfo, ver, sizeof(g_rendererInfo.driverInfo)-1);
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &g_rendererInfo.maxTextureSize);
@@ -1487,7 +1553,7 @@ static void fillRendererInfo()
 	else if (g_rendererType == RENDERER_DIRECTX)
 	{
 		const char* d3dName = g_directxVersion == 11 ? "Direct3D 11" : "Direct3D 9";
-		sprintf(g_rendererInfo.backendName, "%s", d3dName);
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName), "%s", d3dName);
 		g_rendererInfo.directxVersion = g_directxVersion;
 
 		if (g_directxVersion == 11)
@@ -1527,7 +1593,11 @@ static void fillRendererInfo()
 					{
 						strncpy(g_rendererInfo.deviceName, adapterId.Description,
 							sizeof(g_rendererInfo.deviceName) - 1);
-						sprintf(g_rendererInfo.driverInfo, "%s %d.%d.%d.%d",
+						// H1 fix: adapterId.Description is char[512] and driverInfo is
+						// char[128] — the old sprintf() overran the field whenever the
+						// adapter name was long.
+						snprintf(g_rendererInfo.driverInfo, sizeof(g_rendererInfo.driverInfo),
+							"%s %d.%d.%d.%d",
 							adapterId.Description,
 							HIWORD(adapterId.DriverVersion.HighPart),
 							LOWORD(adapterId.DriverVersion.HighPart),
@@ -1694,12 +1764,29 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 			}
 		}
 
-		// Create streaming texture for software-rendered sprites
-		g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
-			SDL_TEXTUREACCESS_STREAMING, w, h);
-		SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
-		lockTarget();
-		INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
+		// Create streaming texture for software-rendered sprites. On the GL
+		// backends g_renderer can legitimately be NULL (SDL cannot always create
+		// a 2D renderer for a GL window), so only build the target when the
+		// renderer exists and report a failure instead of passing NULL around.
+		if(!g_renderer)
+		{
+			INIT_LOG("SDL renderer unavailable on this path: %s", SDL_GetError());
+		}
+		else
+		{
+			g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+				SDL_TEXTUREACCESS_STREAMING, w, h);
+			if(!g_target)
+			{
+				INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+			}
+			else
+			{
+				SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
+				lockTarget();
+				INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
+			}
+		}
 
 		winProcInit();
 		INIT_LOG("Window procedure hook installed");
@@ -1750,6 +1837,10 @@ init_opengl:
 		INIT_LOG("Window created (%dx%d)", w, h);
 
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer)
+		{
+			INIT_LOG("SDL renderer unavailable on the GL path: %s", SDL_GetError());
+		}
 		g_gl = SDL_GL_CreateContext(g_window);
 		if (!g_gl)
 		{
@@ -1847,10 +1938,18 @@ init_opengl:
 	INIT_LOG("Window created (%dx%d)", w, h);
 
 	g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+	if(!g_renderer){
+		INIT_LOG("Failed to create SDL renderer: %s", SDL_GetError());
+		return false;
+	}
 	INIT_LOG("SDL renderer created");
 
 	g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
 		SDL_TEXTUREACCESS_STREAMING, w, h);
+	if(!g_target){
+		INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+		return false;
+	}
 	SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
 	lockTarget();
 	INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
@@ -1876,16 +1975,31 @@ init_opengl:
 // ---------------------------------------------------------------------------
 // GetRendererInfo  –  Return current renderer info as a string
 // ---------------------------------------------------------------------------
+// Forward declaration: the renderer-info body lives further down (it needs
+// g_rendererInfo), but the SSZ entry point above it already needs the name.
+std::wstring RendererInfoString();
+
 void SSZ_STDCALL GetRendererInfo()
 {
+	std::wstring info = RendererInfoString();
+	REND_LOG("%ls", info.c_str());
+}
+
+// L1 fix: the old ABI can hand a string back through a Reference*, so expose
+// the data the function already computed instead of only logging it.
+std::wstring RendererInfoString()
+{
 	char buf[512];
-	sprintf(buf, "Backend: %s\nDevice: %s\nDriver: %s\nMax Texture: %d",
+	snprintf(buf, sizeof(buf),
+		"Backend: %s\nDevice: %s\nDriver: %s\nMax Texture: %d",
 		g_rendererInfo.backendName,
 		g_rendererInfo.deviceName,
 		g_rendererInfo.driverInfo,
 		g_rendererInfo.maxTextureSize);
-	// Note: returning info via console since SSZ string return is complex
-	REND_LOG("%s", buf);
+	// The fields above are ASCII (GL/D3D version strings, GPU names), so a
+	// byte-wise widening is exact.
+	std::wstring w(buf, buf + strlen(buf));
+	return w;
 }
 
 // ---------------------------------------------------------------------------
@@ -1902,13 +2016,22 @@ static void textCacheClear();
 static void blitCacheClear();
 static void textCacheEvictFont(TTF_Font* font);
 
+// Defined below GetRendererInfo; declared here so the SSZ entry point above it
+// can use it.
+std::wstring RendererInfoString();
+
 void SSZ_STDCALL End()
 {
 	INIT_LOG("Shutting down renderer...");
 	textCacheClear();
 	blitCacheClear();
 	cleanupGL33Shaders();
-	wglDeleteContext(g_hglrc2);
+	g_glCache.reset(); // declared below cleanupGL33Shaders(), so reset it here
+	if(g_hglrc2)
+	{
+		wglDeleteContext(g_hglrc2);
+		g_hglrc2 = nullptr;
+	}
 	g_js.close();
 	bgmclear();
 	Mix_CloseAudio();
@@ -1951,7 +2074,9 @@ void SSZ_STDCALL FullScreenExclusive(bool fsr) //FullScreenExclusive need to be 
 		fsMode = SDL_WINDOW_FULLSCREEN_DESKTOP;
 		SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0"); //Don't Minimize SDL_Window if it loses key focus when in fullscreen mode. Defaults to true.
 	}
-	(fsr ? fsMode : fsMode);
+	// Calibrate fullscreen mode constant from the argument. (There used to be
+	// a no-op `(fsr ? fsMode : fsMode);` statement here.)
+	(void)fsr;
 }
 
 bool fullscreenChecker = false;
@@ -2046,11 +2171,37 @@ int SSZ_STDCALL GetHeight()
 	return GetSystemMetrics(SM_CYSCREEN);
 }
 
+// ---------------------------------------------------------------------------
+// Size the GL viewport to the drawable (window) size while preserving the
+// logical g_w x g_h coordinate space that the ortho projection and all clip
+// rects are expressed in. Called at init and on every window resize.
+// ---------------------------------------------------------------------------
+static void UpdateRenderViewport()
+{
+	if(!g_window) return;
+	int dw = 0, dh = 0;
+	if(g_gl) SDL_GL_GetDrawableSize(g_window, &dw, &dh);
+	else     SDL_GetWindowSize(g_window, &dw, &dh);
+	if(dw <= 0) dw = 1;
+	if(dh <= 0) dh = 1;
+	if(isOpenGLRenderer(g_rendererType) && g_gl)
+	{
+		glViewport(0, 0, dw, dh);
+	}
+}
+
 void SSZ_STDCALL WindowSize(int height, int width)
 {
-	//g_w = width;
-	//g_h = height;
-	SDL_SetWindowSize(g_window, width, height);
+	if(!g_window) return;
+	// g_w/g_h stay at the logical render resolution on purpose: the software
+	// and DirectX paths scale the streaming texture into the window
+	// (SDL_RenderCopy with a NULL dst rect) and the GL path scales through
+	// glViewport. The assignments that used to sit here (commented out) would
+	// have desynchronised every clip rect and the ortho projection from the
+	// g_w x g_h streaming texture they are sized from — so resize is handled
+	// by re-sizing the GL viewport instead, see UpdateRenderViewport().
+	SDL_SetWindowSize(g_window, width, height); // SDL2 returns void here
+	UpdateRenderViewport();
 }
 
 bool isAspectRatio = false;
@@ -2099,23 +2250,26 @@ void SSZ_STDCALL TakeScreenShot(const std::wstring& path)
 }
 
 //To update window resize in OpenGL context
+//
+// H3 fix: the old version only handled SDL_WINDOWEVENT_MAXIMIZED, and it wrote
+// the window size into g_w/g_h — the logical game resolution every clip rect
+// and the ortho projection are computed from. Un-maximising was never handled
+// at all, so the coordinate space stayed wrong for the rest of the session.
+// The viewport is now derived from the drawable size and g_w/g_h are left alone.
 bool SSZ_STDCALL UpdateGLViewport(const SDL_Event& event)
 {
-	if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MAXIMIZED)
+	if (event.type != SDL_WINDOWEVENT) return false;
+	switch (event.window.event)
 	{
-		int32_t new_w = event.window.data1;
-		int32_t new_h = event.window.data2;
-		if (new_h == 0) new_h = 1;
-		glViewport(0, 0, new_w, new_h);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		gluPerspective(45.0, (double)new_w / (double)new_h, 0.1, 1000.0);
-		glMatrixMode(GL_MODELVIEW);
-		g_w = new_w;
-		g_h = new_h;
-		return true; //Resize ok
+	case SDL_WINDOWEVENT_MAXIMIZED:
+	case SDL_WINDOWEVENT_RESTORED:
+	case SDL_WINDOWEVENT_RESIZED:
+	case SDL_WINDOWEVENT_SIZE_CHANGED:
+		UpdateRenderViewport();
+		return true;
+	default:
+		return false;
 	}
-	return false; //Is not a resize event
 }
 
 //Video Player Definition
@@ -2666,6 +2820,7 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
@@ -2675,6 +2830,9 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
 
+	// pp lives outside the setjmp block so a libpng error (longjmp) neither
+	// leaks it nor leaves a half-decoded destination behind.
+	png_bytep* pp = nullptr;
 	if(!setjmp(png_jmpbuf(png_ptr)))
 	{
 		png_uint_32 width, height;
@@ -2685,40 +2843,55 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 				nullptr, nullptr, nullptr)
 			&& color_type == PNG_COLOR_TYPE_PALETTE && bit_depth <= 8)
 		{
-			*w = width;
-			*h = height;
-			out.resize(height * width);
-			if (out.size() < (size_t)(height * width)) out.resize(height * width);
-	auto p = out.data();
-			auto pp = new png_bytep[height];
-			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i;
-			png_read_image(png_ptr, pp);
-			switch(bit_depth){
-			case 1:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>3] & 1 << (i&7)) >> (i&7);
+			// C1 fix: validate in 64-bit before sizing anything. The old code
+			// used `height * width` (32-bit) both for resize() and for the
+			// "guard", so a 65536x65536 header wrapped the size to 0 and
+			// png_read_image() then wrote 4 GiB into the empty vector.
+			uint64_t need = 0;
+			if(!pngCheckImageSize(width, height, 1, &need)){
+				LOG_INFO("SDL",
+					"DecodePNG8: rejected %ux%u image (oversized or empty)",
+					(unsigned)width, (unsigned)height);
+				*w = *h = 0;
+			}else{
+				*w = width;
+				*h = height;
+				out.resize((size_t)need);
+				auto p = out.data();
+				pp = new png_bytep[height];
+				for(int i = height-1; i >= 0; i--) pp[i] = p + width*i;
+				png_read_image(png_ptr, pp);
+				switch(bit_depth){
+				case 1:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>3] & 1 << (i&7)) >> (i&7);
+						}
 					}
-				}
-				break;
-			case 2:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>2] & 3 << (i&3)*2) >> (i&3)*2;
+					break;
+				case 2:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>2] & 3 << (i&3)*2) >> (i&3)*2;
+						}
 					}
-				}
-				break;
-			case 4:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>1] & 15 << (i&1)*4) >> (i&1)*4;
+					break;
+				case 4:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>1] & 15 << (i&1)*4) >> (i&1)*4;
+						}
 					}
+					break;
 				}
-				break;
 			}
-			delete [] pp;
 		}
+	}else{
+		// libpng error (longjmp): the destination is not usable.
+		*w = *h = 0;
+		out.clear();
 	}
+	delete [] pp;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 }
 
@@ -2739,6 +2912,7 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
@@ -2747,6 +2921,7 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 	png_init_io(png_ptr, fp);
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
+	png_bytep* pp = nullptr;
 	if(!setjmp(png_jmpbuf(png_ptr)))
 	{
 		png_uint_32 width, height;
@@ -2762,16 +2937,29 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 			if((color_type & PNG_COLOR_MASK_ALPHA) == 0){
 				png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
 			}
-			*w = width;
-			*h = height;
-			out.resize((size_t)width * height * 4);
-			auto p = out.data();
-			auto pp = new png_bytep[height];
-			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
-			png_read_image(png_ptr, pp);
-			delete [] pp;
+			// C1 fix: no cap at all before — a huge header asked for a
+			// terabyte-sized allocation; validate first, in 64-bit.
+			uint64_t need = 0;
+			if(!pngCheckImageSize(width, height, 4, &need)){
+				LOG_INFO("SDL",
+					"DecodePNG32: rejected %ux%u image (oversized or empty)",
+					(unsigned)width, (unsigned)height);
+				*w = *h = 0;
+			}else{
+				*w = width;
+				*h = height;
+				out.resize((size_t)need);
+				auto p = out.data();
+				pp = new png_bytep[height];
+				for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
+				png_read_image(png_ptr, pp);
+			}
 		}
+	}else{
+		*w = *h = 0;
+		out.clear();
 	}
+	delete [] pp;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 }
 
@@ -2897,7 +3085,6 @@ static void CapturePendingShotSDL()
 void SSZ_STDCALL Flip()
 {
 	LARGE_INTEGER flipT0, flipT1;
-
 	QueryPerformanceCounter(&flipT0);
 	if(g_target)
 	{
@@ -3086,10 +3273,22 @@ void SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x, SDL_C
 		SDL_Surface* psrc =
 			TTF_RenderUNICODE_Blended(
 				pf, (Uint16*)wstr.c_str(), c);
+		if(!psrc){
+			// H2 fix: this dereferenced a NULL surface on any render failure
+			// (out of memory, missing glyph, invalid UTF-16).
+			LOG_INFO("SDL", "RenderFont: TTF_RenderUNICODE_Blended failed: %s",
+				TTF_GetError());
+			return;
+		}
 		tw = psrc->w;
 		th = psrc->h;
 		tex = SDL_CreateTextureFromSurface(g_renderer, psrc);
 		SDL_FreeSurface(psrc);
+		if(!tex){
+			LOG_INFO("SDL", "RenderFont: SDL_CreateTextureFromSurface failed: %s",
+				SDL_GetError());
+			return;
+		}
 
 		TextCacheEntry entry;
 		entry.tex = tex;
@@ -5309,6 +5508,10 @@ template<typename Img> void mzrScreenBilt(
 static bool fastSimpleAddRectBlit(
 	SDL_Rect dr, Reference img, SDL_Rect psrcr, uint32_t* ppal, uint16_t colorkey)
 {
+	// Palette data is required here; a NULL ppal used to be dereferenced one
+	// byte-index at a time (ppal[b0] ...) whenever a truecolor sprite was
+	// routed down this path.
+	if(!ppal) return false;
 	if(
 		dr.w <= 0 || dr.h <= 0 || psrcr.w <= 0 || psrcr.h <= 0
 		|| img.len() < psrcr.w * psrcr.h)
@@ -6491,17 +6694,33 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return 0;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
 		return 0;
 	}
+	// C2 fix: this path installed no error handler at all, so libpng's
+	// png_error() longjmp'd through an uninitialised jmp_buf. Everything
+	// from here on must sit inside the setjmp scope.
 	png_init_io(png_ptr, fp);
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
-	png_uint_32 width, height;
-	int bit_depth, color_type;
+	png_uint_32 width = 0, height = 0;
+	int bit_depth = 0, color_type = 0;
 	uint32_t texid = 0;
+	png_byte* buff = nullptr;
+	png_bytep* pp = nullptr;
+	if(setjmp(png_jmpbuf(png_ptr)))
+	{
+		// Malformed/truncated PNG: free what we own and report failure.
+		LOG_INFO("SDL", "LoadPngTexture: libpng error (corrupt image)");
+		delete [] buff;
+		delete [] pp;
+		*w = *h = 0;
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return 0;
+	}
 	if(
 		png_get_IHDR(
 			png_ptr, info_ptr, &width, &height, &bit_depth, &color_type,
@@ -6512,18 +6731,31 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		if((color_type & PNG_COLOR_MASK_ALPHA) == 0){
 			png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
 		}
-		*w = width;
-		*h = height;
-		auto buff = new png_byte[width * height * 4];
+		// C1 fix: `width * height * 4` was a 32-bit product that wraps; a
+		// 32768x32768 header made it 0 and png_read_image() then wrote the
+		// whole 4 GiB into a zero-length allocation.
+		uint64_t need = 0;
+		if(!pngCheckImageSize(width, height, 4, &need)){
+			LOG_INFO("SDL",
+				"LoadPngTexture: rejected %ux%u image (oversized or empty)",
+				(unsigned)width, (unsigned)height);
+			*w = *h = 0;
+			png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+			return 0;
+		}
+		*w = (int32_t)width;
+		*h = (int32_t)height;
+		buff = new png_byte[(size_t)need];
 		auto p = buff;
-		auto pp = new png_bytep[height];
+		pp = new png_bytep[height];
 		for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
 		png_read_image(png_ptr, pp);
 		delete [] pp;
+		pp = nullptr;
 		// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
 		if (useModernRender()) {
 			texid = atlasAlloc(width, height, GL_RGBA, buff);
-			if (texid) { g_perfCounters.atlasHits++; delete [] buff; }
+			if (texid) { g_perfCounters.atlasHits++; delete [] buff; buff = nullptr; }
 			else { g_perfCounters.atlasMisses++; }
 		}
 		if (!texid) {
@@ -6536,11 +6768,15 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 			glTexSubImage2D(
 				GL_TEXTURE_2D, 0, 0, 0,
 				width, height, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-			delete [] buff;
+			delete [] buff; buff = nullptr;
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+			// H12 fix: a pooled texture must be re-registered, otherwise
+			// DeleteGlTexture() cannot look its dimensions up and the pool
+			// never receives it back (pool worked exactly once per size).
+			texDimRegister(texid, width, height, GL_RGBA);
 		}
 		else
 		{
@@ -6551,7 +6787,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 			glTexImage2D(
 				GL_TEXTURE_2D, 0, GL_RGBA,
 				width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-			delete [] buff;
+			delete [] buff; buff = nullptr;
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -6560,6 +6796,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		}
 		} // if (!texid)
 	}
+	delete [] buff;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 	INIT_LOG("LoadPngTexture: %dx%d -> texid=%u", (int)width, (int)height, texid);
 	return texid;
@@ -6633,6 +6870,7 @@ void SSZ_STDCALL GlSwapBuffers()
 	}
 
 	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
+	glScissorOff();   // nothing pending any more; glClear() honours the scissor
 //Deferred GL screenshot: frame is fully drawn but not yet presented
 	if (g_shotPending)
 	{
@@ -6876,13 +7114,21 @@ void drawQuads(
 {
 	if(useModernRender()){
 	// Same strip layout as the legacy glBegin path: 2 + 2*(n-1) + 2 vertices.
-	int n =
-		(int)(
-			(
-				pers > 1.0
-				? (1-1/(pers*pers))*abs(x3-x4) : (1-(pers*pers))*abs(x1-x2))
-			* (g_h>>5) / (abs(y1-y4) + (g_h>>5)));
+	// The tessellation count is derived from a floating-point ratio; clamp it so
+	// a degenerate pers (0, inf, NaN) cannot reserve a gigabyte or spin for
+	// billions of iterations.
+	const float denom = abs(y1-y4) + (float)(g_h>>5);
+	int n = 1;
+	if(denom > 1e-6f)
+	{
+		const float num =
+			(pers > 1.0f
+				? (1.0f-1.0f/(pers*pers))*abs(x3-x4) : (1.0f-(pers*pers))*abs(x1-x2));
+		const float est = num * (float)(g_h>>5) / denom;
+		if(est > 0.0f && est < 1e9f) n = (int)est; // NaN fails both compares
+	}
 	if(n < 1) n = 1;
+	if(n > 4096) n = 4096;
 	static std::vector<float> v;
 	v.clear();
 	v.reserve((size_t)(2*n+2)*4);
@@ -6929,6 +7175,8 @@ void drawQuads(
 				pers > 1.0
 				? (1-1/(pers*pers))*abs(x3-x4) : (1-(pers*pers))*abs(x1-x2))
 			* (g_h>>5) / (abs(y1-y4) + (g_h>>5)));
+	if(n < 1) n = 1;
+	if(n > 4096) n = 4096;
 	for(int i = 1; i < n; i++){
 		glTexCoord2f((float)i/n, 1);
 		glVertex2f(x1 + (x2 - x1)*i/n, y1 + (y2 - y1)*i/n);
@@ -6949,13 +7197,20 @@ void drawTileHolizon(
 	float r, float g, float b, float a, float pers)
 {
 	float topbtwn = xtw + xtopscl*(float)tile.x;
+	// The division used to happen before the `abs(topbtwn) < 0.01` guard further
+	// down; with topbtwn == 0 that produced NaN/inf coordinates, and every
+	// break condition in the fill loops below is a coordinate comparison — so
+	// the frame hung instead of drawing nothing.
+	if(abs(topbtwn) < 0.01f) return;
 	float db =
 		((xbw + xbotscl*(float)tile.x) - topbtwn) * (rcx - x4) / abs(topbtwn);
 	x1 -= db;
 	x2 -= db;
 	if(tile.w == 1){
 		float x1d=x1, x2d=x2, x3d=x3, x4d=x4;
+		int guard = 0;
 		for(;;){
+			if(++guard > 65536) break; // degenerate coords: never loop forever
 			x2d = x1d - xbotscl*(float)tile.x;
 			x3d = x4d - xtopscl*(float)tile.x;
 			x4d = x3d - xtw;
@@ -6982,7 +7237,10 @@ void drawTileHolizon(
 		}
 	}
 	int n = tile.w;
+	if(n <= 0) return;
+	int guard = 0;
 	for(;;){
+		if(++guard > 65536) break; // tile.w<=0 / zero-size steps: no infinite loop
 		if(topbtwn > 0){
 			if(
 				x1 >= (float)g_w && x2 >= (float)g_w
@@ -7023,7 +7281,10 @@ void drawTile(
 	y3 = rcy + (y - rcy) * vscl;
 	x4 = x;
 	y4 = y3;
-	float pers = abs(x3 - x4) / abs(x2 - x1);
+	// Degenerate trapezoid: a zero-width top edge made this a division by zero,
+	// which turned pers into inf/NaN and poisoned every drawQuads() downstream.
+	const float persDen = abs(x2 - x1);
+	float pers = (persDen > 1e-6f) ? abs(x3 - x4) / persDen : 1.0f;
 	if(angle != 0.0f){
 		kaiten(x1, y1, angle, rcx, rcy, vscl);
 		kaiten(x2, y2, angle, rcx, rcy, vscl);
@@ -7098,30 +7359,50 @@ void drawTile(
 // Returns false if the sprite should be skipped.
 // When scissor+texid+alpha match the previous sprite, the batch is NOT flushed
 // and vertices accumulate — reducing per-sprite draw calls (scissor batching).
+// Scissor (clip-rect) helper bodies — declared next to the scissor state above
+// because GlSwapBuffers() and rectFillGl() (both much earlier in the file) need
+// glScissorOff().
+static void glScissorApply(const SDL_Rect* r)
+{
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(r->x, g_h - (r->y + r->h), r->w, r->h);
+	g_glScissorOn   = true;
+	g_glScissorRect = *r;
+}
+
+// Turn clipping off for draws that are not part of the sprite batch (flat
+// fills, the frame clear) — glClear() honours the scissor test too.
+static void glScissorOff()
+{
+	if(g_glScissorOn){
+		glDisable(GL_SCISSOR_TEST);
+		g_glScissorOn = false;
+	}
+}
+
 static bool glSpriteBegin(
 	float& x, float& y, float& rcy, float& rcx, float& vscl, float& yscl,
 	float& angle, float xtopscl, float xbotscl, float rasterxadd,
 	SDL_Rect* tile, SDL_Rect* rect, SDL_Rect& r, SDL_Rect& tl,
 	uint32_t texid, SDL_Rect* dstr, int alpha)
 {
-	// Scissor batching: only flush when render state changes.
-	static SDL_Rect prevScissor = {0,0,0,0};
-	static uint32_t prevTexid = 0;
-	static int prevAlpha = 0;
-	bool sameScissor = (dstr->x == prevScissor.x) && (dstr->y == prevScissor.y)
-		&& (dstr->w == prevScissor.w) && (dstr->h == prevScissor.h);
-	bool sameTexid = (texid == prevTexid);
-	bool sameAlpha = (alpha == prevAlpha);
-	bool sameState = sameScissor && sameTexid && sameAlpha;
+	if(!dstr || !rect || !tile) return false;
+	// Scissor batching: only flush when render state changes. The flush below
+	// runs *before* the new clip rect is applied, so the pending vertices keep
+	// the rect they were built for.
+	bool sameScissor = (dstr->x == g_glScissorRect.x) && (dstr->y == g_glScissorRect.y)
+		&& (dstr->w == g_glScissorRect.w) && (dstr->h == g_glScissorRect.h);
+	bool sameTexid = (texid == g_glPrevTexid);
+	bool sameAlpha = (alpha == g_glPrevAlpha);
+	bool sameState = sameScissor && sameTexid && sameAlpha && g_glScissorOn;
 	if (!sameState)
 	{
 		gl33BatchFlush();
 		if (!sameTexid)   g_perfCounters.glFlushByTexid++;
 		if (!sameAlpha)   g_perfCounters.glFlushByAlpha++;
 		if (!sameScissor) g_perfCounters.glFlushByScissor++;
-		prevScissor = *dstr;
-		prevTexid = texid;
-		prevAlpha = alpha;
+		g_glPrevTexid = texid;
+		g_glPrevAlpha = alpha;
 	}
 	else
 	{
@@ -7151,15 +7432,17 @@ static bool glSpriteBegin(
 	rcy = -rcy;
 	if (yscl < 0) y = -y;
 	y += rcy;
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(dstr->x, g_h - (dstr->y + dstr->h), dstr->w, dstr->h);
+	glScissorApply(dstr);
 	g_perfCounters.glScissorCalls++;
 	return true;
 }
 
 static void glSpriteEnd()
 {
-	glDisable(GL_SCISSOR_TEST);
+	// Intentionally does NOT disable the scissor: vertices for this sprite are
+	// still pending in the batch, and gl33BatchFlush() applies the clip rect
+	// that was current when they were emitted. Non-sprite draws call
+	// glScissorOff() explicitly.
 }
 
 // [OPT] Added alphaUniform parameter - uses cached uniform location instead of
@@ -7421,7 +7704,9 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	if(useModernRender()){
 	// Same vertex order as the legacy GL_QUADS path (y pre-negated; the
 	// modelview translate(0,g_h) is baked into uProj instead).
-	gl33BatchFlush(); // flat fill uses a different program
+	gl33BatchFlush(); // flat fill uses a different program (flushed under the
+	                  // sprite clip rect still in effect)
+	glScissorOff();   // the fill itself is not clipped
 	float v[16] = {
 		(float)rect.x,           -(float)(rect.y+rect.h), 0.0f, 0.0f,
 		(float)(rect.x+rect.w),  -(float)(rect.y+rect.h), 0.0f, 0.0f,
@@ -7437,9 +7722,10 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	g_perfCounters.glDrawArraysCalls++;
 	g_perfCounters.glBufferDataCalls++;
 	g_perfCounters.glTotalVertices += 4;
-	glBindVertexArray(0);
-	return;
+		glBindVertexArray(0);
+		return;
 	}
+	glScissorOff(); // legacy immediate-mode fill: clip rect does not apply
 	glBegin(GL_QUADS);
 	{
 		glColor4f(r, g, b, a);

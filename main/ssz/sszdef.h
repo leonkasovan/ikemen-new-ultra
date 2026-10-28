@@ -11,7 +11,14 @@
 #include <process.h>
 
 #define THREADCALL __stdcall
+// C6: MSVC-only. GCC/MinGW has no MS-style __try/__except, and defining this
+// unconditionally made the SSZ_TRY/SSZ_EXCEPT blocks below look like real
+// handlers while compiling to bare braces — plus it kept the whole
+// SSZException/g_cal error path alive as unreachable code. Faults are now
+// reported by CrashDumpReport() instead (see main/crash_log.hpp).
+#ifdef _MSC_VER
 #define SSZ_EXCEPTION
+#endif
 #define WSTR wstring
 #define WCHR wchar_t
 #define L(x) L ## x
@@ -186,7 +193,8 @@ extern volatile int64_t g_jitDataBytes;
 // =========================================================================
 #define LOG_INFO(tag, fmt, ...)  do{ printf("[" tag "] " fmt "\n", ##__VA_ARGS__); fflush(stdout); }while(0)
 
-#if defined(DEBUG) || defined(DEBUG)
+// L3: the condition used to be `defined(DEBUG) || defined(DEBUG)`.
+#if defined(DEBUG) || defined(_DEBUG)
 #define LOG_DEBUG(tag, fmt, ...)   do{ printf("[DEBUG][" tag "] " fmt "\n", ##__VA_ARGS__); fflush(stdout); }while(0)
 #else
 #define LOG_DEBUG(tag, fmt, ...)   ((void)0)
@@ -196,4 +204,9 @@ extern volatile int64_t g_jitDataBytes;
 // exit-time rankings). Independent of PerformanceMonitor (which controls the
 // per-frame [Perf] lines in the SDL plugin). Default: off.
 extern bool g_profilerLog;
+
+// Best-effort "file(line)" lookup for an address inside JIT-emitted code.
+// Allocation-free and lock-free: safe to call from a crash handler.
+// Returns false when the address is not inside SSZ JIT code.
+bool SSZLookupScriptLocation(void* address, WCHR* outBuf, size_t outChars);
 

@@ -11,11 +11,14 @@ Build:
 2. Release : `make 2>&1 | tee build-release.log`
 
 Tests:
-- `make CONFIG=Debug test_common` — utility functions
-- `make CONFIG=Debug test_command` — command loading (kfm.cmd)
-- `make CONFIG=Debug test_integration` — cross-module validation
-- `make CONFIG=Debug test_matchflow` — match state machine (13 tests, 0 failures)
-- `make test_sff|font|animation|action|stage CONFIG=Release` — interactive SDL2 tests
+- `make CONFIG=Debug check` — everything that needs no display: `test_helpers` (header-only safety helpers: PNG size gate, SSZ index clamp) + `test_file` (native file I/O, 44 assertions)
+- `make CONFIG=Debug test_helpers` — just the header-only helpers
+- `make CONFIG=Debug test` — just the file I/O regression suite
+
+Interactive SDL2 tests (`test_sff`, `test_font`, `test_animation`, `test_action`, `test_stage`)
+and the `test_common` / `test_command` / `test_integration` / `test_matchflow` targets
+that earlier revisions of this file advertised **do not exist in the Makefile**. The
+only test binaries are `test_helpers` and `test_file`.
 
 Debug with gdb:
 1. Open w64devkit shell and go to install
@@ -42,11 +45,48 @@ quit
 ```
 2. `gdb -x gdb_watch.cmd ikemen-debug.exe`
 
+## Crash Reports
+
+A Vectored Exception Handler prints an allocation-free crash summary to **stderr**
+before the process dies (it never blocks the debugger/WER report):
+
+```
+==== CRASH REPORT ====
+reason: access violation
+fault address: 0x6179821
+SSZ script location: c:\...\install\ssz\char.ssz(1153)
+time regions (ms, calls):
+  script:draw = 812.4  x640
+  ...
+======================
+```
+
+The script location comes from the JIT address table, so it is exact when the fault
+happened inside compiled SSZ code. The `time regions` list is filled from an
+allocation-free mirror of the profiler, so it only has content when profiling is on
+(`IKEMEN_PROFILE=1`); the rest of the report is always available. The hook is
+`SetUnhandledExceptionFilter`, so it only fires for faults nothing handled (a
+first-chance exception a driver handles internally stays silent). To verify the
+reporter on a new machine:
+
+```bash
+IKEMEN_CRASH_TEST=1 ./ikemen-debug.exe      # faults on purpose
+```
+
 ## Performance Profiling
 
 The engine has a built-in, pprof-style session profiler. No external tools needed.
-Run the game (Debug or Release), play a representative match, quit normally, and a
-ranked time report prints at exit (also on crashes):
+
+**Recording is off by default** (it costs a clock read + map update per mark, and the
+fight loop emits ~25 marks per frame). Enable it with an environment variable:
+
+```bash
+IKEMEN_PROFILE=1 ./ikemen-debug.exe > game.log 2>&1    # bash / sh
+$env:IKEMEN_PROFILE=1; .\ikemen-debug.exe              # PowerShell
+```
+
+With the flag set, run a representative match and quit normally: a ranked time report
+prints at exit. Without it, the profilers record nothing and print nothing.
 
 ```
 [Time] ==== TIME USAGE RANKING ====
@@ -62,14 +102,15 @@ ranked time report prints at exit (also on crashes):
 ### How to run a profile
 
 ```bash
-make CONFIG=Release install       # or CONFIG=Debug
+make CONFIG=Release install       # or CONFIG=Debug (use Release for numbers)
 cd install
-./ikemen.exe > game.log 2>&1      # play; quit normally (or wait for match end)
-grep "TIME USAGE RANKING" -A 30 game.log
+IKEMEN_PROFILE=1 ./ikemen.exe > game.log 2>&1   # play; quit normally
+rg "TIME USAGE RANKING" -A 30 game.log
 ```
 
 Redirecting stdout keeps the console clean; capture the last lines of `game.log`
-for the report.
+for the report. Profiling is gated on recording *and* printing, so a build without
+`IKEMEN_PROFILE` measures the engine, not the profiler.
 
 ### Adding your own marks
 

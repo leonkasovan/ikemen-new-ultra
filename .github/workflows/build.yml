@@ -1,0 +1,54 @@
+name: build
+
+# Windows-only build, matching the supported toolchain (w64devkit + MinGW GCC).
+# The Makefile expects the toolchain at C:/x86devkit and is otherwise hermetic:
+# every dependency is vendored under external/, so no package manager is needed.
+#
+# This workflow was added with the remediation described in PROJECT_REVIEW.md and
+# has NOT been exercised on GitHub's runners yet — the first push will tell.
+
+on:
+  push:
+    branches: [main, optimized, native]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-check:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install w64devkit (x86_64) to C:\x86devkit
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/skeeto/w64devkit/releases/download/v2.8.0/w64devkit-x86-2.8.0.7z.exe'
+          Invoke-WebRequest -Uri $url -OutFile w64devkit.7z.exe
+          # 7z self-extracting archive: -o is the 7z extraction switch.
+          .\w64devkit.7z.exe -y -oC:\
+          Remove-Item w64devkit.7z.exe
+          # The archive extracts to C:\w64devkit; the Makefile points at C:\x86devkit.
+          if (-not (Test-Path 'C:\x86devkit')) {
+            New-Item -ItemType Directory -Path 'C:\x86devkit' | Out-Null
+            Copy-Item -Recurse -Force 'C:\w64devkit\*' 'C:\x86devkit\'
+          }
+          & C:/x86devkit/bin/g++.exe --version
+
+      - name: Build (Debug)
+        run: C:/x86devkit/bin/make.exe CONFIG=Debug -j8
+
+      - name: Unit tests
+        run: C:/x86devkit/bin/make.exe CONFIG=Debug check
+
+      - name: Build (Release)
+        run: C:/x86devkit/bin/make.exe CONFIG=Release -j8
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ikemen-debug-windows
+          path: build/Debug/ikemen-debug.exe
+          if-no-files-found: error
+          retention-days: 7
