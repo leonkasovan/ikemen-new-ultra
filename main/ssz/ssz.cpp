@@ -78,7 +78,10 @@ void MemPrintHistogram()
 // =========================================================================
 static void* SSZ_STDCALL MemoryKakuho(intptr_t size)
 {
-	intptr_t* p = (intptr_t*)new int8_t[size + sizeof(intptr_t)];
+	// Reject negative sizes and intptr_t overflow before adding the header.
+	if(size < 0) return nullptr;
+	if((uint64_t)size > (uint64_t)(INTPTR_MAX - sizeof(intptr_t))) return nullptr;
+	intptr_t* p = (intptr_t*)new int8_t[(size_t)size + sizeof(intptr_t)];
 	p[0] = size;
 	g_allocBytes += size;
 	if (g_allocBytes - g_freeBytes > g_peakLiveBytes)
