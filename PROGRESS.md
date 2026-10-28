@@ -270,15 +270,17 @@ switching. The +189 MB GL memory anomaly is inherent to per-sprite
 atlas packing (combine hundreds of small sprites into one or a few large GL
 textures), which is a larger refactor touching the SSZ render loop.
 
-### P5b — Sprite atlas (disabled)
+### P5b — Sprite atlas (ACTIVE since the re-enablement)
 
-Infrastructure added (atlas pages, virtual texids, UV remapping) but **disabled
-due to visual correctness issues**: the UV remapping in `drawQuads()` breaks
-lifebar rendering and causes character flickering on GL 3.3/4.6. `atlasAlloc()`
-returns 0 immediately, falling through to individual textures via P5 pool.
-Atlas code retained for future re-enablement.
+Infrastructure added (atlas pages, virtual texids, UV remapping). This section
+described it as *disabled* — that is out of date: `LoadPngTexture()` and
+`Load8bitTexture()` both call `atlasAlloc()` on the modern (GL 3.3/4.6) path and
+`atlasAlloc()` does real packing (`main/sdlplugin/sdlplugin.cpp`). The earlier
+visual issues (lifebar UVs, character flicker) are what the per-sprite UV bake in
+`drawQuads()` (`g_atlasUOff/VOff/UScale/VScale`) now handles. If you want it off
+again, make `atlasAlloc()` return 0 — the pool path (P5) takes over unchanged.
 
-### Active optimizations: P1 + P2 + P3 + P5 (P4 ring disabled, P5b atlas disabled)
+### Active optimizations: P1 + P2 + P3 + P5 (P4 ring disabled, P5b atlas active)
 
 Default renderer changed to **Renderer=2 (OpenGL 3.3)**.
 

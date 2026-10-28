@@ -4,14 +4,17 @@ Ikemen GO (M.U.G.E.N engine) with a custom JIT-compiled scripting language calle
 
 | Component | Key Files | Lines |
 |---|---|---|
-| Entry point | `main/main.cpp` | 165 |
-| SSZ JIT compiler | `main/ssz/jitcompiler.hpp` | 8,886 |
-| SSZ source tree | `main/ssz/sourcetree.hpp` | 8,583 |
-| SDL renderer plugin | `main/sdlplugin/sdlplugin.cpp` | 5,826 |
+| Entry point | `main/main.cpp` | 484 |
+| SSZ JIT compiler | `main/ssz/jitcompiler.hpp` | 8,888 |
+| SSZ source tree | `main/ssz/sourcetree.hpp` | 8,601 |
+| SDL renderer plugin | `main/sdlplugin/sdlplugin.cpp` | 7,813 |
 | x86 codegen backend | `main/ssz/x86.hpp` | 3,680 |
-| Plugin registry | `main/ssz/static_plugin_registry.hpp` | 170 |
-| Platform abstraction | `main/ssz/sszdef.h` | 176 |
-| Type ID definitions | `main/ssz/typeid.h` | 35 |
+| Plugin registry | `main/ssz/static_plugin_registry.hpp` | 202 |
+| Platform abstraction | `main/ssz/sszdef.h` | 212 |
+| Type ID definitions | `main/ssz/typeid.h` | 37 |
+| Legacy-ABI bridge | `main/ssz/bridge.cpp` | 1,427 |
+| Crash diagnostics | `main/crash_log.hpp` | 42 |
+| PNG size gate | `main/sdlplugin/pngutil.h` | 58 |
 | 13 plugin sources | `main/*/` | 50–200 each |
 | 13 static headers | `main/*_static.hpp` | 30–240 each |
 
@@ -41,9 +44,11 @@ make CONFIG=Debug install -j8 # → build/Debug/ikemen-debug.exe → install/ike
 make clean
 ```
 
-- All 19 external libraries compiled from source (~800 source files) into 19 static archives
+- All 18 external libraries compiled from source (~800 source files) into 18 static archives
 - **Note:** The Makefile sets `PATH` internally for the toolchain (`as`, `ld`) — no manual environment setup required
 - Debug exe is copied to `install/ikemen-debug.exe` via `make install`; it also renames the build output with `-debug` suffix
+- Debug build uses `-Og -g3` (debuggable, not throughput — profile Release)
+- `make check` runs every test that needs no display: `test_helpers` (header-only safety helpers) + `test_file` (native file I/O)
 
 ### Linux (Makefile, experimental)
 
