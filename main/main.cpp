@@ -147,6 +147,7 @@ static int updateCharInSelectDef(const char* fname)
 	}
 
 	std::vector<std::string> chars;
+	bool changed = false; // H11: rewrite the file only when we added something
 	int section = 0;
 	char buf[4096];
 
@@ -186,6 +187,7 @@ static int updateCharInSelectDef(const char* fname)
 							if (!stringInSlice(chars, dirName)) {
 								printf(" add new char: %s\n", dirName);
 								fprintf(file2, "%s\n", dirName);
+								changed = true;
 							}
 						}
 					}
@@ -212,7 +214,14 @@ static int updateCharInSelectDef(const char* fname)
 					printf(" existing char: %s\n", charName.c_str());
 					fprintf(file2, "%s\n", originalLine.c_str());
 				} else {
-					printf(" remove missing char: %s\n", charName.c_str());
+					// H11: do not delete a user entry because its directory is not
+					// where we looked (path style, half-installed pack, different
+					// layout). Report and keep the line; this used to drop characters
+					// from select.def permanently, on every launch.
+					printf(" warning: no chars/%s directory (entry kept)\n",
+						charName.c_str());
+					chars.push_back(charName);
+					fprintf(file2, "%s\n", originalLine.c_str());
 				}
 				continue;
 			}
@@ -224,10 +233,16 @@ static int updateCharInSelectDef(const char* fname)
 	fclose(file2);
 	fclose(file);
 
-	// Atomic rename (remove old .bak first — Windows rename doesn't overwrite)
+	if (!changed) {
+		// Nothing to add — leave select.def exactly as the user has it.
+		remove(updateName.c_str());
+		return 0;
+	}
+
+	// Never overwrite an existing backup: repeated rewrites would otherwise
+	// destroy the only copy of the user's original file.
 	std::string bakName = std::string(fname) + ".bak";
-	remove(bakName.c_str());
-	rename(fname, bakName.c_str());
+	if (rename(fname, bakName.c_str()) != 0) remove(fname);
 	rename(updateName.c_str(), fname);
 
 	return 0;
@@ -254,6 +269,7 @@ static int updateStageInSelectDef(const char* fname)
 	}
 
 	std::vector<std::string> stages;
+	bool changed = false; // H11: rewrite only when new entries were appended
 	int section = 0;
 	char pathSep1 = 0;
 	char pathSep2 = 0;
@@ -298,6 +314,7 @@ static int updateStageInSelectDef(const char* fname)
 						if (!stringInSlice(stages, stagePath)) {
 							printf(" add new stage: %s\n", stagePath.c_str());
 							fprintf(file2, "%s\n", stagePath.c_str());
+							changed = true;
 						}
 					}
 				} while (_findnext(handle, &fd) == 0);
@@ -329,7 +346,13 @@ static int updateStageInSelectDef(const char* fname)
 				}
 				fprintf(file2, "%s\n", originalLine.c_str());
 			} else {
-				printf(" remove missing stage: %s\n", stagePath.c_str());
+				// H11: same rule as characters — report, never delete. A stage
+				// stored outside the expected path used to disappear from
+				// select.def permanently on the next launch.
+				printf(" warning: stage file not found: %s (entry kept)\n",
+					stagePath.c_str());
+				stages.push_back(stagePath);
+				fprintf(file2, "%s\n", originalLine.c_str());
 			}
 			continue;
 		}
@@ -340,10 +363,14 @@ static int updateStageInSelectDef(const char* fname)
 	fclose(file2);
 	fclose(file);
 
-	// Atomic rename (remove old .bak first — Windows rename doesn't overwrite)
+	if (!changed) {
+		remove(updateName.c_str());
+		return 0;
+	}
+
+	// Never overwrite an existing backup (see updateCharInSelectDef).
 	std::string bakName = std::string(fname) + ".bak";
-	remove(bakName.c_str());
-	rename(fname, bakName.c_str());
+	if (rename(fname, bakName.c_str()) != 0) remove(fname);
 	rename(updateName.c_str(), fname);
 
 	return 0;
