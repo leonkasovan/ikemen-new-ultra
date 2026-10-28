@@ -1016,3 +1016,13 @@ public void getRendererInfo()
   plugin void GetRendererInfo(::) = "dll/sdlplugin.dll";
   GetRendererInfo(::);
 }
+
+// Same data as getRendererInfo(), but returned as a string instead of only
+// being logged (L1 in PROJECT_REVIEW.md).
+public ^/char getRendererInfoStr()
+{
+  plugin void GetRendererInfoStr(:^char=:) = "dll/sdlplugin.dll";
+  ^char info;
+  GetRendererInfoStr(:info=:);
+  ret info;
+}

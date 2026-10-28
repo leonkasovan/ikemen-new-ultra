@@ -1958,16 +1958,31 @@ init_opengl:
 // ---------------------------------------------------------------------------
 // GetRendererInfo  –  Return current renderer info as a string
 // ---------------------------------------------------------------------------
+// Forward declaration: the renderer-info body lives further down (it needs
+// g_rendererInfo), but the SSZ entry point above it already needs the name.
+std::wstring RendererInfoString();
+
 void SSZ_STDCALL GetRendererInfo()
 {
+	std::wstring info = RendererInfoString();
+	REND_LOG("%ls", info.c_str());
+}
+
+// L1 fix: the old ABI can hand a string back through a Reference*, so expose
+// the data the function already computed instead of only logging it.
+std::wstring RendererInfoString()
+{
 	char buf[512];
-	sprintf(buf, "Backend: %s\nDevice: %s\nDriver: %s\nMax Texture: %d",
+	snprintf(buf, sizeof(buf),
+		"Backend: %s\nDevice: %s\nDriver: %s\nMax Texture: %d",
 		g_rendererInfo.backendName,
 		g_rendererInfo.deviceName,
 		g_rendererInfo.driverInfo,
 		g_rendererInfo.maxTextureSize);
-	// Note: returning info via console since SSZ string return is complex
-	REND_LOG("%s", buf);
+	// The fields above are ASCII (GL/D3D version strings, GPU names), so a
+	// byte-wise widening is exact.
+	std::wstring w(buf, buf + strlen(buf));
+	return w;
 }
 
 // ---------------------------------------------------------------------------
