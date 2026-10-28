@@ -1351,6 +1351,23 @@ static void cleanupGL33Shaders()
 	if (g_gl33_palatlas)      { glDeleteTextures(1, &g_gl33_palatlas); g_gl33_palatlas = 0; }
 	if (g_gl33_vao) { glDeleteVertexArrays(1, &g_gl33_vao); g_gl33_vao = 0; }
 	if (g_gl33_vbo) { glDeleteBuffers(1, &g_gl33_vbo); g_gl33_vbo = 0; }
+	// H12 fix: the legacy ARB programs and the 1D palette texture were never
+	// released, and the state caches kept GL names that die with the context —
+	// so an End()→Init() cycle bound dead objects and glTexSubImage1D failed
+	// silently.
+	if (GLEW_ARB_shader_objects)
+	{
+		if (g_mugenshader)      { glDeleteObjectARB(g_mugenshader);      g_mugenshader = 0; }
+		if (g_mugenshaderFc)   { glDeleteObjectARB(g_mugenshaderFc);   g_mugenshaderFc = 0; }
+		if (g_mugenshaderFcS)  { glDeleteObjectARB(g_mugenshaderFcS);  g_mugenshaderFcS = 0; }
+	}
+	if (g_paltex) { glDeleteTextures(1, &g_paltex); g_paltex = 0; }
+	g_paltexInitialized = false;
+	g_glPrevTexid = 0;
+	g_glPrevAlpha = 0;
+	g_glScissorOn = false;
+	g_glScissorRect = SDL_Rect{0,0,0,0};
+	g_orthoProjectionSet = false;
 	// P5: drain texture pool + atlas
 	texPoolDrain();
 	atlasDrain();
@@ -1999,13 +2016,22 @@ static void textCacheClear();
 static void blitCacheClear();
 static void textCacheEvictFont(TTF_Font* font);
 
+// Defined below GetRendererInfo; declared here so the SSZ entry point above it
+// can use it.
+std::wstring RendererInfoString();
+
 void SSZ_STDCALL End()
 {
 	INIT_LOG("Shutting down renderer...");
 	textCacheClear();
 	blitCacheClear();
 	cleanupGL33Shaders();
-	wglDeleteContext(g_hglrc2);
+	g_glCache.reset(); // declared below cleanupGL33Shaders(), so reset it here
+	if(g_hglrc2)
+	{
+		wglDeleteContext(g_hglrc2);
+		g_hglrc2 = nullptr;
+	}
 	g_js.close();
 	bgmclear();
 	Mix_CloseAudio();
