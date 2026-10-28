@@ -7236,8 +7236,12 @@ void drawTileHolizon(
 			}
 		}
 	}
+	// tile.w == 0 is the ordinary "not horizontally tiled" case, NOT a reason to
+	// skip the draw: the loop below emits its single quad and `n == 0` then ends
+	// it. Returning here made every non-tiled sprite a no-op, i.e. a black GL
+	// frame, because the ordinary sprite path passes tile = {0,0,0,0}.
 	int n = tile.w;
-	if(n <= 0) return;
+	if(n < 0) n = 0;
 	int guard = 0;
 	for(;;){
 		if(++guard > 65536) break; // tile.w<=0 / zero-size steps: no infinite loop
@@ -7536,11 +7540,18 @@ bool SSZ_STDCALL RenderMugenGl(float rcy, float rcx, SDL_Rect* dstr, int alpha,
 	// Guard: non-GL renderer should never reach here (SSZ conditionals prevent it)
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
-	// Clamp clipping rect to game viewport (same as GlFc fix)
-	if(rect->x >= g_w || rect->y >= g_h
-	   || rect->x + rect->w <= 0 || rect->y + rect->h <= 0){
-		rect->x = 0; rect->y = 0;
-		rect->w = g_w; rect->h = g_h;
+	// Clamp the CLIP WINDOW to the game viewport when it is degenerate. This must
+	// not touch `rect`: that is the sprite's own rect, whose x/y are AXIS offsets
+	// (e.g. a 2048x1019 stage layer has axis 1024,476). Testing those against
+	// 640x480 treated every large layer as "off-screen" and rewrote its size to
+	// the viewport, which is what drew stage backgrounds at a third of their size
+	// and left the left half of the screen black under OpenGL only (the software
+	// renderer never applies this clamp).
+	if(dstr && (
+		   dstr->x >= g_w || dstr->y >= g_h
+		|| dstr->x + dstr->w <= 0 || dstr->y + dstr->h <= 0)){
+		dstr->x = 0; dstr->y = 0;
+		dstr->w = g_w; dstr->h = g_h;
 	}
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
@@ -7622,12 +7633,13 @@ bool SSZ_STDCALL RenderMugenGlFc(float mulb, float mulg, float mulr,
 {
 	if (!isOpenGLRenderer(g_rendererType))
 		return false;
-	// Clamp clipping rect to game viewport — HD stages push the rect outside
-	// 640x480 via bg.ssz coordinate transformation, culling all truecolor draws
-	if(rect->x >= g_w || rect->y >= g_h
-	   || rect->x + rect->w <= 0 || rect->y + rect->h <= 0){
-		rect->x = 0; rect->y = 0;
-		rect->w = g_w; rect->h = g_h;
+	// Clamp the CLIP WINDOW (not `rect`, see RenderMugenGl) — HD stages push the
+	// window outside 640x480 via the bg.ssz coordinate transformation.
+	if(dstr && (
+		   dstr->x >= g_w || dstr->y >= g_h
+		|| dstr->x + dstr->w <= 0 || dstr->y + dstr->h <= 0)){
+		dstr->x = 0; dstr->y = 0;
+		dstr->w = g_w; dstr->h = g_h;
 	}
 	SDL_Rect r, tl;
 	if (!glSpriteBegin(x, y, rcy, rcx, vscl, yscl, angle, xtopscl, xbotscl, rasterxadd,
