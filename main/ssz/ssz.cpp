@@ -297,23 +297,9 @@ void CrashDumpReport(const char* reason, void* faultAddress)
 #include <stdarg.h>
 #include <sys/mman.h>
 
-static HMODULE LoadLibrary(const WCHR *lpFileName)
-{
-	auto ret = dlopen(PluginUtil::wToA(lpFileName).c_str(), RTLD_NOW);
-	if(!ret) fprintf(stderr, "%s\n", dlerror());
-	return ret;
-}
-static FARPROC GetProcAddress(HMODULE hModule, const char *lpProcName)
-{
-	auto ret = dlsym(hModule, lpProcName);
-	if(!ret) fprintf(stderr, "%s\n", dlerror());
-	return ret;
-}
-static BOOL FreeLibrary(HMODULE hModule)
-{
-	if(!hModule) return false;
-	return dlclose(hModule) == 0;
-}
+// L4: the LoadLibrary/GetProcAddress/FreeLibrary shims that used to sit here
+// were dead once plugins became statically registered (see
+// static_plugin_registry.hpp) — nothing called them.
 
 static WCHR* _wfullpath(WCHR*, const WCHR *relPath, size_t)
 {
