@@ -3,8 +3,11 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <chrono>
+
+#include "crash_log.hpp"
 
 // =========================================================================
 //  Time Profiler  –  cumulative per-region CPU time, ranked at exit
@@ -19,8 +22,11 @@
 //    TIME_MARK_AFTER(tag)
 //    TimeAccumulateMs("name", ms)          add raw timings (e.g. per frame)
 //
-//  Hook TimePrintRanking() into main.cpp's exit path (SafePrintRanking)
-//  so the report prints on normal exit and on crashes.
+//  Cost model (H4): recording is gated on the runtime flag g_profilerLog and
+//  name lookup goes through a hash index, so a disabled profiler costs one
+//  predictable branch and an enabled one costs O(1) per mark instead of a
+//  linear scan of std::string comparisons. Scripts call .ssz.profBegin/End 25
+//  times per frame, so this was measurable in Release builds.
 //
 //  Nested regions double-count wall time (scope-in-scope adds both totals),
 //  which is fine for a ranked overview. Tags must be unique per function
@@ -36,27 +42,33 @@ struct TimeSample
 
 // Defined once in ssz.cpp, alongside g_memEvents
 extern std::vector<TimeSample> g_timeSamples;
+// name -> index into g_timeSamples (defined in ssz.cpp)
+extern std::unordered_map<std::string, size_t> g_timeIndex;
 
 // --------------------------------------------------
 // Accumulate a named timing (single-threaded game loop — no locking)
 // --------------------------------------------------
 static inline void TimeAccumulateMs(const char* name, double ms)
 {
+	if (!g_profilerLog) return;   // H4: recording, not just printing, is gated
 	if (ms < 0.0) ms = 0.0;
-	for (size_t i = 0; i < g_timeSamples.size(); i++)
+	auto it = g_timeIndex.find(name);
+	if (it != g_timeIndex.end())
 	{
-		if (g_timeSamples[i].name == name)
-		{
-			g_timeSamples[i].totalMs += ms;
-			g_timeSamples[i].calls++;
-			return;
-		}
+		TimeSample& s = g_timeSamples[it->second];
+		s.totalMs += ms;
+		s.calls++;
 	}
-	TimeSample s;
-	s.name    = name;
-	s.totalMs = ms;
-	s.calls   = 1;
-	g_timeSamples.push_back(s);
+	else
+	{
+		TimeSample s;
+		s.name    = name;
+		s.totalMs = ms;
+		s.calls   = 1;
+		g_timeIndex[s.name] = g_timeSamples.size();
+		g_timeSamples.push_back(s);
+	}
+	CrashRecordTime(name, ms);   // C4: allocation-free mirror for the crash path
 }
 
 static inline void TimeAccumulateUs(const char* name, double us)
@@ -119,6 +131,8 @@ static inline void TimePrintRanking()
 		[](const TimeSample& a, const TimeSample& b) {
 			return a.totalMs > b.totalMs;
 		});
+	// Indices are stale after the sort.
+	g_timeIndex.clear();
 
 	LOG_INFO("Time", "==== TIME USAGE RANKING ====");
 	LOG_INFO("Time", "  %-32s %12s %10s %12s", "region", "total(ms)", "calls", "avg(ms)");

@@ -29,6 +29,7 @@
 // Required for complete Reference type in extern "C" bridge declarations
 // (static registration headers use Reference by value for __stdcall decoration).
 #include "arrayandref.hpp"
+#include "crash_log.hpp"   // CrashDumpReport(): allocation-free crash diagnostics
 
 // =========================================================================
 //  Exit safety nets: VEH (crashes) + TLS callback (ExitProcess)
@@ -50,31 +51,52 @@ static void SafePrintRanking()
 	}
 }
 
-// Vectored Exception Handler — prints memory ranking on crashes
-// (access violations, div by zero, etc.) before the process terminates.
-static LONG WINAPI MemProfilerVEH(PEXCEPTION_POINTERS /*ep*/)
+// Unhandled-exception filter (C4).
+//
+// A Vectored Exception Handler was the wrong tool: it sees *first-chance*
+// exceptions, so benign, library-internal faults the program handles itself
+// (GL/D3D driver probes, C++ throw mechanics) were reported as crashes — with
+// the profiler now silent-by-default this showed up immediately as a bogus
+// "CRASH REPORT" during GL context creation. The filter below only runs for
+// exceptions nothing handled, i.e. for actual fatal faults.
+//
+// Only the crash-safe dumper runs here: the rich printers (std::sort over
+// vector<string> + printf) are reserved for the atexit path, because running
+// them from a handler whose fault may be heap corruption turns a crash into a
+// hang.
+static LONG WINAPI CrashExceptionFilter(PEXCEPTION_POINTERS ep)
 {
-	SafePrintRanking();
+	static volatile LONG entered = 0;   // no re-entry on a nested fault
+	if (InterlockedExchange(&entered, 1) != 0) return EXCEPTION_CONTINUE_SEARCH;
+
+	const char* reason = "EXCEPTION";
+	void* faultAddress = nullptr;
+	if (ep && ep->ExceptionRecord)
+	{
+		faultAddress = ep->ExceptionRecord->ExceptionAddress;
+		switch (ep->ExceptionRecord->ExceptionCode)
+		{
+		case EXCEPTION_ACCESS_VIOLATION:    reason = "access violation"; break;
+		case EXCEPTION_INT_DIVIDE_BY_ZERO:  reason = "integer divide by zero"; break;
+		case EXCEPTION_FLT_DIVIDE_BY_ZERO:  reason = "float divide by zero"; break;
+		case EXCEPTION_ILLEGAL_INSTRUCTION: reason = "illegal instruction"; break;
+		case EXCEPTION_STACK_OVERFLOW:      reason = "stack overflow"; break;
+		case EXCEPTION_IN_PAGE_ERROR:       reason = "in-page error"; break;
+		case EXCEPTION_PRIV_INSTRUCTION:    reason = "privileged instruction"; break;
+		case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: reason = "array bounds exceeded"; break;
+		case EXCEPTION_DATATYPE_MISALIGNMENT: reason = "datatype misalignment"; break;
+		default: break;
+		}
+	}
+	// Diagnostics only: CONTINUE_SEARCH keeps the debugger/WER report intact.
+	CrashDumpReport(reason, faultAddress);
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// TLS callback — fires on DLL_PROCESS_DETACH which catches direct
-// ExitProcess() calls that bypass the CRT's atexit mechanism.
-// Safe to call here: MemPrintRanking uses only std::sort + printf.
-static void NTAPI MemProfilerTLS(PVOID /*h*/, DWORD reason, PVOID /*reserved*/)
-{
-	if (reason == DLL_PROCESS_DETACH)
-	{
-		SafePrintRanking();
-	}
-}
-
-// Place the TLS callback pointer in the CRT's TLS callback array
-// (.CRT$XLY section) so it is iterated during DLL_PROCESS_DETACH.
-// GCC/MinGW attribute syntax — no #pragma needed.
-// MinGW's CRT already defines _tls_used, so no explicit /INCLUDE necessary.
-PIMAGE_TLS_CALLBACK _tls_callback
-	__attribute__((section(".CRT$XLY"), used)) = MemProfilerTLS;
+// C4: the TLS callback that used to sit here fired at DLL_PROCESS_DETACH, i.e.
+// after the namespace-scope profiler vectors had already been destroyed, so a
+// clean exit read freed memory. Removed; atexit covers normal termination and
+// the filter above covers fatal faults.
 
 // Forward declaration of native Run — defined in ssz.cpp
 bool Run(const std::wstring& scriptPath);
@@ -328,7 +350,14 @@ static int updateStageInSelectDef(const char* fname)
 }
 
 int main(int argc, char *argv[]) {
-	AddVectoredExceptionHandler(1, MemProfilerVEH);
+	// H4: the profilers now gate *recording* (not just printing) on this flag,
+	// so a normal run pays nothing. IKEMEN_PROFILE=1 turns on recording plus the
+	// exit-time TIME/MEMORY rankings.
+	{
+		const char* prof = getenv("IKEMEN_PROFILE");
+		g_profilerLog = (prof != nullptr && prof[0] != '\0' && prof[0] != '0');
+	}
+	SetUnhandledExceptionFilter(CrashExceptionFilter);
 	atexit(SafePrintRanking);
 	MemMarkProcess("PROCESS-START");
 	setlocale(LC_CTYPE, "en_US.UTF-8");
@@ -410,6 +439,15 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	LOG_DEBUG("SSZ", "All static plugins registered successfully");
+
+	// Diagnostics self-test: IKEMEN_CRASH_TEST=1 faults on purpose so the crash
+	// reporter (VEH -> CrashDumpReport) can be verified on a new machine or
+	// toolchain without waiting for a real bug.
+	if(getenv("IKEMEN_CRASH_TEST")){
+		LOG_INFO("Ikemen", "IKEMEN_CRASH_TEST set: faulting on purpose");
+		volatile int* crashProbe = nullptr;
+		*crashProbe = 1;
+	}
 	MemMarkProcess("PLUGINS-REGISTERED");
 
 	updateCharInSelectDef("data/select.def");

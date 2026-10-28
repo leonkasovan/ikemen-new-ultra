@@ -214,7 +214,8 @@ struct MemorySnapshot
 	std::string name;
 	uint64_t before;
 	uint64_t after;
-	int64_t delta;
+	int64_t delta;      // cumulative over `count` events
+	uint64_t count;     // number of aggregated MemRecord() calls
 };
 
 extern std::vector<MemorySnapshot> g_memEvents;
@@ -225,14 +226,33 @@ void MemPrintHistogram();
 
 // --------------------------------------------------
 // Record a snapshot pair
+//
+// H5: events are aggregated by name instead of appended, so a mark on a
+// repeated path (music load, char reload, per-match helpers) no longer grows
+// g_memEvents without bound for the life of the session.
 // --------------------------------------------------
 static inline void MemRecord(const char* name, uint64_t before, uint64_t after)
 {
+	if (!g_profilerLog) return;
+	const int64_t delta = (int64_t)(after - before);
+	for (size_t i = 0; i < g_memEvents.size(); i++)
+	{
+		if (g_memEvents[i].name == name)
+		{
+			MemorySnapshot& e = g_memEvents[i];
+			e.before = before;
+			e.after  = after;
+			e.delta += delta;
+			e.count++;
+			return;
+		}
+	}
 	MemorySnapshot s;
 	s.name   = name;
 	s.before = before;
 	s.after  = after;
-	s.delta  = (int64_t)(after - before);
+	s.delta  = delta;
+	s.count  = 1;
 	g_memEvents.push_back(s);
 }
 
@@ -259,8 +279,9 @@ static inline void MemPrintRanking()
 	{
 		const auto& e = g_memEvents[i];
 		LOG_INFO("Memory",
-			"  %s : delta=%+lld bytes  (before=%llu  after=%llu)",
+			"  %s : delta=%+lld bytes  x%llu  (last before=%llu  after=%llu)",
 			e.name.c_str(), (long long)e.delta,
+			(unsigned long long)e.count,
 			(unsigned long long)e.before,
 			(unsigned long long)e.after);
 	}
