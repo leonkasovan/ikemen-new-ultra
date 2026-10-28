@@ -2143,11 +2143,37 @@ int SSZ_STDCALL GetHeight()
 	return GetSystemMetrics(SM_CYSCREEN);
 }
 
+// ---------------------------------------------------------------------------
+// Size the GL viewport to the drawable (window) size while preserving the
+// logical g_w x g_h coordinate space that the ortho projection and all clip
+// rects are expressed in. Called at init and on every window resize.
+// ---------------------------------------------------------------------------
+static void UpdateRenderViewport()
+{
+	if(!g_window) return;
+	int dw = 0, dh = 0;
+	if(g_gl) SDL_GL_GetDrawableSize(g_window, &dw, &dh);
+	else     SDL_GetWindowSize(g_window, &dw, &dh);
+	if(dw <= 0) dw = 1;
+	if(dh <= 0) dh = 1;
+	if(isOpenGLRenderer(g_rendererType) && g_gl)
+	{
+		glViewport(0, 0, dw, dh);
+	}
+}
+
 void SSZ_STDCALL WindowSize(int height, int width)
 {
-	//g_w = width;
-	//g_h = height;
-	SDL_SetWindowSize(g_window, width, height);
+	if(!g_window) return;
+	// g_w/g_h stay at the logical render resolution on purpose: the software
+	// and DirectX paths scale the streaming texture into the window
+	// (SDL_RenderCopy with a NULL dst rect) and the GL path scales through
+	// glViewport. The assignments that used to sit here (commented out) would
+	// have desynchronised every clip rect and the ortho projection from the
+	// g_w x g_h streaming texture they are sized from — so resize is handled
+	// by re-sizing the GL viewport instead, see UpdateRenderViewport().
+	SDL_SetWindowSize(g_window, width, height); // SDL2 returns void here
+	UpdateRenderViewport();
 }
 
 bool isAspectRatio = false;
@@ -2196,23 +2222,26 @@ void SSZ_STDCALL TakeScreenShot(const std::wstring& path)
 }
 
 //To update window resize in OpenGL context
+//
+// H3 fix: the old version only handled SDL_WINDOWEVENT_MAXIMIZED, and it wrote
+// the window size into g_w/g_h — the logical game resolution every clip rect
+// and the ortho projection are computed from. Un-maximising was never handled
+// at all, so the coordinate space stayed wrong for the rest of the session.
+// The viewport is now derived from the drawable size and g_w/g_h are left alone.
 bool SSZ_STDCALL UpdateGLViewport(const SDL_Event& event)
 {
-	if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MAXIMIZED)
+	if (event.type != SDL_WINDOWEVENT) return false;
+	switch (event.window.event)
 	{
-		int32_t new_w = event.window.data1;
-		int32_t new_h = event.window.data2;
-		if (new_h == 0) new_h = 1;
-		glViewport(0, 0, new_w, new_h);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		gluPerspective(45.0, (double)new_w / (double)new_h, 0.1, 1000.0);
-		glMatrixMode(GL_MODELVIEW);
-		g_w = new_w;
-		g_h = new_h;
-		return true; //Resize ok
+	case SDL_WINDOWEVENT_MAXIMIZED:
+	case SDL_WINDOWEVENT_RESTORED:
+	case SDL_WINDOWEVENT_RESIZED:
+	case SDL_WINDOWEVENT_SIZE_CHANGED:
+		UpdateRenderViewport();
+		return true;
+	default:
+		return false;
 	}
-	return false; //Is not a resize event
 }
 
 //Video Player Definition
