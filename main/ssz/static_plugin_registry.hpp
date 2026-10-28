@@ -43,6 +43,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "sszdef.h"   // LOG_DEBUG (previously relied on include order)
+
 // -----------------------------------------------------------------------
 // Public data structures
 // -----------------------------------------------------------------------
@@ -68,20 +70,46 @@ public:
 	/// @param entries  Array of {funcName, funcPtr} pairs.
 	/// @param count    Number of entries.
 	/// @return true on success, false if any entry is invalid.
+	///
+	/// Validation is a full pass *before* any insertion (H10): the old version
+	/// interleaved the two, so a null entry halfway through left a partially
+	/// populated library behind — and because `libraries_[lib]` was created on
+	/// entry, hasLibrary() still returned true, so the script compiler believed
+	/// the plugin was present and failed later on an unknown export instead.
 	bool registerFunctions(
 		const char* libName,
 		const SSZ_FunctionEntry* entries,
 		size_t count)
 	{
-		if (!libName || !entries) return false;
-		std::string lib = normalise(libName);
-		auto& funcs = libraries_[lib];
+		if (!libName || !entries || count == 0) return false;
 		for (size_t i = 0; i < count; i++)
 		{
 			if (!entries[i].funcName || !entries[i].funcPtr) return false;
-			funcs[entries[i].funcName] = entries[i].funcPtr;
 		}
-		LOG_DEBUG("SSZ", "Registered %zu functions for library '%s'", count, lib.c_str());
+		std::string lib = normalise(libName);
+		auto& funcs = libraries_[lib];
+		size_t inserted = 0, duplicates = 0;
+		for (size_t i = 0; i < count; i++)
+		{
+			// Function names are normalised too: library names were already
+			// case-insensitive here while export names were not (H10).
+			std::string fn = normalise(entries[i].funcName);
+			auto it = funcs.find(fn);
+			if (it != funcs.end())
+			{
+				duplicates++;
+				if (it->second == entries[i].funcPtr) continue; // benign re-register
+				LOG_INFO("SSZ",
+					"registerFunctions: duplicate export '%s' in '%s' "
+					"(overwriting %p with %p)",
+					entries[i].funcName, lib.c_str(),
+					(void*)it->second, entries[i].funcPtr);
+			}
+			funcs[fn] = entries[i].funcPtr;
+			inserted++;
+		}
+		LOG_DEBUG("SSZ", "Registered %zu functions for library '%s' (%zu duplicates)",
+			inserted, lib.c_str(), duplicates);
 		return true;
 	}
 
@@ -95,9 +123,10 @@ public:
 			LOG_DEBUG("SSZ", "lookup: library '%s' not found", libName.c_str());
 			return nullptr;
 		}
-		auto fit = lit->second.find(funcName);
+		auto fit = lit->second.find(normalise(funcName));
 		if (fit == lit->second.end()) {
-			LOG_DEBUG("SSZ", "lookup: '%s' not found in library '%s'", funcName.c_str(), libName.c_str());
+			LOG_DEBUG("SSZ", "lookup: '%s' not found in library '%s'",
+				funcName.c_str(), libName.c_str());
 			return nullptr;
 		}
 		return fit->second;
