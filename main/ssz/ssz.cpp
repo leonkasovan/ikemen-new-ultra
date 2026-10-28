@@ -358,16 +358,69 @@ public:
 		}
 		return nullptr;
 	}
+	// Lock-free variant for crash handlers: taking a CRITICAL_SECTION while the
+	// process is dying can deadlock if the fault happened while the lock was
+	// held (e.g. inside add()/remove()). A torn read is the worst case here, and
+	// that is strictly better than hanging.
+	MEMBER const LineAddress* getNoLock(uint8_t* adr)
+	{
+		for(Node<Range>* tmp = top; tmp != nullptr; tmp = tmp->next){
+			if(tmp->item.start <= adr && adr < tmp->item.end){
+				return tmp->item.get(adr);
+			}
+		}
+		return nullptr;
+	}
 };
 static CodeAddressLines g_cal;
 
+// =========================================================================
+// SSZLookupScriptLocation  –  allocation-free address -> "file(line)" lookup
+//
+// C6: the compiler records an address range per JIT block (g_cal) and, on
+// MSVC, uses it from the SEH handler. Under MinGW there is no __try/__except,
+// so that handler never existed — which left JIT faults with no script
+// location at all. This entry point lets the process-wide crash handler in
+// main.cpp produce the location instead, without any allocation, locks, or STL.
+// =========================================================================
+bool SSZLookupScriptLocation(void* address, WCHR* outBuf, size_t outChars)
+{
+	if(!outBuf || outChars < 8) return false;
+	outBuf[0] = L('\0');
+	if(!address) return false;
+	const LineAddress* la = g_cal.getNoLock((uint8_t*)address);
+	if(!la || !la->filename) return false;
+
+	size_t i = 0;
+	const WCHR* fn = la->filename->data();
+	while(fn && *fn != L('\0') && i + 32 < outChars) outBuf[i++] = *fn++;
+	if(i + 32 >= outChars && i > 0) outBuf[i++] = L('~'); // truncated marker
+	outBuf[i++] = L('(');
+
+	// Decimal line number, written backwards into a small stack buffer.
+	WCHR digits[24];
+	int d = 0;
+	uint64_t line = (la->line > 0) ? (uint64_t)la->line : 0;
+	do { digits[d++] = (WCHR)(L('0') + (line % 10)); line /= 10; } while(line && d < 23);
+	while(d > 0 && i + 2 < outChars) outBuf[i++] = digits[--d];
+
+	outBuf[i++] = L(')');
+	outBuf[i] = L('\0');
+	return true;
+}
+
+// Crash-report text buffer size (see SSZException / CrashDumpReport).
+static const int kMesCap = 1024;
+
 static void appendText(wchar_t* str, int& idx, const wchar_t* txt)
 {
-	while(*txt != L('\0')) str[idx++] = *txt++;
+	while(*txt != L('\0') && idx + 1 < kMesCap) str[idx++] = *txt++;
+	str[idx] = L('\0');
 }
 template<typename T> static void appendHex(wchar_t* str, int& idx, T n)
 {
 	for(int i = (sizeof(T)*2-1)*4; i >= 0; i -= 4){
+		if(idx + 1 >= kMesCap) break;
 		switch(n >> i & 0xf){
     case   0: str[idx++]=L('0');break;case   1: str[idx++]=L('1');break;
 		case   2: str[idx++]=L('2');break;case   3: str[idx++]=L('3');break;

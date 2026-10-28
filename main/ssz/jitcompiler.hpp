@@ -8871,8 +8871,18 @@ public:
 				(uint8_t*)vmemory,
 				(uint8_t*)vmemory + bin.code.size(), bin.lineadr);
 			DWORD oldprotect;
-			VirtualProtect(
-				vmemory, bin.code.size(), PAGE_EXECUTE, &oldprotect);
+			// C6: the return value used to be discarded — on failure the page
+			// stayed PAGE_READWRITE and the emitted code was executed anyway.
+			if(!VirtualProtect(
+				vmemory, bin.code.size(), PAGE_EXECUTE, &oldprotect))
+			{
+				LOG_INFO("SSZ",
+					"VirtualProtect(PAGE_EXECUTE) failed for %u bytes of JIT code",
+					(unsigned)bin.code.size());
+				root->stat->ss->emes.Add(
+					root->srce->filename, root->topsrcgyo,
+					L("VirtualProtect failed."));
+			}
 
 		}else{
 			root->stat->ss->emes.Add(
