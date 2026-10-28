@@ -626,6 +626,24 @@ static GLint g_uniformAlphaFc = 0;  // for g_mugenshaderFc (full-color)
 static GLint g_uniformAlphaFcS = 0; // for g_mugenshaderFcS (solid-color shadow)
 static GLuint g_paltex = 0;
 static bool g_paltexInitialized = false; // [OPT] Track palette texture allocation state
+// GL scissor (clip rect) tracking. Declared here, above cleanupGL33Shaders(),
+// so teardown can reset it; the sprite path keeps it enabled while batch
+// vertices are pending (see C3 in PROJECT_REVIEW.md).
+static bool     g_glScissorOn = false;
+static SDL_Rect g_glScissorRect = {0,0,0,0};
+// Previous sprite batch state (was function-local static in glSpriteBegin(),
+// which made it impossible to reset on context teardown).
+static uint32_t g_glPrevTexid = 0;
+static int      g_glPrevAlpha = 0;
+
+// Scissor (clip-rect) helpers.
+//
+// The batch is only rasterised inside gl33BatchFlush(), so the scissor must be
+// enabled at *flush* time, not merely while building vertices. Previously
+// glSpriteEnd() disabled it right after every sprite, so every flush ran
+// unclipped and the drawing bound was silently ignored on GL 3.3/4.6.
+static void glScissorApply(const SDL_Rect* r);
+static void glScissorOff();
 // [OPT] Track whether ortho projection is already set for this frame
 // Avoids redundant glPushMatrix/glOrtho/glPopMatrix per sprite (~50-200+ sprites/frame)
 static bool g_orthoProjectionSet = false;
@@ -6701,6 +6719,7 @@ void SSZ_STDCALL GlSwapBuffers()
 	}
 
 	gl33BatchFlush(); // draw the frame's last accumulated sprite quads (P3)
+	glScissorOff();   // nothing pending any more; glClear() honours the scissor
 //Deferred GL screenshot: frame is fully drawn but not yet presented
 	if (g_shotPending)
 	{
@@ -7166,30 +7185,50 @@ void drawTile(
 // Returns false if the sprite should be skipped.
 // When scissor+texid+alpha match the previous sprite, the batch is NOT flushed
 // and vertices accumulate — reducing per-sprite draw calls (scissor batching).
+// Scissor (clip-rect) helper bodies — declared next to the scissor state above
+// because GlSwapBuffers() and rectFillGl() (both much earlier in the file) need
+// glScissorOff().
+static void glScissorApply(const SDL_Rect* r)
+{
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(r->x, g_h - (r->y + r->h), r->w, r->h);
+	g_glScissorOn   = true;
+	g_glScissorRect = *r;
+}
+
+// Turn clipping off for draws that are not part of the sprite batch (flat
+// fills, the frame clear) — glClear() honours the scissor test too.
+static void glScissorOff()
+{
+	if(g_glScissorOn){
+		glDisable(GL_SCISSOR_TEST);
+		g_glScissorOn = false;
+	}
+}
+
 static bool glSpriteBegin(
 	float& x, float& y, float& rcy, float& rcx, float& vscl, float& yscl,
 	float& angle, float xtopscl, float xbotscl, float rasterxadd,
 	SDL_Rect* tile, SDL_Rect* rect, SDL_Rect& r, SDL_Rect& tl,
 	uint32_t texid, SDL_Rect* dstr, int alpha)
 {
-	// Scissor batching: only flush when render state changes.
-	static SDL_Rect prevScissor = {0,0,0,0};
-	static uint32_t prevTexid = 0;
-	static int prevAlpha = 0;
-	bool sameScissor = (dstr->x == prevScissor.x) && (dstr->y == prevScissor.y)
-		&& (dstr->w == prevScissor.w) && (dstr->h == prevScissor.h);
-	bool sameTexid = (texid == prevTexid);
-	bool sameAlpha = (alpha == prevAlpha);
-	bool sameState = sameScissor && sameTexid && sameAlpha;
+	if(!dstr || !rect || !tile) return false;
+	// Scissor batching: only flush when render state changes. The flush below
+	// runs *before* the new clip rect is applied, so the pending vertices keep
+	// the rect they were built for.
+	bool sameScissor = (dstr->x == g_glScissorRect.x) && (dstr->y == g_glScissorRect.y)
+		&& (dstr->w == g_glScissorRect.w) && (dstr->h == g_glScissorRect.h);
+	bool sameTexid = (texid == g_glPrevTexid);
+	bool sameAlpha = (alpha == g_glPrevAlpha);
+	bool sameState = sameScissor && sameTexid && sameAlpha && g_glScissorOn;
 	if (!sameState)
 	{
 		gl33BatchFlush();
 		if (!sameTexid)   g_perfCounters.glFlushByTexid++;
 		if (!sameAlpha)   g_perfCounters.glFlushByAlpha++;
 		if (!sameScissor) g_perfCounters.glFlushByScissor++;
-		prevScissor = *dstr;
-		prevTexid = texid;
-		prevAlpha = alpha;
+		g_glPrevTexid = texid;
+		g_glPrevAlpha = alpha;
 	}
 	else
 	{
@@ -7219,15 +7258,17 @@ static bool glSpriteBegin(
 	rcy = -rcy;
 	if (yscl < 0) y = -y;
 	y += rcy;
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(dstr->x, g_h - (dstr->y + dstr->h), dstr->w, dstr->h);
+	glScissorApply(dstr);
 	g_perfCounters.glScissorCalls++;
 	return true;
 }
 
 static void glSpriteEnd()
 {
-	glDisable(GL_SCISSOR_TEST);
+	// Intentionally does NOT disable the scissor: vertices for this sprite are
+	// still pending in the batch, and gl33BatchFlush() applies the clip rect
+	// that was current when they were emitted. Non-sprite draws call
+	// glScissorOff() explicitly.
 }
 
 // [OPT] Added alphaUniform parameter - uses cached uniform location instead of
@@ -7489,7 +7530,9 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	if(useModernRender()){
 	// Same vertex order as the legacy GL_QUADS path (y pre-negated; the
 	// modelview translate(0,g_h) is baked into uProj instead).
-	gl33BatchFlush(); // flat fill uses a different program
+	gl33BatchFlush(); // flat fill uses a different program (flushed under the
+	                  // sprite clip rect still in effect)
+	glScissorOff();   // the fill itself is not clipped
 	float v[16] = {
 		(float)rect.x,           -(float)(rect.y+rect.h), 0.0f, 0.0f,
 		(float)(rect.x+rect.w),  -(float)(rect.y+rect.h), 0.0f, 0.0f,
@@ -7505,9 +7548,10 @@ void rectFillGl(float r, float g, float b, float a, SDL_Rect rect)
 	g_perfCounters.glDrawArraysCalls++;
 	g_perfCounters.glBufferDataCalls++;
 	g_perfCounters.glTotalVertices += 4;
-	glBindVertexArray(0);
-	return;
+		glBindVertexArray(0);
+		return;
 	}
+	glScissorOff(); // legacy immediate-mode fill: clip rect does not apply
 	glBegin(GL_QUADS);
 	{
 		glColor4f(r, g, b, a);
