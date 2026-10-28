@@ -10,6 +10,12 @@
 		if(mai) return L("It's already compiled.");
 		src.Clear();//Because root
 		ss.CircularGC.Clear();
+		// H8: run() used to disable appending permanently, so a second compile
+		// on the same CompilerState (reachable from the script reload helpers)
+		// silently returned an empty error string. Re-enable + clear per compile;
+		// run() disables it again for the runtime phase.
+		ss.emes.appendable = true;
+		ss.emes.mes.clear();
 		return L("");
 	}
 	MEMBER std::WSTR compileSub2()
@@ -82,6 +88,16 @@ public:
 		HANDLE gcthr =
 			(HANDLE)_beginthreadex(
 				nullptr, 0, GC_Thread_Proc, &gcts, 0, nullptr);
+		if(gcthr == nullptr)
+		{
+			// L5: without a collector thread nothing ever frees SSZ heap
+			// objects, so the process would grow without bound (or fault) rather
+			// than fail visibly. Refuse to run and say why.
+			gcts.running = false;
+			LOG_INFO("SSZ", "run(): failed to start the GC thread; aborting");
+			return false;
+		}
+		// Runtime errors no longer belong to the compile diagnostics.
 		ss.emes.appendable = false;
 		runner(mai);
 		gcts.running = false;
