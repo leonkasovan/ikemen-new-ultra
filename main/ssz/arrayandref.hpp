@@ -244,6 +244,10 @@ struct Reference
 		tmp->head.refcount = 1;
 		if(fp != nullptr) fp(p, tmp->head.data, s*tsize);
 		volatile Reference* thi = this;
+		volatile HeapObj *old = thi->pointer;
+		if(old != nullptr && InterlockedDecrement((LONG*)&old->head.refcount) == 0){
+			((HeapObj*)old)->delet();
+		}
 		thi->pointer = tmp;
 		thi->position = 0;
 		thi->length = s*tsize;
@@ -273,6 +277,10 @@ struct Reference
 		tmp->head.refcount = 1;
 		if(fp != nullptr) fp(p, tmp->head.data, s*tsize);
 		volatile Reference* thi = this;
+		volatile HeapObj *old = thi->pointer;
+		if(old != nullptr && InterlockedDecrement((LONG*)&old->head.refcount) == 0){
+			((HeapObj*)old)->delet();
+		}
 		thi->pointer = tmp;
 		thi->position = 0;
 		thi->length = -1;

@@ -236,7 +236,7 @@ void drawClsn()
   &.sff.Sprite spr.rct.set(0, 0, 1, 1);
   spr.colorPallet.new(256);
   spr.colorPallet<> = 0xff0000;
-  spr.setPxl(pxl);
+  spr.setPxl(pxl=);
   .drawc1:<-[void(i=){i.draw(spr=, (int)0x3feff);}];
   spr.colorPallet<> = 0x0000ff;
   .drawc2:<-[void(i=){i.draw(spr=, (int)0x3feff);}];

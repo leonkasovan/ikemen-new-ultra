@@ -294,7 +294,7 @@ public &Sprite
     {
       `rlePcxDecode(px=);
     }
-    `setPxl(px);
+    `setPxl(px=);
     ret "";
   }
   public ^/char readV2(
@@ -318,11 +318,11 @@ public &Sprite
       if(coldepth != 0d8) ret "unsupported uncompressed color depth";
       px.new((index)dsz);
       f.readAry!ubyte?(px);
-      `setPxl(px);
+      `setPxl(px=);
       ret "";
     }
     if(useCache && SffV2CacheGet(:cacheKey, `imageGroup, `imageNumber, px=:)){
-      `setPxl(px);
+      `setPxl(px=);
       ret "";
     }
     if(`rle < 0) switch(-`rle){
@@ -352,17 +352,17 @@ public &Sprite
     default:
       ret "unknown format";
     }
-    `setPxl(px);
+    `setPxl(px=);
     /?/*.cfg.Renderer == 0 || .cfg.Renderer == 4:
     if(useCache) SffV2CachePut(:cacheKey, `imageGroup, `imageNumber, px:);
     /*?*/
     ret "";
   }
-  public void setPxl(^ubyte px)
+  public void setPxl(^ubyte px=)
   {
   /?/*.cfg.Renderer != 0 && .cfg.Renderer != 4:
     `pxl.new(1);
-    `pxl~load8bitTexture(px, `rct.w, `rct.h);
+    `pxl~load8bitTexture(px=, `rct.w, `rct.h);
   /*true:
     `pxl = px;
   /*?*/
