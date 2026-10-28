@@ -387,7 +387,17 @@ static void updateWindowTitle(); // forward declaration
 
 void lockTarget()
 {
-	if(g_target) SDL_LockTexture(g_target, nullptr, (void**)&g_pix, &g_pitch);
+	if(!g_target) return;
+	// H2 fix: an unchecked SDL_LockTexture left g_pix stale/NULL, which every
+	// software blitter then writes through.
+	void* pixels = nullptr;
+	if(SDL_LockTexture(g_target, nullptr, &pixels, &g_pitch) != 0){
+		LOG_INFO("SDL", "lockTarget: SDL_LockTexture failed: %s", SDL_GetError());
+		g_pix = nullptr;
+		return;
+	}
+	g_pix = (uint32_t*)pixels;
+	if(!g_pix) LOG_INFO("SDL", "lockTarget: SDL returned a NULL pixel buffer");
 }
 
 void unlockTarget()
@@ -922,9 +932,17 @@ bool SSZ_STDCALL Init(bool mugen, int32_t h, int32_t w, const std::wstring& cap)
 		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer){
+			INIT_LOG("Failed to create SDL renderer: %s", SDL_GetError());
+			return false;
+		}
 		if(mugen)
 		{
 			g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+			if(!g_target){
+				INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+				return false;
+			}
 			SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
 			lockTarget();
 		}
@@ -957,7 +975,18 @@ bool SSZ_STDCALL GlInit(int32_t h, int32_t w, const std::wstring& cap)
 		g_window = SDL_CreateWindow(WstrToStr(cap).c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, g_scrflag);
 		if(!g_window) return false;
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer)
+		{
+			// Not fatal on GL: g_renderer is only used for the SDL-side text/
+			// fill helpers. Log it instead of passing NULL to SDL later.
+			INIT_LOG("SDL renderer unavailable on the GL path: %s", SDL_GetError());
+		}
 		g_gl = SDL_GL_CreateContext(g_window);
+		if(!g_gl)
+		{
+			INIT_LOG("Failed to create GL 2.1 context: %s", SDL_GetError());
+			return false;
+		}
 		if(glewInit() != GLEW_OK) return false;
 		winProcInit();
 		if(h == 0) h = 1; 
@@ -1713,12 +1742,29 @@ bool SSZ_STDCALL RendererInit(const std::wstring& rendererName, int32_t h, int32
 			}
 		}
 
-		// Create streaming texture for software-rendered sprites
-		g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
-			SDL_TEXTUREACCESS_STREAMING, w, h);
-		SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
-		lockTarget();
-		INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
+		// Create streaming texture for software-rendered sprites. On the GL
+		// backends g_renderer can legitimately be NULL (SDL cannot always create
+		// a 2D renderer for a GL window), so only build the target when the
+		// renderer exists and report a failure instead of passing NULL around.
+		if(!g_renderer)
+		{
+			INIT_LOG("SDL renderer unavailable on this path: %s", SDL_GetError());
+		}
+		else
+		{
+			g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+				SDL_TEXTUREACCESS_STREAMING, w, h);
+			if(!g_target)
+			{
+				INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+			}
+			else
+			{
+				SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
+				lockTarget();
+				INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
+			}
+		}
 
 		winProcInit();
 		INIT_LOG("Window procedure hook installed");
@@ -1769,6 +1815,10 @@ init_opengl:
 		INIT_LOG("Window created (%dx%d)", w, h);
 
 		g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+		if(!g_renderer)
+		{
+			INIT_LOG("SDL renderer unavailable on the GL path: %s", SDL_GetError());
+		}
 		g_gl = SDL_GL_CreateContext(g_window);
 		if (!g_gl)
 		{
@@ -1866,10 +1916,18 @@ init_opengl:
 	INIT_LOG("Window created (%dx%d)", w, h);
 
 	g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED);
+	if(!g_renderer){
+		INIT_LOG("Failed to create SDL renderer: %s", SDL_GetError());
+		return false;
+	}
 	INIT_LOG("SDL renderer created");
 
 	g_target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
 		SDL_TEXTUREACCESS_STREAMING, w, h);
+	if(!g_target){
+		INIT_LOG("Failed to create streaming texture: %s", SDL_GetError());
+		return false;
+	}
 	SDL_SetTextureBlendMode(g_target, SDL_BLENDMODE_NONE);
 	lockTarget();
 	INIT_LOG("Streaming texture created (%dx%d ARGB8888)", w, h);
@@ -3138,10 +3196,22 @@ void SSZ_STDCALL RenderFont(const std::wstring& str, int32_t y, int32_t x, SDL_C
 		SDL_Surface* psrc =
 			TTF_RenderUNICODE_Blended(
 				pf, (Uint16*)wstr.c_str(), c);
+		if(!psrc){
+			// H2 fix: this dereferenced a NULL surface on any render failure
+			// (out of memory, missing glyph, invalid UTF-16).
+			LOG_INFO("SDL", "RenderFont: TTF_RenderUNICODE_Blended failed: %s",
+				TTF_GetError());
+			return;
+		}
 		tw = psrc->w;
 		th = psrc->h;
 		tex = SDL_CreateTextureFromSurface(g_renderer, psrc);
 		SDL_FreeSurface(psrc);
+		if(!tex){
+			LOG_INFO("SDL", "RenderFont: SDL_CreateTextureFromSurface failed: %s",
+				SDL_GetError());
+			return;
+		}
 
 		TextCacheEntry entry;
 		entry.tex = tex;
