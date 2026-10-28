@@ -2074,7 +2074,9 @@ void SSZ_STDCALL FullScreenExclusive(bool fsr) //FullScreenExclusive need to be 
 		fsMode = SDL_WINDOW_FULLSCREEN_DESKTOP;
 		SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0"); //Don't Minimize SDL_Window if it loses key focus when in fullscreen mode. Defaults to true.
 	}
-	(fsr ? fsMode : fsMode);
+	// Calibrate fullscreen mode constant from the argument. (There used to be
+	// a no-op `(fsr ? fsMode : fsMode);` statement here.)
+	(void)fsr;
 }
 
 bool fullscreenChecker = false;
@@ -5506,6 +5508,10 @@ template<typename Img> void mzrScreenBilt(
 static bool fastSimpleAddRectBlit(
 	SDL_Rect dr, Reference img, SDL_Rect psrcr, uint32_t* ppal, uint16_t colorkey)
 {
+	// Palette data is required here; a NULL ppal used to be dereferenced one
+	// byte-index at a time (ppal[b0] ...) whenever a truecolor sprite was
+	// routed down this path.
+	if(!ppal) return false;
 	if(
 		dr.w <= 0 || dr.h <= 0 || psrcr.w <= 0 || psrcr.h <= 0
 		|| img.len() < psrcr.w * psrcr.h)
@@ -7108,13 +7114,21 @@ void drawQuads(
 {
 	if(useModernRender()){
 	// Same strip layout as the legacy glBegin path: 2 + 2*(n-1) + 2 vertices.
-	int n =
-		(int)(
-			(
-				pers > 1.0
-				? (1-1/(pers*pers))*abs(x3-x4) : (1-(pers*pers))*abs(x1-x2))
-			* (g_h>>5) / (abs(y1-y4) + (g_h>>5)));
+	// The tessellation count is derived from a floating-point ratio; clamp it so
+	// a degenerate pers (0, inf, NaN) cannot reserve a gigabyte or spin for
+	// billions of iterations.
+	const float denom = abs(y1-y4) + (float)(g_h>>5);
+	int n = 1;
+	if(denom > 1e-6f)
+	{
+		const float num =
+			(pers > 1.0f
+				? (1.0f-1.0f/(pers*pers))*abs(x3-x4) : (1.0f-(pers*pers))*abs(x1-x2));
+		const float est = num * (float)(g_h>>5) / denom;
+		if(est > 0.0f && est < 1e9f) n = (int)est; // NaN fails both compares
+	}
 	if(n < 1) n = 1;
+	if(n > 4096) n = 4096;
 	static std::vector<float> v;
 	v.clear();
 	v.reserve((size_t)(2*n+2)*4);
@@ -7161,6 +7175,8 @@ void drawQuads(
 				pers > 1.0
 				? (1-1/(pers*pers))*abs(x3-x4) : (1-(pers*pers))*abs(x1-x2))
 			* (g_h>>5) / (abs(y1-y4) + (g_h>>5)));
+	if(n < 1) n = 1;
+	if(n > 4096) n = 4096;
 	for(int i = 1; i < n; i++){
 		glTexCoord2f((float)i/n, 1);
 		glVertex2f(x1 + (x2 - x1)*i/n, y1 + (y2 - y1)*i/n);
@@ -7181,13 +7197,20 @@ void drawTileHolizon(
 	float r, float g, float b, float a, float pers)
 {
 	float topbtwn = xtw + xtopscl*(float)tile.x;
+	// The division used to happen before the `abs(topbtwn) < 0.01` guard further
+	// down; with topbtwn == 0 that produced NaN/inf coordinates, and every
+	// break condition in the fill loops below is a coordinate comparison — so
+	// the frame hung instead of drawing nothing.
+	if(abs(topbtwn) < 0.01f) return;
 	float db =
 		((xbw + xbotscl*(float)tile.x) - topbtwn) * (rcx - x4) / abs(topbtwn);
 	x1 -= db;
 	x2 -= db;
 	if(tile.w == 1){
 		float x1d=x1, x2d=x2, x3d=x3, x4d=x4;
+		int guard = 0;
 		for(;;){
+			if(++guard > 65536) break; // degenerate coords: never loop forever
 			x2d = x1d - xbotscl*(float)tile.x;
 			x3d = x4d - xtopscl*(float)tile.x;
 			x4d = x3d - xtw;
@@ -7214,7 +7237,10 @@ void drawTileHolizon(
 		}
 	}
 	int n = tile.w;
+	if(n <= 0) return;
+	int guard = 0;
 	for(;;){
+		if(++guard > 65536) break; // tile.w<=0 / zero-size steps: no infinite loop
 		if(topbtwn > 0){
 			if(
 				x1 >= (float)g_w && x2 >= (float)g_w
@@ -7255,7 +7281,10 @@ void drawTile(
 	y3 = rcy + (y - rcy) * vscl;
 	x4 = x;
 	y4 = y3;
-	float pers = abs(x3 - x4) / abs(x2 - x1);
+	// Degenerate trapezoid: a zero-width top edge made this a division by zero,
+	// which turned pers into inf/NaN and poisoned every drawQuads() downstream.
+	const float persDen = abs(x2 - x1);
+	float pers = (persDen > 1e-6f) ? abs(x3 - x4) / persDen : 1.0f;
 	if(angle != 0.0f){
 		kaiten(x1, y1, angle, rcx, rcy, vscl);
 		kaiten(x2, y2, angle, rcx, rcy, vscl);
