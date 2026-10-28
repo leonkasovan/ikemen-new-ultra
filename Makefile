@@ -735,11 +735,17 @@ install: $(TARGET)
 		rm -f install.zip; \
 	fi
 	cp $(TARGET) "install/"
+	# Code/assets always refreshed.
 	cp -rf ssz_script/lib/ install/
 	cp -rf ssz_script/ssz/ install/
-	cp -rf ssz_script/save/ install/
 	cp -rf lua_script/lib/ install/
 	cp -rf lua_script/script/ install/
-	cp -rf lua_script/save/ install/
+	# H13: save/ holds the *templates* (config.ssz, *_sav.lua). Copying them with
+	# plain `cp -rf` overwrote the live save data on every install, silently
+	# reverting in-game settings and the config tweaks AGENTS.md recommends.
+	# -n keeps whatever the runtime has already written; delete the file first if
+	# you actually want the template restored.
+	cp -rf -n ssz_script/save/ install/
+	cp -rf -n lua_script/save/ install/
 	@echo "=== Installed to install/ ==="
   
