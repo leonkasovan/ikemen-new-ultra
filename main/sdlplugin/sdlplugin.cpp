@@ -1515,9 +1515,9 @@ static void fillRendererInfo()
 
 	if (g_rendererType == RENDERER_SDL2)
 	{
-		sprintf(g_rendererInfo.backendName, "SDL2 Software");
-		sprintf(g_rendererInfo.deviceName, "CPU");
-		sprintf(g_rendererInfo.driverInfo, "SDL %d.%d.%d",
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName), "SDL2 Software");
+		snprintf(g_rendererInfo.deviceName, sizeof(g_rendererInfo.deviceName), "CPU");
+		snprintf(g_rendererInfo.driverInfo, sizeof(g_rendererInfo.driverInfo), "SDL %d.%d.%d",
 			SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 	}
 	else if (isOpenGLRenderer(g_rendererType))
@@ -1525,7 +1525,8 @@ static void fillRendererInfo()
 		const char* ver = (const char*)glGetString(GL_VERSION);
 		const char* ren = (const char*)glGetString(GL_RENDERER);
 		const char* ven = (const char*)glGetString(GL_VENDOR);
-		sprintf(g_rendererInfo.backendName, "OpenGL %s", glVersionName(g_glVersion));
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName),
+			"OpenGL %s", glVersionName(g_glVersion));
 		if (ren) strncpy(g_rendererInfo.deviceName, ren, sizeof(g_rendererInfo.deviceName)-1);
 		if (ver) strncpy(g_rendererInfo.driverInfo, ver, sizeof(g_rendererInfo.driverInfo)-1);
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &g_rendererInfo.maxTextureSize);
@@ -1535,7 +1536,7 @@ static void fillRendererInfo()
 	else if (g_rendererType == RENDERER_DIRECTX)
 	{
 		const char* d3dName = g_directxVersion == 11 ? "Direct3D 11" : "Direct3D 9";
-		sprintf(g_rendererInfo.backendName, "%s", d3dName);
+		snprintf(g_rendererInfo.backendName, sizeof(g_rendererInfo.backendName), "%s", d3dName);
 		g_rendererInfo.directxVersion = g_directxVersion;
 
 		if (g_directxVersion == 11)
@@ -1575,7 +1576,11 @@ static void fillRendererInfo()
 					{
 						strncpy(g_rendererInfo.deviceName, adapterId.Description,
 							sizeof(g_rendererInfo.deviceName) - 1);
-						sprintf(g_rendererInfo.driverInfo, "%s %d.%d.%d.%d",
+						// H1 fix: adapterId.Description is char[512] and driverInfo is
+						// char[128] — the old sprintf() overran the field whenever the
+						// adapter name was long.
+						snprintf(g_rendererInfo.driverInfo, sizeof(g_rendererInfo.driverInfo),
+							"%s %d.%d.%d.%d",
 							adapterId.Description,
 							HIWORD(adapterId.DriverVersion.HighPart),
 							LOWORD(adapterId.DriverVersion.HighPart),
