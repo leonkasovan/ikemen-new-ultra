@@ -35,6 +35,7 @@
 #include "mem_profiler.hpp"
 #include "arrayandref.hpp"
 #include "renderer.h"
+#include "pngutil.h"   // pngCheckImageSize / PNG_MAX_DIM (see C1 in PROJECT_REVIEW.md)
 
 // ---------------------------------------------------------------------------
 // Renderer global state
@@ -2666,6 +2667,7 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
@@ -2675,6 +2677,9 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
 
+	// pp lives outside the setjmp block so a libpng error (longjmp) neither
+	// leaks it nor leaves a half-decoded destination behind.
+	png_bytep* pp = nullptr;
 	if(!setjmp(png_jmpbuf(png_ptr)))
 	{
 		png_uint_32 width, height;
@@ -2685,40 +2690,55 @@ void SSZ_STDCALL DecodePNG8(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8_
 				nullptr, nullptr, nullptr)
 			&& color_type == PNG_COLOR_TYPE_PALETTE && bit_depth <= 8)
 		{
-			*w = width;
-			*h = height;
-			out.resize(height * width);
-			if (out.size() < (size_t)(height * width)) out.resize(height * width);
-	auto p = out.data();
-			auto pp = new png_bytep[height];
-			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i;
-			png_read_image(png_ptr, pp);
-			switch(bit_depth){
-			case 1:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>3] & 1 << (i&7)) >> (i&7);
+			// C1 fix: validate in 64-bit before sizing anything. The old code
+			// used `height * width` (32-bit) both for resize() and for the
+			// "guard", so a 65536x65536 header wrapped the size to 0 and
+			// png_read_image() then wrote 4 GiB into the empty vector.
+			uint64_t need = 0;
+			if(!pngCheckImageSize(width, height, 1, &need)){
+				LOG_INFO("SDL",
+					"DecodePNG8: rejected %ux%u image (oversized or empty)",
+					(unsigned)width, (unsigned)height);
+				*w = *h = 0;
+			}else{
+				*w = width;
+				*h = height;
+				out.resize((size_t)need);
+				auto p = out.data();
+				pp = new png_bytep[height];
+				for(int i = height-1; i >= 0; i--) pp[i] = p + width*i;
+				png_read_image(png_ptr, pp);
+				switch(bit_depth){
+				case 1:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>3] & 1 << (i&7)) >> (i&7);
+						}
 					}
-				}
-				break;
-			case 2:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>2] & 3 << (i&3)*2) >> (i&3)*2;
+					break;
+				case 2:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>2] & 3 << (i&3)*2) >> (i&3)*2;
+						}
 					}
-				}
-				break;
-			case 4:
-				for(uint32_t y = 0; y < height; y++){
-					for(int i = width-1; i >= 0; i--){
-						pp[y][i] = (pp[y][i>>1] & 15 << (i&1)*4) >> (i&1)*4;
+					break;
+				case 4:
+					for(uint32_t y = 0; y < height; y++){
+						for(int i = width-1; i >= 0; i--){
+							pp[y][i] = (pp[y][i>>1] & 15 << (i&1)*4) >> (i&1)*4;
+						}
 					}
+					break;
 				}
-				break;
 			}
-			delete [] pp;
 		}
+	}else{
+		// libpng error (longjmp): the destination is not usable.
+		*w = *h = 0;
+		out.clear();
 	}
+	delete [] pp;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 }
 
@@ -2739,6 +2759,7 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
@@ -2747,6 +2768,7 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 	png_init_io(png_ptr, fp);
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
+	png_bytep* pp = nullptr;
 	if(!setjmp(png_jmpbuf(png_ptr)))
 	{
 		png_uint_32 width, height;
@@ -2762,16 +2784,29 @@ void SSZ_STDCALL DecodePNG32(FILE* fp, int32_t* h, int32_t* w, std::vector<uint8
 			if((color_type & PNG_COLOR_MASK_ALPHA) == 0){
 				png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
 			}
-			*w = width;
-			*h = height;
-			out.resize((size_t)width * height * 4);
-			auto p = out.data();
-			auto pp = new png_bytep[height];
-			for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
-			png_read_image(png_ptr, pp);
-			delete [] pp;
+			// C1 fix: no cap at all before — a huge header asked for a
+			// terabyte-sized allocation; validate first, in 64-bit.
+			uint64_t need = 0;
+			if(!pngCheckImageSize(width, height, 4, &need)){
+				LOG_INFO("SDL",
+					"DecodePNG32: rejected %ux%u image (oversized or empty)",
+					(unsigned)width, (unsigned)height);
+				*w = *h = 0;
+			}else{
+				*w = width;
+				*h = height;
+				out.resize((size_t)need);
+				auto p = out.data();
+				pp = new png_bytep[height];
+				for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
+				png_read_image(png_ptr, pp);
+			}
 		}
+	}else{
+		*w = *h = 0;
+		out.clear();
 	}
+	delete [] pp;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 }
 
@@ -6490,17 +6525,33 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		png_create_read_struct(
 			PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	if(!png_ptr) return 0;
+	png_set_user_limits(png_ptr, (png_uint_32)PNG_MAX_DIM, (png_uint_32)PNG_MAX_DIM);
 	auto info_ptr = png_create_info_struct(png_ptr);
 	if(!info_ptr){
 		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
 		return 0;
 	}
+	// C2 fix: this path installed no error handler at all, so libpng's
+	// png_error() longjmp'd through an uninitialised jmp_buf. Everything
+	// from here on must sit inside the setjmp scope.
 	png_init_io(png_ptr, fp);
 	png_set_sig_bytes(png_ptr, 8);
 	png_read_info(png_ptr, info_ptr);
-	png_uint_32 width, height;
-	int bit_depth, color_type;
+	png_uint_32 width = 0, height = 0;
+	int bit_depth = 0, color_type = 0;
 	uint32_t texid = 0;
+	png_byte* buff = nullptr;
+	png_bytep* pp = nullptr;
+	if(setjmp(png_jmpbuf(png_ptr)))
+	{
+		// Malformed/truncated PNG: free what we own and report failure.
+		LOG_INFO("SDL", "LoadPngTexture: libpng error (corrupt image)");
+		delete [] buff;
+		delete [] pp;
+		*w = *h = 0;
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return 0;
+	}
 	if(
 		png_get_IHDR(
 			png_ptr, info_ptr, &width, &height, &bit_depth, &color_type,
@@ -6511,18 +6562,31 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		if((color_type & PNG_COLOR_MASK_ALPHA) == 0){
 			png_set_add_alpha(png_ptr, 0xFF, PNG_FILLER_AFTER);
 		}
-		*w = width;
-		*h = height;
-		auto buff = new png_byte[width * height * 4];
+		// C1 fix: `width * height * 4` was a 32-bit product that wraps; a
+		// 32768x32768 header made it 0 and png_read_image() then wrote the
+		// whole 4 GiB into a zero-length allocation.
+		uint64_t need = 0;
+		if(!pngCheckImageSize(width, height, 4, &need)){
+			LOG_INFO("SDL",
+				"LoadPngTexture: rejected %ux%u image (oversized or empty)",
+				(unsigned)width, (unsigned)height);
+			*w = *h = 0;
+			png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+			return 0;
+		}
+		*w = (int32_t)width;
+		*h = (int32_t)height;
+		buff = new png_byte[(size_t)need];
 		auto p = buff;
-		auto pp = new png_bytep[height];
+		pp = new png_bytep[height];
 		for(int i = height-1; i >= 0; i--) pp[i] = p + width*i*4;
 		png_read_image(png_ptr, pp);
 		delete [] pp;
+		pp = nullptr;
 		// Modern GL: pack into atlas to reduce per-sprite GL texture objects.
 		if (useModernRender()) {
 			texid = atlasAlloc(width, height, GL_RGBA, buff);
-			if (texid) { g_perfCounters.atlasHits++; delete [] buff; }
+			if (texid) { g_perfCounters.atlasHits++; delete [] buff; buff = nullptr; }
 			else { g_perfCounters.atlasMisses++; }
 		}
 		if (!texid) {
@@ -6535,11 +6599,15 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 			glTexSubImage2D(
 				GL_TEXTURE_2D, 0, 0, 0,
 				width, height, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-			delete [] buff;
+			delete [] buff; buff = nullptr;
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+			// H12 fix: a pooled texture must be re-registered, otherwise
+			// DeleteGlTexture() cannot look its dimensions up and the pool
+			// never receives it back (pool worked exactly once per size).
+			texDimRegister(texid, width, height, GL_RGBA);
 		}
 		else
 		{
@@ -6550,7 +6618,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 			glTexImage2D(
 				GL_TEXTURE_2D, 0, GL_RGBA,
 				width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buff);
-			delete [] buff;
+			delete [] buff; buff = nullptr;
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -6559,6 +6627,7 @@ uint32_t SSZ_STDCALL LoadPngTexture(FILE* fp, int32_t* h, int32_t* w)
 		}
 		} // if (!texid)
 	}
+	delete [] buff;
 	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 	INIT_LOG("LoadPngTexture: %dx%d -> texid=%u", (int)width, (int)height, texid);
 	return texid;
